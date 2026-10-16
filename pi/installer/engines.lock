@@ -1,0 +1,8 @@
+# Loki engine version pins — verified against upstream, 2026-10-16
+# Full rationale in the Phase 1 research report.
+
+bettercap==2.41.7        # build from source or vendor ARM64 binary (Pi OS apt is stuck at 2.32.x)
+aircrack-ng==1.7          # available in Raspberry Pi OS repos
+hcxdumptool==7.1.2        # build from source; MUST stay version-matched with hcxtools
+hcxtools==7.1.2
+scapy==2.8.0              # pip; crafting / low-rate use only on Zero 2 W (slow)
