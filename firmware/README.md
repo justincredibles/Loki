@@ -4,9 +4,19 @@ Loki's ESP32-S3 runs a fork of Bruce firmware (AGPL-3.0-or-later), extended
 with a serial command API so the Pi can drive it — see
 `docs/protocol/pi-esp32-serial.md`.
 
-The fork lives in its own repository and is linked here as a git submodule so
-source-offer and release obligations stay clean. Loki's board definition goes
-in as `boards/loki-hat/` in the fork, upstream-style.
+**Fork:** [justincredibles/bruce-loki](https://github.com/justincredibles/bruce-loki)
+(forked from [BruceDevices/firmware](https://github.com/BruceDevices/firmware), 2026-10-16)
+
+The fork lives in its own repository so source-offer and release obligations
+stay clean. It will be linked here as a git submodule when firmware work
+begins:
+
+```
+git submodule add https://github.com/justincredibles/bruce-loki.git firmware/bruce-loki
+```
+
+Loki's board definition goes in as `boards/loki-hat/` in the fork,
+upstream-style.
 
 Key firmware work:
 
