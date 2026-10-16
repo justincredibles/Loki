@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "loki"
+version = "0.1.0"
+description = "Loki Pi-side software - pocket security multi-tool (Raspberry Pi brain)"
+license = { text = "MIT" }
+requires-python = ">=3.9"
+dependencies = [
+    "pyserial>=3.5",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7",
+]
+
+[tool.setuptools.packages.find]
+include = ["loki*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
