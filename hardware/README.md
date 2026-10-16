@@ -1,7 +1,7 @@
 # hardware/ — PCB and enclosure
 
 - `pcb/` — KiCad project, gerbers, BOM, and PCBA notes for the Loki HAT
-  (65 x 56 mm, Raspberry Pi HAT form factor, 40-pin header)
+  (85.6 x 56.5 mm — full Raspberry Pi footprint, 40-pin header)
 - `enclosure/` — Fusion 360 source and STL files for the 3D-printed case
 
 Design constraints:
