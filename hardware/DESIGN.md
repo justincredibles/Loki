@@ -1,6 +1,6 @@
 # Project Loki — Hardware Design Document (Schematic-Ready Draft)
 
-**Board:** Loki HAT — custom PCB, 65 × 56 mm, Raspberry Pi HAT form factor, 40-pin stacking header
+**Board:** Loki top board — custom PCB, **85.6 × 56.5 mm (full Raspberry Pi footprint)**, 40-pin stacking header. Deliberately NOT the 65 × 56.5 mm HAT-spec outline: the board is the same size as the Pi 4/5 itself, per Justin's spec (corrected 2026-10-16). Mounting holes follow the Pi pattern (Ø2.7 mm, 3.5 mm edge offsets, 58 × 49 mm spacing — verify against the official Pi 5 mechanical drawing at fabrication). On a Pi Zero 2 W (65 × 30 mm) the board overhangs; the enclosure defines the device outline.
 **Revision:** 0.1 — 2026-10-16
 **Status:** Ready to enter schematic capture (KiCad). All §7 decisions resolved — Justin accepted every recommendation on 2026-10-16.
 **Distribution model:** Sold **assembled** (JLCPCB PCBA). Design rules applied throughout: JLCPCB parts library preferred, Basic-library parts where possible, modules over bare RF ICs, single-sided assembly as the goal (see §2.11 for the two-sided caveat), 4-layer stackup (§6).
