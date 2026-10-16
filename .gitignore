@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# PlatformIO / ESP32
+.pio/
+
+# Images and build artifacts
+*.img
+*.img.xz
+build/
+dist/
+
+# KiCad
+*.bak
+*.bck
+*-backups/
+fp-info-cache
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
