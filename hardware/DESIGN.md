@@ -2,7 +2,7 @@
 
 **Board:** Loki HAT — custom PCB, 65 × 56 mm, Raspberry Pi HAT form factor, 40-pin stacking header
 **Revision:** 0.1 — 2026-10-16
-**Status:** Ready to enter schematic capture (KiCad). Open decisions in §7 need Justin's sign-off where marked.
+**Status:** Ready to enter schematic capture (KiCad). All §7 decisions resolved — Justin accepted every recommendation on 2026-10-16.
 **Distribution model:** Sold **assembled** (JLCPCB PCBA). Design rules applied throughout: JLCPCB parts library preferred, Basic-library parts where possible, modules over bare RF ICs, single-sided assembly as the goal (see §2.11 for the two-sided caveat), 4-layer stackup (§6).
 
 **Verification legend:** ✅ = verified against a live source during research (source named). ⚠️ = part/family confirmed to exist and be stocked in the LCSC/JLC ecosystem, but the exact LCSC C-number was **not** confirmed — must be pinned at BOM freeze. No prices are cited anywhere in this document.
@@ -358,7 +358,9 @@ The slide switch gates converter EN pins only. VSYS (and therefore the gauge + c
 
 ---
 
-## 7. Open Decisions (recommendation given for each)
+## 7. Decisions (all resolved 2026-10-16)
+
+Justin accepted every recommendation below as written on 2026-10-16; the Recommendation column is now the design baseline.
 
 | # | Decision | Options | **Recommendation** |
 |---|---|---|---|
