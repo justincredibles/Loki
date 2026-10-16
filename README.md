@@ -8,7 +8,7 @@ Loki combines Wi-Fi network attacks and handshake capture, BLE, sub-GHz (CC1101)
 
 - **Brain:** Raspberry Pi Zero 2 W (minimum), Pi 4, or Pi 5 — running Loki's own software on Raspberry Pi OS Lite
 - **Coprocessor:** ESP32-S3 running a fork of Bruce firmware, driven by the Pi over a serial link
-- **Board:** custom HAT-sized PCB (65 x 56 mm) — display, radios, power management, USB-C charging
+- **Board:** custom full-footprint PCB (85.6 x 56.5 mm — same size as the Pi itself) — display, radios, power management, USB-C charging
 - **Kit model:** buy the assembled PCB, attach your own Pi, 3D-print the case, flash the image, go
 
 ## Status
