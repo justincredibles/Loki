@@ -2,21 +2,169 @@
 
 Complete schematic + placement reference for the Loki HAT PCB: every subsystem, every component, every net, and the placement rules that matter electrically. The pin tables in **Part B** are the original DESIGN.md §3 tables, kept verbatim. If this file and `hardware/DESIGN.md` ever disagree on architecture, DESIGN.md wins; if they disagree on a component value, **this file wins** (it is derived from the manufacturers' datasheets, cited per section).
 
-Values are marked: **(DS)** = taken from / calculated with the cited datasheet or app note; **(CALC)** = calculated here, arithmetic shown; **(EC)** = engineering choice where the datasheet specifies no value — treat as a starting point, not gospel; **⚠️ VERIFY** = could not be confirmed from a primary source — check before fabrication.
-
-**Revision:** expanded 2026-10-16 from the §3 pin tables into the full build sheet.
+**Revision:** expanded 2026-10-16 from the §3 pin tables into the full build sheet. **Rewritten 2026-10-17 in beginner-friendly language** — every technical fact, value, and warning is identical to the original; plain-English explanations, a glossary, and drawing hints were added around them. If you ever need the dense original wording, it is preserved as `pinout-full-technical-backup-2026-10-17.md`.
 
 ---
 
+## How to read this document
+
+**What this document is.** This is the complete recipe for Loki's circuit board. It tells you, for every single part on the board: what the part is, what value it has (for example, a 1 µF capacitor), and exactly which pins it connects between. If you draw everything in Part A into your KiCad schematic, wire for wire, you will have the whole board. Parts B–E are reference material that supports Part A.
+
+**The five parts:**
+
+- **Part A — Subsystem build sheets.** The main event. The board is divided into 13 numbered sections (§1 charger, §2 fuel gauge, §3 boost converter, and so on). Each section covers one chip and all the small parts around it. Work through them in order, drawing each section into the schematic before moving on — that's exactly how you've been doing it.
+- **Part B — Pin assignment tables.** The master lists of what every pin of the Raspberry Pi header, the ESP32, and the expansion header does. You mostly use these to double-check a connection while drawing Part A.
+- **Part C — Complete BOM.** The shopping list ("BOM" = Bill of Materials): every part, how many, what package size, and its LCSC part number where one is confirmed.
+- **Part D — Placement rules.** Rules for the *PCB layout* step (arranging the physical parts on the board in KiCad), which comes after the schematic. You can skim these now; they matter when you start laying out the board.
+- **Part E — Sources & verification status.** Where every value came from (which manufacturer's datasheet), plus a numbered double-check list of the few things that could not be fully confirmed. Read it before ordering boards.
+
+**Schematic vs. layout — the one distinction that unlocks half the wording.** Building a board in KiCad is two separate jobs. First the **schematic**: a diagram showing which pins connect to which, drawn with symbols. Distances on the schematic page mean nothing — two parts drawn far apart can still be connected by a wire or a shared net name. Second the **PCB layout**: the physical board, where every part gets a **footprint** (the pattern of copper pads it solders to) and position suddenly matters a lot. Whenever this document says things like *"closest to the pin"*, *"within 3 mm"*, or *"keep this loop tiny"*, that is a **layout** instruction — write it down for later, but it does not change what you draw in the schematic today. Whenever it says *"connects to"*, *"→ GND"*, or *"no connect"*, that is a **schematic** instruction — it changes what you draw now.
+
+**How the values are marked.** Every value in Part A carries a tag saying how much you can trust it:
+
+- **(DS)** — taken straight from the chip manufacturer's datasheet or application note (the chip's official manual). Trust it.
+- **(CALC)** — calculated for this design, with the arithmetic shown so you can check it. The result is what you use; the arithmetic is there so the number isn't magic.
+- **(EC)** — "engineering choice": the datasheet doesn't specify a value, so a sensible standard one was picked. Treat it as a good starting point, not gospel.
+- **⚠️ VERIFY** — could not be confirmed from an official source. The flag stays visible wherever it applies, and in this rewrite each one also gets a plain-English note telling you what to actually *do* about it (usually: check one specific thing in one specific datasheet before the boards are ordered — nothing you have to resolve while drawing).
+
+**Reference designators ("refdes") — the naming system.** Every part on the board has a code name: a letter for its type plus a number. **C** = capacitor, **R** = resistor, **L** = inductor (a coil), **U** = a chip/IC or module, **D** = diode or LED, **Q** = transistor, **J** = connector, **F** = fuse, **Y** = crystal, **SW** = switch, **SJ** = solder jumper, **SD** = card slot, **TP** = test pad. The number's first digit(s) tell you which section of the board it belongs to: 1xx = charger, 2xx = fuel gauge, 3xx = boost, and so on (full list just below Part A's intro, under "Reference-designator groups"). So **C304** reads as "capacitor, in section 3 (boost), number 04". When the document says **C301/C302/C303 = 3 × 22 µF**, it means three separate capacitors, named C301, C302 and C303, each one 22 µF. A range like **R1114–R1117** means the four resistors R1114, R1115, R1116 and R1117.
+
+**In KiCad, set the Reference by hand.** KiCad's automatic numbering will want to call your capacitors C1, C2, C3… in the order you place them. Double-click each part and type the Reference from this document (C101, R101, …) into its Reference field, so your schematic matches this document, the BOM, and the FOOTPRINTS.md map exactly. It costs a few seconds per part and saves endless confusion later. The **Value** field gets the value from this document (e.g. `1uF`, `890`, `22uF`). The **Footprint** field gets the `Library:Name` string from `hardware/FOOTPRINTS.md`.
+
+**Generic symbols.** Most small parts have no dedicated KiCad symbol, and that's normal — you use the plain generic symbol and let the Reference + Value + Footprint fields say what it really is. Capacitors: `Device:C`. Resistors: `Device:R`. Inductors: `Device:L`. Ground: the `power:GND` symbol (every GND symbol on the page is automatically the same connection — that's how ground is drawn). The chips (U1, U2, …) use their own specific symbols or a drawn box with the right pins; each section says what applies.
+
+### Worked example — one part, end to end (R101)
+
+Nearly every line in Part A follows the same pattern as this one, so here is one decoded completely, using the charger resistor from §1.2:
+
+> | 16 | ISET | **R101 = 890 Ω** → GND | (CALC) … 890/890 = **1.00 A** charge current … Never leave ISET open: open = charging disabled |
+
+- **"16"** is the pin number on the chip (U1, the battery charger). **"ISET"** is the pin's name — short for "current set". This pin is the charger's adjustment dial: the resistor you hang on it tells the charger how fast to charge the battery.
+- **"R101 = 890 Ω"** — part R101 (resistor, section 1, number 01) has the value 890 ohms. Bigger resistor = slower charging; smaller = faster.
+- **"→ GND"** — the other end of the resistor connects to ground. So the circuit is: pin 16 — resistor — ground.
+- **The (CALC) note** explains where 890 came from: the datasheet gives a constant for this chip, K_ISET = 890, and the formula resistor = 890 ÷ desired amps. We want 1.00 A of charge current, so 890 ÷ 1.00 = 890 Ω. You don't need to redo this math — it's shown so you can see the number was derived, not guessed.
+- **"Never leave ISET open"** — if this pin is connected to nothing, the charger reads that as "no setting" and switches charging off entirely. In KiCad terms: this pin must end up wired to the resistor. (A pin that is *supposed* to be unconnected gets a red no-connect flag — the little X tool — so KiCad knows it's deliberate. ISET is not one of those pins.)
+- **What you actually draw:** place U1's symbol; place a `Device:R`; set its Reference to `R101` and Value to `890`; wire one end of the resistor to U1's pin 16 and the other end to a `power:GND` symbol; set the resistor's Footprint to `Resistor_SMD:R_0603_1608Metric` (per FOOTPRINTS.md). Done — that is the whole pattern, repeated ~180 times with different pins and values.
+
+C101 works the same way: it is the capacitor on U1's pin 13 (IN) — `Device:C`, Reference `C101`, Value `1uF`, one side wired to pin 13's net, the other side to GND, footprint `Capacitor_SMD:C_0603_1608Metric`.
+
+---
+
+## Glossary — every piece of jargon in this document, in plain English
+
+**Abs-max (absolute maximum ratings).** The datasheet table of hard limits — exceed them, even briefly, and the chip may be damaged. Different from the *recommended* operating range, which is where you're supposed to live.
+
+**Active-low.** A signal that does its job when it's at 0 V instead of at the supply voltage. Example: the charger's CHG pin sits high doing nothing, and pulls *down* to ground while charging — "low = active". Written with a bar or "_N" in some pin names (e.g. RSTPD_N).
+
+**AGND (analog ground).** A ground pin a chip keeps separate for its quiet, sensitive circuitry. On the finished board it still joins the same ground plane as everything else — the separate name just tells you to connect it at the chip, not route it somewhere strange.
+
+**"At the pin" / "tight to the pin" / "closest to the pin".** A layout instruction: in the physical board layout, place that part immediately next to the named pin — within a few millimetres. Some parts (especially small capacitors on power pins) only do their job when they're physically close; a long trace between the pin and the part acts like a tiny coil and defeats the purpose.
+
+**BOM (Bill of Materials).** The complete shopping list of parts for the board. **BOM freeze** is the moment the part choices are locked so footprints and ordering can be finalized — "confirm at BOM freeze" means "nobody has picked the exact orderable part yet; it gets decided at that lock-in moment, not now".
+
+**Bulk capacitor.** A relatively big capacitor (here, 10–22 µF) placed on a power rail as a local reservoir: the circuit gulps current in pulses, and the bulk cap supplies the gulps so the voltage doesn't dip. Compare *decoupling capacitor* below — many caps here do both jobs at once, and a typical recipe is one bulk cap + one small decoupling cap side by side on the same pin.
+
+**Capacitor size codes (0603, 0805, 1206, 1812, 2520, 3225).** Standard physical sizes for surface-mount parts, in hundredths of an inch (0603 = 0.06″ × 0.03″) or metric for the bigger ones. The size is part of the footprint choice — a 22 µF capacitor in this design is physically bigger (0805/1206) than a 0.1 µF one (0603) even though both are "a capacitor". Part C lists the package for every part.
+
+**Decoupling / bypass capacitor.** A small capacitor (usually 0.1 µF) wired from a chip's power pin straight to ground, placed right at the pin. Chips switch internally millions of times a second and make electrical noise while drawing current in tiny spikes; the decoupling cap is a tiny local reservoir + noise drain that keeps the chip's own supply clean and stops its noise spreading. "IN → GND at the pin" in a table means: one side of the cap to the IN pin's net, other side to ground, placed (at layout time) right next to that pin.
+
+**Differential pair.** Two wires that carry the same signal in opposite polarities (USB's D+ and D− are the classic pair). They must be routed together, the same length, with an unbroken ground beneath them, so interference cancels out. Applies here to the USB-C #2 data lines.
+
+**Divider (voltage divider).** Two resistors in series between a voltage and ground; the middle point sits at a predictable fraction of the voltage. Used two ways here: to *set* an output voltage (the chip watches the middle point and adjusts until it hits its reference — that's the FB/feedback divider on both converters), and to *sense* a voltage safely (the VBUS-detect divider halves 5 V so the ESP32 pin sees ≈2.5 V).
+
+**DNP (Do Not Populate).** A part whose footprint is drawn on the board but which is **not fitted** in the standard build. The pads are there so the option exists; the part is left off. Example: the spring-antenna option is DNP when the SMA whip antenna is fitted — exactly one of the two gets installed.
+
+**ESR (equivalent series resistance).** A small unwanted resistance inside every real capacitor. Low ESR = the capacitor can deliver/absorb current fast, which is what power circuits need. Ceramic capacitors (everything in this design) are naturally low-ESR.
+
+**Feedforward capacitor.** A small capacitor wired *across* the top resistor of a feedback divider. It lets fast voltage changes at the output reach the chip's feedback pin sooner, so the converter reacts quicker to sudden load changes ("transient response").
+
+**Footprint.** The pattern of copper pads on the physical board that a part solders onto — one specific pattern per part/package. In KiCad, each schematic symbol gets a footprint assigned (that's what `hardware/FOOTPRINTS.md` maps out). The schematic doesn't care about size; the layout is nothing but sizes.
+
+**GND / ground.** The common 0 V reference for the whole board — every circuit's "return path". On this board, ground is a solid sheet of copper on layer 2 of the 4-layer board (the **ground plane**), and anything marked GND connects down into it. In the schematic, every `power:GND` symbol is the same connection, even though they're drawn in different corners of the page.
+
+**High-impedance (Hi-Z).** An input pin that listens without drawing meaningful current — it senses voltage only. A button wire connected to a high-impedance input doesn't get "loaded down" by it.
+
+**Hold / trip (PPTC ratings).** A PPTC is a resettable fuse (see below). Its **hold** current is the current it will carry forever without tripping (at room temperature); its **trip** current is where it is guaranteed to trip and block the current. Between the two is a grey zone, and the hold rating drops as temperature rises ("derates").
+
+**I²C.** A two-wire communication bus (clock SCL + data SDA) that lets one chip talk to several others using addresses. Lines idle high, so each needs a **pull-up** resistor (see below). The Pi talks to the fuel gauge over I²C; the ESP32 talks to the PN532 over a separate I²C bus.
+
+**Keep-out.** A zone on the board where copper (and sometimes parts) are forbidden — here, mainly under/around antennas, because copper near an antenna detunes it and absorbs the radio energy.
+
+**LCSC.** The parts distributor whose stock JLCPCB (the board fabricator/assembler used for this project) assembles from. An "LCSC number" like C165948 is the exact orderable part. ✅ means the number is verified; "confirm" means the exact part hasn't been picked yet.
+
+**LDO.** A simple type of voltage regulator chip (low-dropout regulator). Mentioned here because some chips have one built in — the PN532 makes its own internal ~3.0 V rail with one, and the TPS61088's VCC pin is the *output* of its internal LDO: you put a capacitor on it, you never feed power into it.
+
+**Net.** Any set of pins that are wired together is one "net" — think of it as one electrical node, one connected piece of copper. Nets get names: `VSYS`, `3V3`, `USB1_VBUS`. In KiCad's schematic, two points with the same net label are connected even if no wire is drawn between them. When a table says pin X connects to "net `3V3`", it means: wire it to the board's 3.3 V supply web, wherever that is drawn.
+
+**NC / no-connect.** A pin that must be connected to *nothing* — deliberately left unconnected. In KiCad you mark these with the no-connect flag (the little X) so the checker knows it's intentional, not a mistake. NC sometimes also names a pin that exists physically but does nothing internally.
+
+**NTC thermistor.** A resistor whose value changes predictably with temperature — used as a battery temperature sensor. The bq24074 expects one on its TS pin; our battery packs don't have the sensor wire, so a fixed 10 kΩ resistor "defeats" (fakes) it instead.
+
+**Open-drain.** A type of output pin that can only pull a line *down* to ground or let go — it can never push the line high by itself. So an open-drain line always needs a pull-up resistor (or an LED path to a supply) to ever read "high". The charger's CHG and PGOOD pins, the fuel gauge's ALRT pin, and the ESP32's attention line all work this way.
+
+**Package.** The physical body style of a part: **SOT-23** (small 3- or 5/6-pin plastic package), **SOIC-8** (8-pin with legs), **VQFN / TDFN / HVQFN** (flat square chips with pads underneath and around the edges, no legs — a size and pin count follow, e.g. VQFN-16 is 16 pads), **Minicast** (Vishay's little leaded can for IR receivers), **1206 / 0805 / 0603** (chip sizes, see above). The package decides the footprint.
+
+**PCM.** The tiny protection circuit board built into most lithium battery packs — last-resort protection against shorts, over-charge and over-discharge.
+
+**Pin / pad.** A **pin** is one electrical connection point on a chip (numbered — pin 1, pin 2, … — and named — IN, GND, ISET…). Modules with solder connections around their edges call them **pads** instead. "Pin 13 (IN)" means pin number 13, whose function name is IN.
+
+**Pitch.** The spacing between adjacent pins/pads, centre to centre. Headers here are 2.54 mm pitch (the classic 0.1″ grid); the microSD slot contacts and fine-pitch chips are smaller.
+
+**Pour.** A filled area of copper connected to a net, instead of thin traces — used for ground and for high-current paths (a wide pour carries amps without heating up; a thin trace can't). "Via-stitched pour" means the pour is tied to the same net on another layer by many small vias, making it fatter still.
+
+**PPTC.** A resettable fuse: it behaves like a wire until current exceeds its trip point, then it heats up and chokes the current off; when it cools, it works again. Used here as battery and expansion-port protection.
+
+**Pull-up / pull-down.** A resistor that gently connects a signal line to the supply (pull-up) or to ground (pull-down) so the line has a definite default voltage when nothing else is driving it. Without one, an un-driven line "floats" — it picks up noise and reads randomly. Every open-drain line and every button line here has one. "PU" in Part B/C is short for pull-up.
+
+**Q (quality factor).** For the NFC antenna network: roughly, how sharply the antenna circuit is tuned. The design targets Q ≈ 35 — sharp enough for good range, broad enough to be forgiving.
+
+**Rail.** A supply voltage distributed around the board — "the 3.3 V rail" is just the `3V3` net thought of as a power supply. This board has four: `VBAT` (raw battery), `VSYS` (always-on system voltage), `5V_SYS` (5.1 V, only when switched on), `3V3` (3.3 V, only when switched on).
+
+**Rd (USB-C).** The 5.1 kΩ resistor a USB-C *device* (power sink) must put on each CC pin to announce "I'm a device, send me 5 V". Both USB-C ports here are sinks, so all four CC pins get one.
+
+**Refdes.** See "Reference designators" above — the C101/R101-style code name of a part.
+
+**Series / shunt.** A part wired **in series** sits *in the path* of a signal — the signal flows through it (a resistor in series with an LED limits the LED's current). A part wired as a **shunt** sits *across* a line, from the line down to ground (or across another part) — shunt capacitors drain noise to ground; a shunt resistor bleeds current away. "R in series with C to ground" = signal → resistor → capacitor → ground, one after the other.
+
+**Silkscreen ("silk").** The white printing on the board (labels, outlines, the "+" by the battery connector). Purely informational — but a polarity mark in silk is cheap insurance.
+
+**Sink / source (current).** A pin **sinks** current when current flows *into* it toward ground (like a drain); it **sources** current when current flows *out of* it. "Abs-max sink 15 mA" means: never let more than 15 mA flow into that pin.
+
+**Solder jumper (SJ).** Two or three bare pads you bridge with a blob of solder to choose a setting — a zero-cost switch. SJ1 here selects whether the EEPROM is writable or locked.
+
+**SPI.** A fast chip-to-chip bus: clock (SCK), data out (MOSI), data in (MISO), and one chip-select (CS) wire per device — the master (ESP32) selects one device at a time by pulling its CS low. The CC1101, nRF24 and microSD card all share one SPI bus here.
+
+**Strapping pin.** A chip pin that is read once, at the instant the chip starts up, to choose a boot option (which program to run, etc.). Between resets it's a normal pin, but you must not hang anything on it that would hold it at the wrong level during that first instant. The ESP32 has several; this document flags each one.
+
+**Stub.** A short branch off a signal line to nowhere useful. Stubs reflect fast signals and corrupt them — "no stubs on the USB pair" means the line runs connector → protection chip → ESP32 in one clean path.
+
+**Thermal pad / exposed pad (EP).** The metal pad under many flat chips. It carries heat out of the chip and is usually also a ground connection. In the layout it gets its own copper area with **thermal vias** — little plated holes that conduct heat down into the ground plane. Note it is a pin too (it must connect to GND), not just a heatsink.
+
+**UART.** The classic two-wire serial link (TX = transmit, RX = receive) between the Pi and the ESP32 here. 115200 8N1 = 115200 bits/second, 8 data bits, No parity, 1 stop bit.
+
+**Vf (forward voltage).** The voltage a diode/LED "uses up" while conducting — a red LED ≈ 2.0 V, green ≈ 2.1 V, blue ≈ 3.0 V, the IR LED ≈ 1.35 V. LED resistor math is always: (supply − Vf) ÷ resistor = LED current.
+
+**Via.** A tiny plated hole that connects copper on one board layer to another layer. Signals and power hop between layers through vias; more/bigger vias in parallel carry more current and heat.
+
+**X5R / X7R / C0G.** Codes for ceramic capacitor dielectric (the insulating material inside). X7R and X5R are the general-purpose types used for power/bulk/decoupling here (X7R is a bit more stable than X5R). C0G is the precision type — its value barely moves with temperature or voltage — used where the exact value is the tuning (crystal load caps, NFC matching, the boost COMP cap).
+
+---
 ## ⚠️ Read first — three errata against DESIGN.md found during datasheet verification
 
+("Errata" = corrections to the earlier design document, found when every value was checked against the manufacturers' datasheets. These three matter before you draw anything.)
+
 1. **bq24074 input limit cannot be 3 A.** DESIGN.md §2.6 says "ILIM ≈ 3 A input". Per TI SLUS810N, the ILIM resistor range (1.1–8 kΩ) programs only **200 mA–1.5 A**, and IN is rated 1.5 A recommended / 1.6 A abs-max. This build sheet sets ILIM to the maximum (~1.4 A). System load above the input limit is supplemented from the battery by the power-path (OUT is rated 4.5 A), so the device still works — but **net charging while a Pi 5 is under load will be slow or negative**, and full-speed charging happens with the device off/idle (as DESIGN.md §4.3 already anticipates). If a future rev wants real 3 A input, the charger IC must change.
+   - *In plain terms:* the charger chip physically cannot be told "take up to 3 A from USB" — 1.5 A is its ceiling, and this design runs it at ~1.4 A. Loki still works fine plugged in (the battery tops up whatever USB can't supply), but if the Pi 5 is working hard on USB power, the battery may slowly drain instead of charge. Nothing for you to do — just don't "fix" R102 to a smaller value chasing 3 A; 1.1 kΩ is already the maximum setting.
 2. **"NXP AN10688" is the wrong document number for the PN532 antenna design.** No PN532 document numbered AN10688 could be found. The antenna/EMC/matching values here come from **NXP AN1445** (*Antenna design guide for MFRC52x, PN51x and PN53x*, which explicitly covers PN532) plus the PN532/C1 data sheet §13 reference circuit.
+   - *In plain terms:* a cited document number in the design doc was simply wrong. The NFC values in §8 come from the correct document (AN1445). Nothing for you to do.
 3. **TSOP38438 is a through-hole part** (Vishay Minicast, leaded), not SMD as DESIGN.md §2.5 calls it. Its footprint is THT — JLCPCB THT assembly or a builder-soldered part. The VS1838B fallback is also a leaded can. There is no true-SMD receiver in the current selection; if that matters, the IR receiver choice needs a rev-2 revisit.
+   - *In plain terms:* the IR receiver (§10.1, U11) has wire legs that go *through* holes in the board, unlike almost everything else on Loki, which solders flat onto the surface (SMD). Its footprint in FOOTPRINTS.md already accounts for this. Nothing changes in the schematic — just don't be surprised that its footprint looks different, and know it may be a hand-soldered part in assembly.
 
 ---
 
 ## Net names used throughout
+
+Every named net below is one of the board's shared connections. In the schematic, when two places carry the same net name, they are wired together — the name *is* the wire.
 
 | Net | Meaning |
 |---|---|
@@ -29,6 +177,8 @@ Values are marked: **(DS)** = taken from / calculated with the cited datasheet o
 | `PWR_EN` | Power-switch output → TPS61088 EN |
 | `GND` | Common ground (solid L2 plane, 4-layer stackup per DESIGN.md §6) |
 
+In plain terms, the power story of the whole board is: battery power enters as `VBAT_RAW`, passes the resettable fuse F1 and becomes `VBAT`. The charger chip (U1) outputs `VSYS`, which is alive whenever a battery is fitted or USB is plugged in — even with the device "off". Only when you flip the power switch does the boost converter (U3) turn `VSYS` into `5V_SYS` (5.1 V for the Pi), and the buck converter (U4) turn that into `3V3` (for the ESP32 and radios). So: `VSYS` = always-on domain, `5V_SYS`/`3V3` = switched domain. "Stackup" means the layer sandwich of the board — 4 copper layers, with layer 2 (L2) as one solid ground sheet.
+
 ## Reference-designator groups
 
 1xx charger/USB-C #1 · 2xx fuel gauge · 3xx 5 V boost · 4xx 3.3 V buck · 5xx ESP32/USB-C #2 · 6xx CC1101 · 7xx nRF24 · 8xx PN532 · 9xx microSD · 10xx IR · 11xx Pi interface/display/EEPROM/buttons/expansion · battery parts ungrouped (J4, F1).
@@ -37,10 +187,16 @@ Values are marked: **(DS)** = taken from / calculated with the cited datasheet o
 
 # Part A — Subsystem build sheets
 
+*How Part A works: each numbered section is one subsystem — one main chip and every small part connected to it. Each section starts with a plain-English summary of what that part of the board does and what you will draw, then the exact pin-by-pin tables. The tables are the authority; the summaries are the map.*
+
 ## 1. Power input & charging — TI bq24074 (U1)
 
+**What this section does.** U1 is the battery charger and the board's front door for power. USB-C port #1 (J2) plugs into it. U1 charges the lithium battery at up to 1.0 A, and — this is why this chip was chosen — it merges the sources: Loki can run from USB while the battery charges, and if the load wants more than USB can give, the battery silently makes up the difference (that's the "power-path" feature). Its OUT pin produces the `VSYS` net, the always-on voltage everything else in the power chain feeds from. It also lights the blue LED while charging, with no software involved.
+
+**What you draw.** The U1 symbol; the J2 USB-C connector symbol with two 5.1 kΩ resistors on its CC pins; one capacitor on each of the IN, BAT and OUT pins; one resistor on each of the ISET, ILIM and TS pins; two pins (TMR, ITERM) deliberately left unconnected; and the blue LED with its resistor. Sixteen pins, but most of them are one part each.
+
 Source for all values: TI **SLUS810N** (bq2407x family datasheet), sections cited per item.
-U1 = bq24074RGTR, VQFN-16 + thermal pad.
+U1 = bq24074RGTR, VQFN-16 + thermal pad. (VQFN-16: a flat, square 16-pad chip package with a metal thermal pad in the middle of its underside — the pad is pin "EP" in the table below and must connect to GND.)
 
 ### 1.1 USB-C #1 — charge-only port (J2)
 
@@ -53,6 +209,8 @@ J2 = HRO TYPE-C-31-M-12, LCSC C165948 ✅.
 | CC2 | R106, 5.1 kΩ → GND |
 | D+ / D− | No connect — this port carries no data, ever (decision D10's mirror) |
 | Shield | GND (chassis fingers to enclosure if metal hardware is used) |
+
+*Plain terms:* VBUS is the USB power wire; all its contacts are one net, `USB1_VBUS`, running to the charger's IN pin. This port asks for plain 5 V only — the two 5.1 kΩ resistors (R105/R106) on the CC pins are how a USB-C device says "I'm a sink, give me 5 V" (see *Rd* in the glossary). The D+/D− data pins are intentionally left unconnected — give them no-connect flags in KiCad. The metal shield of the connector goes to GND.
 
 ### 1.2 U1 pin-by-pin
 
@@ -74,20 +232,35 @@ J2 = HRO TYPE-C-31-M-12, LCSC C165948 ✅.
 | 8 | VSS | GND | |
 | EP | Thermal pad | GND | Must be at VSS potential with thermal vias; the VSS pin must still be grounded separately — the pad is not the primary ground path (§7) |
 
-**Placement:** C101/C102/C103 within ~3 mm of their pins. U1 sits near the USB-C #1 board edge so the IN run from J2 is short.
+*Plain terms for the less obvious pins:*
+- **EN1 / EN2** are the charger's mode-select pins — two switches that tell it which current-limit rule to use. Wiring EN2 to the USB voltage and EN1 to ground selects "use the ILIM resistor" whenever USB is plugged in. The ⚠️ VERIFY on EN2 is not something to resolve while drawing: it means that before the parts are ordered (BOM freeze), someone should open the SLUS810N datasheet's absolute-maximum table and confirm the EN pins tolerate 5 V. The family's other logic pins are rated 7 V-class, so this is expected to pass — it's a checklist item, not a design change. Draw EN2 → `USB1_VBUS` as written.
+- **CE** is the on/off switch for charging. It's active-low (ground = "charging on"), and even though the chip has a built-in pull-down, the design wires it to GND explicitly — "do not float" means never leave a control pin unconnected to fend for itself; it could pick up noise and misbehave.
+- **TMR and ITERM** are settings pins that this design deliberately leaves unconnected (no-connect flags in KiCad), because unconnected = the datasheet's built-in defaults, which are what we want: default safety timers (the charger gives up if charging takes abnormally long) and default charge termination (stop when charge current tapers to 100 mA). Especially do **not** ground TMR — that turns the safety timers off.
+- **TS** is the battery temperature-sensor input. Our battery packs have no temperature wire, so R103 (10 kΩ to GND) fakes a "temperature is fine" reading permanently. It must be this resistor — grounding TS directly, or leaving it open, makes the charger refuse to charge.
+- **CHG** (pin 9) is an open-drain, active-low output: while charging, it connects itself to ground. That's what lights the blue LED in §1.3 — the LED's other side goes to `VSYS`, so current flows supply → LED → CHG pin → ground whenever charging. "Abs-max sink 15 mA" = never let it swallow more than 15 mA; §1.3's resistor keeps it at ~1.4 mA.
+- **PGOOD** would tell a processor "input power is good" — nothing reads it in v1, so it gets a no-connect flag. Don't tie it to any supply.
+- **EP (thermal pad):** the metal pad under the chip. It goes to GND and gets thermal vias at layout, but note the warning: pin 8 (VSS) still needs its own ground connection — the pad alone isn't the chip's ground path.
+
+**Placement:** C101/C102/C103 within ~3 mm of their pins. U1 sits near the USB-C #1 board edge so the IN run from J2 is short. *(Layout note — matters at PCB time, not in the schematic.)*
 
 ### 1.3 Blue "charging" LED (D4)
 
 VSYS → **R104 = 1.0 kΩ** → D4 anode; D4 cathode → U1 pin 9 (CHG). D4 = 0805 blue (LCSC: confirm at BOM freeze ⚠️).
 
-**(CALC)** With USB present VSYS = 4.4 V; blue Vf ≈ 3.0 V: I ≈ (4.4 − 3.0) / 1000 ≈ **1.4 mA** — well under CHG's 15 mA abs-max, bright enough for a modern high-efficiency 0805. (TI's own typical circuit uses 1.5 kΩ from OUT, §10.2.2.4; 1.0 kΩ trades a little current for visibility.) The LED lights whenever the charger is actively charging, including with the device switched off — exactly per spec, zero firmware.
+*Plain terms:* an LED needs a resistor in series with it to limit its current, or it burns out — that's R104's whole job. The chain is: `VSYS` → resistor → LED (anode = the + side) → LED cathode (− side) → the CHG pin, which connects the chain to ground while charging. So the LED lights exactly while the charger is charging — including with the device switched off, because `VSYS` is alive whenever USB is in. The ⚠️ on D4 just means the exact orderable blue LED hasn't been picked yet; any standard 0805 blue LED works, and the pick happens at BOM freeze. Draw it as a generic LED (`Device:LED`) with footprint from FOOTPRINTS.md.
+
+**(CALC)** With USB present VSYS = 4.4 V; blue Vf ≈ 3.0 V: I ≈ (4.4 − 3.0) / 1000 ≈ **1.4 mA** — well under CHG's 15 mA abs-max, bright enough for a modern high-efficiency 0805. (TI's own typical circuit uses 1.5 kΩ from OUT, §10.2.2.4; 1.0 kΩ trades a little current for visibility.) The LED lights whenever the charger is actively charging, including with the device switched off — exactly per spec, zero firmware. *(Vf = the voltage the LED itself drops; what's left across the resistor, divided by the resistance, is the current — the standard LED calculation you'll see again for D3 and D2.)*
 
 ---
 
 ## 2. Fuel gauge — MAX17048 (U2)
 
+**What this section does.** U2 is the battery "fuel gauge" — the chip that tells the Pi what percentage of battery is left, the way a phone knows its battery percentage. It watches the battery voltage directly and talks to the Pi over I²C. It also drives the red "low battery" LED (§2.1) entirely in hardware, so the warning works even with the whole device switched off — the gauge never sleeps, because it runs straight off the battery and sips only ~25 µA.
+
+**What you draw.** The U2 symbol; exactly **one** capacitor (C201) — this chip famously needs almost nothing around it; a few pins strapped straight to GND (CTG, QSTRT); one pin (CELL) left unconnected on purpose; and its two I²C wires to the Pi header, each with a pull-up resistor (§2.2). The ALRT pin goes to the Pi header *and* to the red LED network.
+
 Source: Analog Devices **MAX17048/MAX17049 datasheet, doc. 19-6171 Rev 7** (cited "ADI DS").
-U2 = MAX17048G+T10, TDFN-8 + EP. I²C address **0x36** (7-bit).
+U2 = MAX17048G+T10, TDFN-8 + EP. I²C address **0x36** (7-bit). *(I²C address: every device on an I²C bus has a number the master uses to call it. 0x36 is this chip's fixed number — firmware needs it, the schematic doesn't show it. TDFN-8: flat 8-pad package, same family as U1's.)*
 
 | Pin | Name | Connection | Notes / source |
 |---|---|---|---|
@@ -102,11 +275,15 @@ U2 = MAX17048G+T10, TDFN-8 + EP. I²C address **0x36** (7-bit).
 | 8 | SDA | Pi I²C1 SDA (header pin 3) + expansion header pin 5 | Pull-up R202 (§2.2) |
 | EP | — | GND | |
 
-**Placement:** bottom side (per DESIGN.md §2.11 low-profile plan). Keep C201 tight to pin 3. VDD trace comes straight from the battery side of the board — the gauge must see the cell even when everything else is off (its draw is ~25 µA active / 4 µA hibernate, DESIGN.md §5.2).
+*Plain terms:* VDD does double duty — it powers the chip *and* is the voltmeter input it measures the battery with, which is why it must come from `VBAT` (the real battery), not from the regulated `VSYS`. CELL is a leftover pin that only does something on the 2-cell sibling chip (MAX17049); on ours it's dead inside, so it gets a no-connect flag and no parts. QSTRT ("quick start") is a feature we don't use, and the datasheet says to ground it when unused — unused pins on this chip are either grounded or flagged no-connect exactly as the table says; never just left dangling by accident. ALRT ("alert") is the open-drain, active-low output that drops to ground when the battery is low: the Pi reads it as an interrupt on GPIO4, and the same wire lights the red LED.
+
+**Placement:** bottom side (per DESIGN.md §2.11 low-profile plan). Keep C201 tight to pin 3. VDD trace comes straight from the battery side of the board — the gauge must see the cell even when everything else is off (its draw is ~25 µA active / 4 µA hibernate, DESIGN.md §5.2). *(Layout notes. "Bottom side" = this chip mounts on the underside of the board, the side facing the Pi.)*
 
 ### 2.1 Red "low battery" LED (D3)
 
 VSYS → **R201 = 1.0 kΩ** → D3 anode; D3 cathode → U2 pin 5 (ALRT). D3 = 0805 red, LCSC C84256 ✅.
+
+*Plain terms:* same LED pattern as the blue one in §1.3 — supply → 1 kΩ resistor → LED → a chip pin that connects to ground when active. Here the ALRT pin pulls down when the battery is low, so the red LED lights on low battery, even with the device off. The calculation below exists because ALRT is a weak output: it's only *guaranteed* to hold the line low while sinking up to 4 mA, so the LED current is budgeted to stay under that, with the Pi's own input adding nearly nothing. The one firmware note (50 kΩ internal pull-up ≈ 70 µA extra) is fine as-is — it's recorded here so the software side knows not to enable a *strong* pull-up on GPIO4.
 
 **(CALC + DS check)** ALRT is characterised at V_OL ≤ 0.4 V with I_OL = 4 mA, abs-max sink 20 mA (ADI DS Electrical Characteristics / Abs-Max). Budget: LED current + any pull-up current on the ALRT net must stay ≤ 4 mA for the guaranteed logic-low. Worst case VSYS = 4.4 V (USB present), red Vf ≈ 2.0 V: I_LED ≈ (4.4 − 2.0 − 0.2) / 1000 ≈ **2.2 mA**. Battery-only at the low-battery threshold (≈3.4 V): I ≈ (3.4 − 1.9 − 0.2) / 1000 ≈ 1.3 mA — visible on a high-efficiency 0805. The Pi-side GPIO4 input is high-impedance; **firmware must not enable a strong pull-up on GPIO4** (the Pi's internal ~50 kΩ pull-up, if enabled, adds only ~70 µA — acceptable; note it in the software handoff). The LED lights with the device off — per spec.
 
@@ -114,17 +291,23 @@ VSYS → **R201 = 1.0 kΩ** → D3 anode; D3 cathode → U2 pin 5 (ALRT). D3 = 0
 
 **R202 = 4.7 kΩ** (SDA→3V3), **R203 = 4.7 kΩ** (SCL→3V3), on the HAT (DESIGN.md §3.1). The MAX17048 datasheet requires system-provided pull-ups on SDA/SCL/ALRT but specifies **no value** (ADI DS Application Examples) — 4.7 kΩ is the standard I²C value for a short, low-capacitance bus (bus is specified to 400 kHz / 400 pF max). These pull-ups go to board `3V3`, so the bus is only pulled up when the device is on; the gauge itself stays alive on VBAT regardless. (The Pi also has its own 1.8 kΩ pull-ups on GPIO2/3 — the parallel combination is fine for this bus length.)
 
+*Plain terms:* I²C lines are open-drain — devices can only pull them down, so something has to pull them back up, and that something is these two resistors, one per wire, each wired from the signal line up to `3V3`. 4.7 kΩ is the everyday standard value for a short bus like this. Two subtleties, both handled: the pull-ups run from the *switched* `3V3` rail, so when Loki is off the bus simply isn't pulled up (the gauge doesn't care — it stays alive on the battery); and the Pi has its own weaker pull-ups on the same wires, which combine harmlessly (two resistors in parallel — electrically fine here). **What you draw:** resistor from SDA to `3V3`, resistor from SCL to `3V3`. That's all a "pull-up" ever means in a schematic.
+
 ---
 
 ## 3. 5 V boost — TI TPS61088 (U3) + power switch (SW1)
 
-Sources: TI **SLVSCM8D** (TPS61088 datasheet; note — the correct document number is SLVSCM8**D**, there is no SLVSF01 for this part) and the open-source **Boosty** design (Absurd Industries, GitHub `absurd-industries/boosty`, CERN-OHL-S), whose component values are a proven 5 V/5 A-from-1S instantiation of the datasheet topology.
-U3 = TPS61088RHLT, VQFN-20 + thermal pad. Target: **5.1 V out, 4 A continuous / 5 A peak** from 1S.
+**What this section does.** A lithium battery outputs 3.0–4.2 V, but the Raspberry Pi needs a steady 5.1 V. U3 is a **boost converter**: it takes the always-on `VSYS` (battery-level voltage) and steps it *up* to a regulated 5.1 V on the `5V_SYS` net — up to 4 A continuously, 5 A in peaks (Pi 5 territory). It does this by switching current through an inductor (L1) tens of thousands of times per second, which is why this section has the strictest layout rules on the board. The power switch SW1 doesn't switch the power itself — it just tells U3's EN pin "on" or "off".
+
+**What you draw.** The U3 symbol (20 pins + the EP pad); three 22 µF capacitors on the VIN side and three more on the VOUT side, plus a 0.1 µF closest to VIN; the big inductor L1 between the SW pins and VIN; two resistors forming the feedback divider that sets 5.1 V; and single resistors/capacitors on the ILIM, FSW, SS and COMP setting pins. MODE gets a no-connect flag; NC pins 11/12 go to GND. Then SW1, a simple slide switch wired between `VSYS` and the `PWR_EN` net.
+
+Sources: TI **SLVSCM8D** (TPS61088 datasheet; note — the correct document number is SLVSCM8**D**, there is no SLVSF01 for this part) and the open-source **Boosty** design (Absurd Industries, GitHub `absurd-industries/boosty`, CERN-OHL-S), whose component values are a proven 5 V/5 A-from-1S instantiation of the datasheet topology. *(Boosty is a published, working open-source board built around this same chip for this same job — where the datasheet gives equations instead of numbers, this design borrows Boosty's proven numbers and says so.)*
+U3 = TPS61088RHLT, VQFN-20 + thermal pad. Target: **5.1 V out, 4 A continuous / 5 A peak** from 1S. *("1S" = a single-cell lithium battery — one cell, 3.0–4.2 V.)*
 
 | Pin | Name | Connection | Notes / source |
 |---|---|---|---|
-| 9 | VIN | Net `VSYS`; **C301/C302/C303 = 3 × 22 µF** X5R (≥10 V) VSYS→GND + **C304 = 0.1 µF** closest to the pin | Boosty BOM (input bulk) + DS §8.2.2.6 (0.1 µF bypass closest to VIN; ≥10 µF effective input capacitance, §6.3) |
-| 4–7 | SW | Switch node → **L1** → VIN node | L1 = **2.2 µH**, Isat ≥ 12 A (Cyntec PIMB065T-2R2M class, per Boosty BOM / DS Table 8-2). Keep this loop physically tiny — see placement rules |
+| 9 | VIN | Net `VSYS`; **C301/C302/C303 = 3 × 22 µF** X5R (≥10 V) VSYS→GND + **C304 = 0.1 µF** closest to the pin (at layout time this small cap goes physically right next to the VIN pin — small bypass caps only work up close) | Boosty BOM (input bulk) + DS §8.2.2.6 (0.1 µF bypass closest to VIN; ≥10 µF effective input capacitance, §6.3) |
+| 4–7 | SW | Switch node → **L1** → VIN node | L1 = **2.2 µH** (µH = microhenries, the unit of inductance), Isat ≥ 12 A (Cyntec PIMB065T-2R2M class, per Boosty BOM / DS Table 8-2). Keep this loop physically tiny — see placement rules |
 | 8 | BOOT | **C305 = 0.1 µF** BOOT→SW node | DS Fig. 8-1 |
 | 14–16 | VOUT | Net `5V_SYS`; **C306/C307/C308 = 3 × 22 µF** X5R (≥10 V) → GND | DS §8.2.2.7 ("typically three 22 µF") + Boosty BOM |
 | 1 | VCC | **C309 = 2.2 µF** VCC→AGND | VCC is the internal bias LDO **output** — decouple only, never feed it (DS Fig. 8-1) |
@@ -139,16 +322,35 @@ U3 = TPS61088RHLT, VQFN-20 + thermal pad. Target: **5.1 V out, 4 A continuous / 
 | 20 | AGND | GND | Join to the main plane at the pad |
 | EP (21) | PGND / pad | GND, thermal vias under the pad | DS §10.1 layout |
 
+*Plain terms for the pins that need it:*
+- **VIN / VOUT capacitors.** A boost converter draws current in hard pulses, so both its input and its output get a **bank of three 22 µF bulk capacitors** in parallel (3 × 22 µF = 66 µF total per side) to absorb the pulses, plus the one small 0.1 µF (C304) right at the VIN pin for the fastest spikes. "X5R (≥10 V)" is the capacitor type and its minimum voltage rating — VSYS and 5V_SYS never exceed ~5.2 V, so 10 V-rated parts have comfortable margin. In the schematic, all six 22 µF caps are just `Device:C` from their net to GND.
+- **SW (pins 4–7) and L1.** SW is the switching node — the violent, fast-moving heart of the converter. Four pins are ganged together because the currents are large. The inductor L1 (2.2 µH, must survive ≥ 12 A without saturating — that's "Isat") connects SW back to the VIN node. The path VIN → L1 → SW → chip is "the SW loop": at layout it must be a tiny, tight loop of copper (Part D, rule 1). In the schematic it's just: SW pins wired to L1, L1 wired to `VSYS`.
+- **BOOT (pin 8).** "Bootstrap" capacitor — a 0.1 µF cap between BOOT and the SW node that the chip uses to power its own internal high-side switch driver. Draw it exactly as the table says: C305 from pin 8 to the SW net (not to ground!).
+- **VCC (pin 1)** is an *output* of the chip's internal regulator — capacitor only (C309 to AGND), never connect a supply to it.
+- **FB (pin 17)** is the feedback input — the chip's voltmeter. It watches the middle of the R301/R302 divider and adjusts its switching until the middle sits at exactly 1.204 V; with 182 kΩ over 56 kΩ, that works out to 5.117 V at the output. "E96" is the precision resistor series the value 182 kΩ comes from (use a 1 % part). AGND here is the chip's quiet ground pin 20 — same ground plane, connected at the pad.
+- **ILIM (pin 19)** sets the safety ceiling on the chip's internal switch current: R303 (100 kΩ) → ~11.9 A limit, matched to the chip's 10 A-class switch. "Cycle-by-cycle" means it enforces the limit on every single switching pulse.
+- **MODE (pin 13)** chooses between two switching styles. Left unconnected (no-connect flag), the chip uses PFM — an efficient idle style that lets the output sit ~0.7 % high at very light load, which is harmless here. Do not wire it high; that mode doesn't exist.
+- **FSW (pin 3)** sets the switching frequency (~600 kHz) via R304 — and note the trap the table flags: this resistor goes to the **SW node**, not to ground, unlike almost every other setting resistor on the board.
+- **SS (pin 10)** is soft-start: C310 (47 nF) makes the output ramp up over ~11.3 ms instead of snapping on instantly, which is gentler on everything downstream.
+- **COMP (pin 18)** is the converter's stability tuning ("compensation") — a resistor and capacitor in series to AGND: R305 then C311, in that order, then ground. The ⚠️ means these exact values come from the proven Boosty board rather than a datasheet table; what you do about it: draw them as written, and on the first prototype the design gets a load-step test (suddenly change the load and watch the output for ringing) to confirm stability. Nothing to decide now.
+- **NC pins 11/12** are marked NC by the manufacturer but the datasheet says to ground them anyway — they carry heat out of the chip. Draw them to GND. (Yes, "NC → GND" looks contradictory; here it means "no electrical function — use as extra ground/thermal connection".)
+
 **SW1 — power switch:** slide switch, common → `PWR_EN`, ON throw → `VSYS`, OFF throw → open (U3's internal pull-down holds EN low). SW1 carries only EN-pin current (µA) — any small SMD slide switch works; it never carries load current (DESIGN.md §5.2 "off" semantics). Rate it ≥ 100 mA for mechanical margin anyway.
 
-**Placement (this is the layout-critical IC — DS §10.1: "Minimize the length and area of all traces connected to the SW pin"):** L1 and C301–C304 within 5 mm of the VIN/SW pins (DESIGN.md §6.3); SW-node copper as small as connectivity allows, over the solid L2 ground; thermal vias under the EP; keep FB/COMP/SS components on the quiet side of the package, away from the SW node; the whole boost cluster sits close to the battery/charger edge so the high-current VSYS path (battery → U1 OUT → U3 VIN) is short and wide.
+*Plain terms:* the switch is a signal, not a gate for the actual power — only microamps flow through it. In the ON position it connects `PWR_EN` to `VSYS` (a high signal → boost on). In the OFF position it connects `PWR_EN` to nothing, and U3's own internal ~800 kΩ pull-down drags EN to ground (boost off, guaranteed). "Throw" = one of the switch's contact positions; "common" = the moving contact. In KiCad, draw a generic SPDT switch symbol: common to `PWR_EN`, one throw to `VSYS`, the other throw left unconnected (no-connect flag).
+
+**Placement (this is the layout-critical IC — DS §10.1: "Minimize the length and area of all traces connected to the SW pin"):** L1 and C301–C304 within 5 mm of the VIN/SW pins (DESIGN.md §6.3); SW-node copper as small as connectivity allows, over the solid L2 ground; thermal vias under the EP; keep FB/COMP/SS components on the quiet side of the package, away from the SW node; the whole boost cluster sits close to the battery/charger edge so the high-current VSYS path (battery → U1 OUT → U3 VIN) is short and wide. *(All layout instructions — for PCB time. The one thing worth remembering now: the SW node is electrically noisy, and the FB/COMP/SS parts are the quiet, sensitive ones — they end up on opposite sides of the chip.)*
 
 ---
 
 ## 4. 3.3 V buck — SY8089AAAC (U4)
 
+**What this section does.** A **buck converter** is the boost's mirror image: it steps voltage *down*. U4 takes `5V_SYS` (5.1 V) and makes the clean, regulated `3V3` rail (3.3 V, up to 2 A) that powers the ESP32, both radios, the NFC chip, the microSD slot and the button pull-ups. It runs *from the boost's output*, not from the battery — so when the power switch kills the boost, the whole 3.3 V world dies with it. That is deliberate: power switch off = ESP32 off.
+
+**What you draw.** The U4 symbol (5 pins, SOT-23-5 — a tiny 5-legged package). One 22 µF cap on IN; the inductor L401 from the LX pin to the `3V3` net; two 22 µF caps on the output; the two-resistor feedback divider + a small 22 pF cap on FB; and EN wired straight to `5V_SYS` with a big pull-down resistor to GND.
+
 Source: Silergy **AN_SY8089/A Rev. 0.9A** (the SY8089/SY8089A datasheet; LCSC lists C78988 as "Output Type: Adjustable").
-U4 = SY8089AAAC, SOT-23-5. **Confirmed: this variant is adjustable** (V_REF = 0.6 V typ) with hiccup short-circuit protection — it is not a fixed-output part, and no fixed variant is listed in the datasheet. Input = `5V_SYS` (fed from the boost, **not** from the battery — DESIGN.md §2.6), output 3.3 V / 2 A, f_SW = 1 MHz.
+U4 = SY8089AAAC, SOT-23-5. **Confirmed: this variant is adjustable** (V_REF = 0.6 V typ) with hiccup short-circuit protection — it is not a fixed-output part, and no fixed variant is listed in the datasheet. Input = `5V_SYS` (fed from the boost, **not** from the battery — DESIGN.md §2.6), output 3.3 V / 2 A, f_SW = 1 MHz. *("Adjustable" = the output voltage is set by an external resistor divider, as opposed to a fixed-output variant that makes one preset voltage. "Hiccup" protection = when shorted, the chip pulses on briefly, gives up, waits, retries — instead of cooking itself. f_SW = its switching frequency, 1 MHz.)*
 
 | Pin | Name | Connection | Notes / source |
 |---|---|---|---|
@@ -159,11 +361,17 @@ U4 = SY8089AAAC, SOT-23-5. **Confirmed: this variant is adjustable** (V_REF = 0.
 | 1 | EN | → `5V_SYS`; **R403 = 1 MΩ** EN→GND | Sequencing by construction: the buck can only start once the boost has brought 5V_SYS up (DESIGN.md §5.1: "SY8089 EN slaved to 5V_SYS"). EN rising threshold 1.5 V / falling 0.4 V, abs-max V_IN + 0.6 V (DS p.2, p.4) — tying EN to the 5.1 V input rail is within rating (inference from the abs-max table; the DS does not print an explicit "may tie to IN" sentence). EN must not float (DS p.2); R403 is the DS p.8-recommended pull-down against false turn-on |
 | 2 | GND | GND | |
 
-**Placement:** C401 tight to pin 4; L401 and C402/C403 tight to pin 3 (LX loop small); FB divider + C404 close to pin 5, away from the LX node. Fed from 5V_SYS means the whole 3V3 domain (ESP32, radios, PN532, SD, button pull-ups) dies cleanly with the power switch — "device off = ESP32 off" (DESIGN.md §2.6).
+*Plain terms:* LX (pin 3) is this converter's switching node — same idea as U3's SW, smaller currents. L401 sits between LX and the output net; C402/C403 are the output bulk caps at the far end of the inductor ("at L401's output" = on the `3V3` side of the inductor, not the chip side). "Isat > 2.3 A" means the inductor must not saturate below ~2.3 A; "DCR < 50 mΩ" means its winding resistance should be under 50 milliohms so it doesn't waste power as heat. The FB divider works exactly like U3's — the chip holds FB at 0.6 V, the 453 kΩ/100 kΩ ratio turns that into 3.318 V out (the +0.55 % is well within what 3.3 V parts accept). C404 (22 pF) is wired *across* R401 — one end on the `3V3` side, the other end on the FB pin — that's the feedforward capacitor from the glossary. EN is wired directly to `5V_SYS` so the buck starts automatically the moment the boost is up ("slaved"); R403 (1 MΩ to GND) just guarantees EN reads a firm "off" before that, instead of floating. The note in the EN row is an honest caveat, not an action item: tying EN to the input rail is inside the pin's voltage rating per the datasheet's own limits table, even though the datasheet never prints a sentence explicitly blessing it.
+
+**Placement:** C401 tight to pin 4; L401 and C402/C403 tight to pin 3 (LX loop small); FB divider + C404 close to pin 5, away from the LX node. Fed from 5V_SYS means the whole 3V3 domain (ESP32, radios, PN532, SD, button pull-ups) dies cleanly with the power switch — "device off = ESP32 off" (DESIGN.md §2.6). *(Layout notes, as usual — "LX loop small" means the pin 3 → L401 → output caps → ground loop is kept physically tiny.)*
 
 ---
 
 ## 5. ESP32-S3 coprocessor — ESP32-S3-WROOM-1-N16R8 (U5) + USB-C #2
+
+**What this section does.** U5 is the second brain of Loki: the ESP32-S3 module that runs the radios (Bluetooth, sub-GHz, 2.4 GHz, NFC, IR) while the Pi runs the main show. This section wires its lifelines: power, the reset/boot-strap pins the Pi uses to control it, the UART (serial link) to the Pi, the attention-interrupt line back to the Pi, the native USB pins, and the fan-out of its GPIOs to the radios. Most rows in the table below are "this GPIO goes to that subsystem" — the actual parts for those subsystems live in their own sections (§6–§10); the only *components* in this section are the pull-ups, series resistors and capacitors around the module itself.
+
+**What you draw.** The U5 module symbol (Espressif's own KiCad library has it — see FOOTPRINTS.md); two power caps on its 3V3 pin; on EN: a pull-up, a 1 µF cap, and a 1 kΩ series resistor to a Pi header pin; the same pull-up + series pair on IO0; a 499 Ω series resistor on the UART TX line, a plain wire for RX; a pull-up on the IO42 attention line; 0 Ω series resistors on the two USB data lines (they run to U10 in §5.1); a two-resistor divider + cap for USB VBUS detection on IO21; and two 4.7 kΩ pull-ups for the ESP32's own I²C bus. Everything else is a wire from a module pad to another section's net.
 
 Sources: Espressif **ESP32-S3-WROOM-1 Datasheet v1.2** §3.2/§6 (cited "Module DS") and **ESP32-S3 Hardware Design Guidelines** (cited "HDG"). Module LCSC C2913202 ✅. Connections are named by GPIO (module pads are labelled by GPIO); module pin numbers are given where verified.
 
@@ -186,14 +394,24 @@ Sources: Espressif **ESP32-S3-WROOM-1 Datasheet v1.2** §3.2/§6 (cited "Module 
 | IO10, IO9, IO17 | U6 CC1101 CS / GDO0 / GDO2 (§6) | |
 | IO14, IO7 | SD1 CS / card-detect (§9) | |
 | IO40, IO41 | U8 PN532 IRQ / RSTPDN (§8) | |
-| IO1, IO2 | IR RX in / IR TX out (§10) | |
 | IO3, IO47, IO48 | Test pads only | IO3 is a strapping pin (JTAG source) — do not load it (DESIGN.md §3.2). IO45/IO46 stay unconnected (strapping); IO26–32 and IO33–37 do not exist as usable pads (flash/PSRAM) |
 
-**Antenna placement (Module DS §3.1 keep-out zone; HDG module layout rules):** module antenna end overhangs the board edge or sits at the edge with the base board cut away beside/below it; **no copper on any layer** under the antenna zone; dense ground vias *near* (not under) the antenna; ≥ 15 mm clearance to housing walls in the end product. Also keep the whole module away from the Pi's own WiFi antenna corner on the board below (DESIGN.md §6.2).
+*Plain terms for the patterns in this table (they repeat all over the board, so they're worth learning once):*
+- **EN (pin 3)** is the ESP32's reset/enable pin: hold it low = chip held off/reset; let it rise = chip boots. R501 (10 kΩ pull-up to `3V3`) makes "let it rise" the default. C503 (1 µF to GND) slows that rise slightly so power is stable first (the resistor + capacitor pair is called an "RC" — the delay is the point). The Pi can grab the line through R502 (1 kΩ, *in series* — the Pi's wire goes Pi pin → resistor → EN net) to force a reset or reflash the ESP32. The 1 kΩ exists so that if the Pi is powered while the ESP32 side is not (or vice versa), only a trickle (< 3.3 mA) can sneak through the chips' internal protection ("clamp backfeed") instead of a damaging current.
+- **IO0** is the boot-mode strap: high at reset = run normally; low at reset = enter flashing mode. Same pattern: R503 pull-up keeps it high (normal boot) by default; the Pi can pull it low through R504 when it wants to reflash the ESP32. The ⚠️ here only means Espressif's guideline says "fit a pull-up" without printing the value — 10 kΩ is what their own reference boards and our design use. Draw it as written. And note: **no capacitor on this net** — a cap here could hold the pin low during boot and break the strap.
+- **Series resistors on signal lines** (R502, R504, R505) sit in the middle of a wire — signal flows through them. They cost the signal almost nothing (the receiving input draws ~no current) but they limit fault currents and, on the UART TX line (R505 = 499 Ω), smooth the signal's edges so it radiates less radio-frequency noise ("harmonic suppression").
+- **IO42 / `ESP_IRQ`** is the ESP32 tapping the Pi on the shoulder ("a radio event happened", "BadUSB finished"). It's open-drain style: the ESP32 either pulls the line to ground or lets go, and R506's pull-up is what brings the line back up — without R506 the line could never read high. This is the same open-drain + pull-up pattern as §2's ALRT.
+- **IO19/IO20 (USB D−/D+)** are the ESP32's built-in USB. The 0 Ω resistors (R507/R508) are placeholders that conduct like a plain wire — they're fitted so that if testing shows the USB signal needs the 22 Ω version instead, it's a part swap, not a board redesign. The "90 Ω differential pair, length-matched, unbroken ground beneath" is a layout instruction (Part D, rule 5): the two wires run together as a pair.
+- **IO21 VBUS detect:** J3's VBUS is 5 V — too much for a 3.3 V GPIO. The two equal 100 kΩ resistors (R509/R510) form a divider that halves it to ≈2.5 V: VBUS → R509 → IO21 → R510 → GND. C504 (0.1 µF) on the same pin just filters noise so the reading doesn't flicker.
+- **"Do not load" IO3:** IO3 is a strapping pin. It goes to a test pad only (TP section of the BOM) — a bare copper pad you can touch a probe to — and nothing else may hang on it, or the ESP32 may boot in the wrong mode. IO45/IO46 are also straps and stay fully unconnected; IO26–32 and IO33–37 don't exist as usable pads at all because they're wired inside the module to its flash memory and RAM.
+
+**Antenna placement (Module DS §3.1 keep-out zone; HDG module layout rules):** module antenna end overhangs the board edge or sits at the edge with the base board cut away beside/below it; **no copper on any layer** under the antenna zone; dense ground vias *near* (not under) the antenna; ≥ 15 mm clearance to housing walls in the end product. Also keep the whole module away from the Pi's own WiFi antenna corner on the board below (DESIGN.md §6.2). *(Layout instructions. The module's antenna is the exposed section at one end of the WROOM — that end hangs over the board edge, and the zone beneath it is a keep-out: no copper pours, no traces, no parts, on any layer.)*
 
 ### 5.1 USB-C #2 — ESP32 data port (J3) + ESD (U10)
 
 J3 = HRO TYPE-C-31-M-12, LCSC C165948 ✅ (same part as J2).
+
+**What this section does.** This is the ESP32's own USB-C port — the one a PC plugs into for BadUSB (the ESP32 pretending to be a keyboard) and for flashing the ESP32. U10 is a tiny bodyguard chip (an ESD protection part) sitting between the connector and the ESP32: if a static spark hits the port, U10 absorbs it instead of the ESP32. Note this port's VBUS powers *nothing* on the board — it's only sensed (§5, IO21) so the ESP32 knows a host is plugged in.
 
 | J3 terminal | Connection |
 |---|---|
@@ -204,11 +422,17 @@ J3 = HRO TYPE-C-31-M-12, LCSC C165948 ✅ (same part as J2).
 
 U10 = USBLC6-2SC6 (SOT-23-6): flow-through routing — connector-side I/O pins face J3, protected-side pins face U5, pin 5 (VBUS) → J3 VBUS, pin 2 → GND. ⚠️ VERIFY: pin numbering per ST's datasheet for the exact ordering code at BOM freeze (the flow-through arrangement above is the part's standard configuration). Place U10 immediately behind J3, before any stub or via on the D+/D− pair.
 
+*Plain terms:* "Flow-through" means the signal enters one side of U10 and exits the opposite side — connector side in, ESP32 side out — so at layout time the USB pair runs in a straight line: connector → U10 → series resistors → module, with no branches (stubs) and no layer-hopping vias before the protection chip. The ⚠️ VERIFY means: USBLC6 parts come in several ordering variants, and before ordering (BOM freeze) the exact variant's pin numbering gets checked against ST's datasheet so pin 5 really is VBUS and pin 2 really is GND on the part we buy. Draw it per the description above now; the check is a pre-order checklist item, not a drawing blocker.
+
 ---
 
 ## 6. Sub-GHz radio — EBYTE E07-900M10S CC1101 module (U6)
 
-Source: EBYTE **E07-900M10S User Manual v1.0** (cited "E07 manual"). Module = TI CC1101 + integrated crystal/matching, 14 × 20 mm stamp-hole SMD, 22 pads. (433 MHz builds fit the pin-compatible E07-400M10S instead — decision D2.)
+**What this section does.** U6 is the sub-GHz radio module — the 868/915 MHz radio used for things like remote controls, sensors and car key fobs (a 433 MHz variant of the same module fits the same footprint for other regions). It's a ready-made module: the radio chip, its crystal and its matching components are already inside, so this section is mostly wires: power + two capacitors, the shared SPI bus, two interrupt wires, a bank of ground pads, and the antenna connection.
+
+**What you draw.** The module symbol (22 pads); C601 + C602 on the VCC pad; nine pads wired straight to GND; five pads flagged no-connect; four SPI wires and two GDO wires to the ESP32 pins listed; and a 0 Ω resistor (R601) from the ANT pad to the U.FL antenna connector J7.
+
+Source: EBYTE **E07-900M10S User Manual v1.0** (cited "E07 manual"). Module = TI CC1101 + integrated crystal/matching, 14 × 20 mm stamp-hole SMD, 22 pads. (433 MHz builds fit the pin-compatible E07-400M10S instead — decision D2.) *("Stamp-hole" = the module solders down by half-circle notches around its edges — the pads in the table are those notches. The module is 14 × 20 mm.)*
 
 | Pad | Name | Connection |
 |---|---|---|
@@ -223,15 +447,21 @@ Source: EBYTE **E07-900M10S User Manual v1.0** (cited "E07 manual"). Module = TI
 | 14 | GDO2 | → ESP32 IO17 (carrier-sense / async serial) |
 | 21 | ANT | → **R601 = 0 Ω** selector → **J7** (U.FL) → pigtail → case SMA whip. Alternate footprint from the post-R601 node: soldered spring antenna, **DNP** in the standard build (decision D6 — footprint keeps both options; fit exactly one path) |
 
-Supply range note: the E07 manual contradicts itself (1.8–3.6 V in §2.2 vs 3.0–3.6 V at the pin-9 definition). Design target is our regulated 3.3 V, which satisfies every stated range (⚠️ flagged in sources). 
+*Plain terms:* The capacitor pair on VCC is the standard recipe from the glossary — C602 (10 µF) is the bulk reservoir, C601 (0.1 µF) is the small fast bypass; the "(EC)" tag and the quoted manual line mean EBYTE demands *a* capacitor there but never says which, so the design uses the standard pair (Part E, item 10 keeps this on the double-check list). All nine GND pads really do all get wired to ground — they're the radio's return path, and RF parts misbehave if you skimp on grounds. CSN is this module's SPI chip-select (the ESP32 pulls it low to talk to this module); SCK/MOSI/MISO are the shared SPI bus wires (§5). GDO0/GDO2 are the module's two programmable signal-out pins — here they report "packet received/sent" and "carrier present" back to the ESP32 as interrupts. The ANT pad goes through a 0 Ω resistor (R601 — a wire-like jumper resistor) to J7, the tiny U.FL snap-on coax connector; a thin coax **pigtail** (a short cable with a connector on one end and an antenna fitting on the other) runs from J7 to the SMA whip antenna on the case. The alternative spring antenna (a little coil that solders straight to the board) shares the same node after R601, and is **DNP** — its footprint exists, but in the standard build you fit the whip path only, never both ("fit exactly one path").
 
-**Placement:** opposite board corner from the ESP32 antenna (DESIGN.md §6.4); J7 at the case edge; keep the ANT pad and the trace to J7 clear of the display header's ground pins and any digital copper — 50 Ω controlled run, as short as possible.
+Supply range note: the E07 manual contradicts itself (1.8–3.6 V in §2.2 vs 3.0–3.6 V at the pin-9 definition). Design target is our regulated 3.3 V, which satisfies every stated range (⚠️ flagged in sources). *(Nothing to do: 3.3 V is inside both versions of the spec, so the contradiction is harmless — it's recorded so nobody "discovers" it later and worries. Part E, item 11.)*
+
+**Placement:** opposite board corner from the ESP32 antenna (DESIGN.md §6.4); J7 at the case edge; keep the ANT pad and the trace to J7 clear of the display header's ground pins and any digital copper — 50 Ω controlled run, as short as possible. *(Layout notes. "50 Ω controlled run" means the antenna trace is drawn with a specific width so its electrical impedance is 50 Ω, matching the antenna system — the layout tool/your design rules handle the width; what matters now is: short and direct.)*
 
 ---
 
 ## 7. 2.4 GHz radio — EBYTE E01-ML01SP4 nRF24L01+ PA/LNA module (U7)
 
-Sources: EBYTE **E01-ML01SP4 Datasheet V1.0** + **E01 User Manual** (cited "E01 manual"). ⚠️ **This SMD module's pin order is NOT the common 8-pin DIP nRF24 order** — it is a 10-pad SMD part; wire it exactly as below. Antenna = onboard IPEX, 50 Ω (§8 of the E01 manual; generation — MHF1/U.FL class — not specified by EBYTE ⚠️).
+**What this section does.** U7 is the 2.4 GHz radio module (nRF24-based — the radio in a lot of wireless mice, and famously in Flipper-Zero-style add-ons for keyboard/mouse jamming research and wireless-device sniffing). "PA/LNA" means it has a power amplifier (PA) to transmit stronger (+20 dBm) and a low-noise amplifier (LNA) to hear weaker signals — which is why it can gulp 120 mA in bursts and needs a bigger reservoir capacitor than U6. Its antenna is a tiny IPEX snap connector on the module itself.
+
+**What you draw.** The module symbol (10 pads); C701 + C702 on VCC; three pads to GND; SPI wires plus CE, CSN and IRQ to the ESP32. And read the warning above the table twice: **this module's pad order is not the order used by the common breakout boards** — wire it by the table, not by habit.
+
+Sources: EBYTE **E01-ML01SP4 Datasheet V1.0** + **E01 User Manual** (cited "E01 manual"). ⚠️ **This SMD module's pin order is NOT the common 8-pin DIP nRF24 order** — it is a 10-pad SMD part; wire it exactly as below. Antenna = onboard IPEX, 50 Ω (§8 of the E01 manual; generation — MHF1/U.FL class — not specified by EBYTE ⚠️). *(The ⚠️ on the antenna connector means EBYTE doesn't state which micro-coax connector generation it is (MHF1 vs U.FL — near-identical snap connectors that are *mostly* intermateable). What to do: when the modules are ordered, confirm the connector on the actual part against the pigtail/whip being bought. Nothing to change in the schematic.)*
 
 | Pad | Name | Connection |
 |---|---|---|
@@ -244,15 +474,23 @@ Sources: EBYTE **E01-ML01SP4 Datasheet V1.0** + **E01 User Manual** (cited "E01 
 | 7 | IRQ | → ESP32 IO6 |
 | 8, 9, 10 | GND | GND |
 
-**Placement:** away from the ESP32 antenna (both live at 2.4 GHz — DESIGN.md §2.10); IPEX whip dressed inside the case; keep the module's ground pads stitched to the plane (PA return current is the pulsed 120 mA).
+*Plain terms:* CE is the module's "radio enable" (high = radio awake and listening; it also switches on the receive amplifier). CSN is its SPI chip-select; IRQ is its interrupt wire ("something happened — packet received"). The VCC note's ⚠️ is the same situation as U6: EBYTE specifies no capacitor values (their ⚠️-marked guidance is a π-filter — a filter shaped like the letter π: cap, then series element, then cap — plus "give it current headroom"), so the design fits the standard 10 µF bulk + 0.1 µF bypass pair on a 2 A rail, which covers the 120 mA transmit bursts with big margin. The sentence about "~115 mA" is there so nobody "corrects" the design from a marketplace listing — the 110/120/130 mA figures are EBYTE's own. (Part E, items 12–13 keep both EBYTE ⚠️s on the double-check list.)
+
+**Placement:** away from the ESP32 antenna (both live at 2.4 GHz — DESIGN.md §2.10); IPEX whip dressed inside the case; keep the module's ground pads stitched to the plane (PA return current is the pulsed 120 mA). *(Layout notes. "Stitched to the plane" = connected down into the ground layer with vias. "Whip dressed inside the case" = the little antenna wire is routed neatly inside the enclosure.)*
 
 ---
 
 ## 8. NFC / RFID — NXP PN532 (U8, bare chip, I²C)
 
-Sources: NXP **AN1445 Rev. 1.2** (antenna design guide — see erratum 2 about "AN10688"), **PN532/C1 Data Sheet Rev. 3.6** §7.2/§8.4/§13 (cited "PN532 DS"), **UM0701-02** (user manual). U8 = PN532/C1, HVQFN-40. Pin numbers below are the HVQFN-40 numbers verified from the data sheet; TX1/TX2/RX are named (their pad numbers ride on the KiCad symbol — confirm against PN532 DS Table 3 when the symbol is placed ⚠️).
+**What this section does.** U8 is the NFC/RFID chip — the thing that reads and emulates 13.56 MHz cards and tags (door badges, transit cards, Amiibo-class NFC). Unlike U6/U7 it is a **bare chip**, not a module: it needs its own crystal, its own power wiring (unusual — see §8.1), and a whole antenna-tuning network (§8.4) between the chip and the U.FL connector that leads to the adhesive loop antenna in the case back. The ESP32 talks to it over I²C. This is the most component-dense section on the board — expect ~25 small parts around this one chip, all of them in §8.1–§8.4.
+
+**What you draw.** The U8 symbol (40 pins); a capacitor on nearly every power pin, in the exact pairings of §8.1; the crystal Y1 with two 22 pF caps (§8.2); six interface wires (§8.3); and the symmetrical antenna network (§8.4) — inductors, capacitors and resistors mirrored identically on the TX1 and TX2 sides, plus the small RX tap-off network.
+
+Sources: NXP **AN1445 Rev. 1.2** (antenna design guide — see erratum 2 about "AN10688"), **PN532/C1 Data Sheet Rev. 3.6** §7.2/§8.4/§13 (cited "PN532 DS"), **UM0701-02** (user manual). U8 = PN532/C1, HVQFN-40. Pin numbers below are the HVQFN-40 numbers verified from the data sheet; TX1/TX2/RX are named (their pad numbers ride on the KiCad symbol — confirm against PN532 DS Table 3 when the symbol is placed ⚠️). *(HVQFN-40: flat 40-pad package. The ⚠️ on the TX/RX pins: the *connections* in §8.4 are specified by pin name because the exact pin numbers for TX1/TX2/RX come from the KiCad symbol we use — when you place the U8 symbol, cross-check those three pins against Table 3 of the PN532 datasheet. Part E, item 6 lists every other pin number, already verified, for the same cross-check. Draw §8.4 by name and verify numbers at that moment.)*
 
 ### 8.1 Power — read carefully, PN532 generates its own rails
+
+**What this sub-section does.** Most chips take one supply voltage and that's it. The PN532 takes battery-level power on VBAT and internally manufactures a second, cleaner ~3.0 V rail called DVDD, which then feeds its own analog (AVDD) and transmitter (TVDD) supplies. So several pins that *sound* like power inputs are actually **outputs or distribution points of that internal rail** — wire them exactly as the table says, especially DVDD: capacitor on it, wire to AVDD and TVDD, but never feed power *into* it.
 
 | Pin | Name | Connection |
 |---|---|---|
@@ -266,13 +504,19 @@ Sources: NXP **AN1445 Rev. 1.2** (antenna design guide — see erratum 2 about "
 | 37 | SVDD | **No connect** (switchable supply *output* for an NFC-WI secure element we don't fit; leave unloaded, PN532 DS §8.4.2) |
 | 9 | VMID | **C808 = 0.1 µF** → GND (internal RX reference, decoupled per AN1445 §4.6.1 / Fig. 51) |
 
-⚠️ Cap-assignment note: Fig. 51's exact per-pin capacitor placement is partially illegible in the PDF; the set above follows the DS §8.4 requirement (separate decoupling on DVDD, AVDD, TVDD; 4.7 µF + 100 nF pairs on DVDD and TVDD; 100 nF on AVDD/PVDD/VMID). This matches the reference circuit's component inventory.
+*Plain terms:* treat `DVDD` as its own little net: it leaves pin 39, gets C802 (bulk) + C803 (bypass) to ground, and continues on to pins 5 (TVDD, the transmitter supply — it gets its own pair, C804 + C805) and 8 (AVDD, the analog supply — C806). TVSS1/TVSS2/AVSS are just ground pins with radio-section names — wire them to GND. PVDD is separate and important: it's the supply for the chip's communication pins, and feeding it from `3V3` is what makes its I²C and interrupt signals speak 3.3 V like the ESP32 expects. SVDD is an output for an accessory we don't fit — no-connect flag. VMID is an internal reference voltage the chip generates for its receiver; it only needs its capacitor (C808) to ground.
+
+⚠️ Cap-assignment note: Fig. 51's exact per-pin capacitor placement is partially illegible in the PDF; the set above follows the DS §8.4 requirement (separate decoupling on DVDD, AVDD, TVDD; 4.7 µF + 100 nF pairs on DVDD and TVDD; 100 nF on AVDD/PVDD/VMID). This matches the reference circuit's component inventory. *(In plain terms: one page of NXP's PDF is blurry, so the exact "which 0.1 µF belongs to which pin" mapping couldn't be read with certainty. The set in the table satisfies the datasheet's written requirement — every one of those pins gets its own decoupling, in the stated sizes — and uses exactly the components NXP's reference circuit lists. Draw the table as written. 100 nF is the same thing as 0.1 µF, by the way — the note just uses the other unit. Part E, item 7.)*
 
 ### 8.2 Crystal
 
 **Y1 = 27.12 MHz** between OSCIN (pin 14) and OSCOUT (pin 15); **C815 = 22 pF** (OSCIN→GND), **C816 = 22 pF** (OSCOUT→GND) (PN532 DS §13 Fig. 51). Crystal spec per DS §12.5: 27.12 MHz ± ~480 ppm, ESR ≤ 50 Ω, load capacitance 10 pF, drive 100 µW (e.g. TAS-3225A class). Keep Y1 and its caps within a few mm of pins 14/15, ground-guarded, away from the antenna network.
 
+*Plain terms:* the crystal (Y1) is the chip's metronome — a tiny quartz part that vibrates at exactly 27.12 MHz (twice the 13.56 MHz NFC frequency) and gives the chip its timing. It wires between pins 14 and 15, and each of those pins also gets a small 22 pF capacitor down to ground (C815/C816, the "load" capacitors that the crystal needs to run at the right frequency — use C0G-type caps here; exact values matter). The spec numbers are for choosing the crystal part at BOM freeze: accuracy ±~480 ppm (parts per million), ESR ≤ 50 Ω (its internal resistance), load capacitance 10 pF, drive level 100 µW (don't overdrive it). "Ground-guarded" is a layout note: surround the crystal traces with ground copper at PCB time, and keep the whole trio close to the pins and away from the antenna network.
+
 ### 8.3 Host interface (I²C)
+
+**What this sub-section does.** Six wires between the ESP32 and the PN532: the I²C pair, the two interface-select straps that tell the chip "speak I²C", the reset line, and the interrupt line.
 
 | Pin | Name | Connection |
 |---|---|---|
@@ -285,24 +529,34 @@ Sources: NXP **AN1445 Rev. 1.2** (antenna design guide — see erratum 2 about "
 
 I²C address is fixed at **0x24** (7-bit; UM0701-02 §6.2.4 gives the 8-bit form 0x48). There are no address-select pins.
 
+*Plain terms:* the PN532 can speak three languages (I²C, SPI, serial); pins I0 and I1 are the selector switch, read at power-up — I0 wired to DVDD (a logic "1") and I1 to GND (a "0") selects I²C permanently. The pull-ups for SDA/SCL (R513/R514) live in §5's table — if you've drawn §5 already, they're placed; here you just land the wires. RSTPD_N is the reset pin: the "_N" marks it active-low (pull it to ground = chip off/reset; the ESP32 holds it high for normal operation, and no pull-up/pull-down resistor is fitted because the ESP32 always drives it). P70_IRQ is the chip's "I have something to tell you" interrupt to the ESP32 — a plain driven signal, no resistors needed. The I²C address 0x24 is fixed in the silicon — there's nothing to wire for it; it's a firmware fact.
+
 ### 8.4 Antenna network — EMC filter + matching (AN1445 §4, Fig. 1; §4.7 worked example)
+
+**What this sub-section does.** The PN532's transmitter pins don't connect straight to the antenna. Between them sits a small network of inductors, capacitors and resistors with two jobs: the **EMC filter** (L801/L802 + C809/C810) cleans up the harsh square-wave energy the transmitter produces so the board doesn't radiate illegal interference, and the **matching network** (C811–C814 + R801/R802) translates between the chip and the loop antenna so power transfers efficiently — like matching a gearbox between an engine and wheels. The network is **symmetrical**: the TX1 side and TX2 side are built identically, mirror images. A third mini-network (R803/R804/C817) taps a sample of the signal off to the receiver pin so the chip can hear the card's answer.
 
 Symmetrical: build the TX1 half and the TX2 half identically. Per side:
 
 TX pin → **L801/L802 = 560 nH** (EMC inductor) → node `EMC_A` / `EMC_B`; **C809/C810 = 220 pF** from each EMC node → TVSS (GND); EMC node → **C811/C812 = 18 pF** (series matching cap C1) → **R801/R802 = 3.3 Ω** (damping Rq) → loop terminal `ANT_A` / `ANT_B`; **C813/C814 = 56 pF** from each loop terminal → TVSS (GND) (shunt matching cap C2).
 
-- EMC filter: L0 = 560 nH with C0 = 220 pF sets fr0 ≈ 14.3 MHz — AN1445 §4.2 worked example (allowed L0 range 390 nH–1 µH, fr0 target 14.1–14.5 MHz).
-- C1/C2/Rq values are the AN1445 §4.7 evaluation-board results for a loop of La ≈ 2.9 µH, Ra ≈ 1.9 Ω, Ca ≈ 11 pF, tuned to Rmatch ≈ 50 Ω at Q ≈ 35. **They are starting values, not final values** — C1, C2 and Rq are antenna-dependent by construction (AN1445 Eqs. 7–10) and **must be bench-tuned with the actual adhesive loop and its cable fitted** (DESIGN.md §6.5 already calls for this). The note's design envelope: La 0.3–3 µH, Ra 0.3–8 Ω, Q target 35 ± 10 %.
-- **ANT_A → J8** (U.FL) centre; **ANT_B → J8** shell/GND. J8 → coax pigtail → adhesive 13.56 MHz loop in the case back (decision D1). The cable is part of the antenna — tune with the final cable length.
-- RX path (from the TX1-side EMC node `EMC_A`): **R803 = 1 kΩ** (R1, predefined) → node `RXD`; **R804 = 2.7 kΩ** (R2) from `RXD` → GND; **C817 = 1 nF** (CRX) from `RXD` → RX pin. R1 and CRX/Cvmid are fixed by AN1445 §4.6.1; R2 = 2.7 kΩ is the PN532 DS Fig. 51 instance value — it is calculated per-loop (AN1445 Eq. 11, target U_RX ≈ 1 Vpp), so treat 2.7 kΩ as the starting value alongside C1/C2/Rq tuning.
+*How to read that paragraph (and how to draw it):* follow one side as a chain. Starting at the TX1 pin: first L801 (560 nH inductor) in series; where the inductor ends is a node (call it `EMC_A`); from `EMC_A`, C809 (220 pF) goes down to ground (a shunt cap), and the main path continues through C811 (18 pF, in series) then R801 (3.3 Ω, in series) to the loop terminal `ANT_A`; from `ANT_A`, C813 (56 pF) shunts to ground, and `ANT_A` itself runs on to the J8 connector. Now draw the exact same chain again for TX2 with L802, C810, C812, R802, C814 and node `EMC_B` / terminal `ANT_B`. In the schematic, giving the nodes the names `EMC_A`, `EMC_B`, `ANT_A`, `ANT_B` as net labels makes the mirror structure obvious. "TVSS" is the transmitter ground — plain GND on this board.
 
-**Placement:** the entire network (L801/L802 → J8) is one compact cluster: EMC parts adjacent to the TX pins, matching caps adjacent to J8, **whole network within 10 mm of the U.FL** (DESIGN.md §6.5), no ground-pour tricks under the network, no digital traces crossing it. PN532 sits on the case-back side of the board so the J8 run is short.
+- EMC filter: L0 = 560 nH with C0 = 220 pF sets fr0 ≈ 14.3 MHz — AN1445 §4.2 worked example (allowed L0 range 390 nH–1 µH, fr0 target 14.1–14.5 MHz). *(fr0 is the filter's resonant frequency — the point it filters around. 14.3 MHz sits just above the 13.56 MHz operating frequency: the wanted signal passes, its higher harmonics get shaved off.)*
+- C1/C2/Rq values are the AN1445 §4.7 evaluation-board results for a loop of La ≈ 2.9 µH, Ra ≈ 1.9 Ω, Ca ≈ 11 pF, tuned to Rmatch ≈ 50 Ω at Q ≈ 35. **They are starting values, not final values** — C1, C2 and Rq are antenna-dependent by construction (AN1445 Eqs. 7–10) and **must be bench-tuned with the actual adhesive loop and its cable fitted** (DESIGN.md §6.5 already calls for this). The note's design envelope: La 0.3–3 µH, Ra 0.3–8 Ω, Q target 35 ± 10 %. *(In plain terms: 18 pF / 56 pF / 3.3 Ω are the values that worked on NXP's test board with a test loop of about that size (La/Ra/Ca are the loop's own inductance, resistance and capacitance). Our real loop is a different physical object, so on the first prototype these parts get adjusted — swapped up/down in value while measuring read range — until the real antenna is tuned. That is normal NFC engineering, planned for, not a flaw: draw them as written now, expect C811–C814 and R801/R802 to change value at prototype stage. The "design envelope" is NXP saying the method works for loops anywhere in those ranges.)*
+- **ANT_A → J8** (U.FL) centre; **ANT_B → J8** shell/GND. J8 → coax pigtail → adhesive 13.56 MHz loop in the case back (decision D1). The cable is part of the antenna — tune with the final cable length. *(J8 is the same kind of tiny snap-on coax connector as J7. `ANT_A` lands on its centre contact; `ANT_B` lands on its shell, which is ground. The adhesive loop is a flat sticker-like antenna that lives in the case's back panel, joined by a short coax pigtail — and because that cable is electrically part of the antenna, the bench tuning above happens with the final cable in place.)*
+- RX path (from the TX1-side EMC node `EMC_A`): **R803 = 1 kΩ** (R1, predefined) → node `RXD`; **R804 = 2.7 kΩ** (R2) from `RXD` → GND; **C817 = 1 nF** (CRX) from `RXD` → RX pin. R1 and CRX/Cvmid are fixed by AN1445 §4.6.1; R2 = 2.7 kΩ is the PN532 DS Fig. 51 instance value — it is calculated per-loop (AN1445 Eq. 11, target U_RX ≈ 1 Vpp), so treat 2.7 kΩ as the starting value alongside C1/C2/Rq tuning. *(The receiver tap: from `EMC_A`, R803 (1 kΩ, in series) leads to a node called `RXD`; R804 (2.7 kΩ) shunts `RXD` to ground — together they scale the big transmit signal down to a safe ~1 V peak-to-peak sample (that's the "U_RX ≈ 1 Vpp" target) — and C817 (1 nF) passes that sample into the RX pin while blocking DC. R2 joins the bench-tune list for the same reason as the matching parts.)*
+
+**Placement:** the entire network (L801/L802 → J8) is one compact cluster: EMC parts adjacent to the TX pins, matching caps adjacent to J8, **whole network within 10 mm of the U.FL** (DESIGN.md §6.5), no ground-pour tricks under the network, no digital traces crossing it. PN532 sits on the case-back side of the board so the J8 run is short. *(Layout notes: at PCB time this whole network is one tight cluster with nothing digital running through it — RF tuning parts only behave if the physical geometry matches the design assumptions.)*
 
 ---
 
 ## 9. microSD slot (SD1)
 
-SD1 = push-push TF slot, LCSC C91145 ✅ / C112217 ✅. SPI mode on the ESP32's shared SPI2 bus (DESIGN.md §2.8, decision D5).
+**What this section does.** SD1 is the microSD card slot — removable storage the ESP32 uses (for Bruce firmware files, captured data, BadUSB payloads). The card talks SPI (the same shared bus as the two radios, with its own chip-select wire), and a card-detect contact tells the ESP32 whether a card is physically inserted.
+
+**What you draw.** The SD1 slot symbol; two power caps at its VDD contact; three wires to the shared SPI bus plus CS to IO14; a 10 kΩ pull-up resistor on each of CMD, DAT0 and the card-detect contact; and no-connect flags on DAT1/DAT2.
+
+SD1 = push-push TF slot, LCSC C91145 ✅ / C112217 ✅. SPI mode on the ESP32's shared SPI2 bus (DESIGN.md §2.8, decision D5). *("Push-push" = push the card in until it clicks; push again to eject — like a ballpoint pen. "TF" is the old name for microSD. A microSD card can speak two protocols; this design uses its slower-but-simple SPI mode, not the fast 4-bit SD mode, because the ESP32 shares the bus with the radios.)*
 
 | Slot contact | Connection |
 |---|---|
@@ -315,13 +569,19 @@ SD1 = push-push TF slot, LCSC C91145 ✅ / C112217 ✅. SPI mode on the ESP32's 
 | DAT1, DAT2 | No connect (unused in SPI mode) |
 | CD (card-detect contact) | → ESP32 IO7; **R903 = 10 kΩ** pull-up → 3V3. ⚠️ VERIFY: assumes the slot's CD contact closes to GND with a card inserted (the common arrangement for this slot class) — confirm against the chosen slot's datasheet at BOM freeze |
 
-No series damping resistors are fitted on the SD lines: Espressif's reference designs wire SD slots directly, and our runs are short. If proto testing shows ringing-related card errors, 33 Ω series pads near the slot are the rev-2 fix (note, not fitted).
+*Plain terms:* the contact names are the card's own pin names — in SPI mode, CMD carries data *to* the card (it's the MOSI wire), DAT0 carries data *back* (MISO), and DAT3 works as the chip-select. DAT1/DAT2 are only used in 4-bit SD mode, so here they're no-connects. The pull-ups on CMD/DAT0 aren't our whim — the SD card specification requires them in SPI mode (they're what the lines rest against between transfers). The CD contact is a tiny switch inside the slot. The ⚠️ VERIFY: this design assumes the switch closes to ground when a card goes in (line pulled up to 3.3 V by R903 normally; reads ground = card present). That's the common arrangement for these slots, but slots exist both ways — what you do: when the exact slot is ordered (BOM freeze), check its datasheet's card-detect description. If it turns out opposite, the fix is firmware (invert the reading), not the board. Draw as written. (Part E, item 14.)
 
-**Placement:** on the case edge — the card must be insertable without opening the enclosure (DESIGN.md §6.8).
+No series damping resistors are fitted on the SD lines: Espressif's reference designs wire SD slots directly, and our runs are short. If proto testing shows ringing-related card errors, 33 Ω series pads near the slot are the rev-2 fix (note, not fitted). *("Series damping resistors" would be small resistors in each data wire to calm electrical ringing — deliberately omitted here; this sentence records that it was considered and why it's a prototype-stage decision, not an oversight.)*
+
+**Placement:** on the case edge — the card must be insertable without opening the enclosure (DESIGN.md §6.8). *(Layout/packaging note: the slot's opening ends up flush with the case wall.)*
 
 ---
 
 ## 10. Infrared — TSOP38438 RX (U11) + 940 nm TX (D1/Q1)
+
+**What this section does.** This is Loki's infrared eye and voice — the same technology as a TV remote. U11 (the TSOP38438) *receives* 38 kHz modulated IR (remote-control signals), and the D1/Q1 pair *transmits*: D1 is an infrared LED (940 nm — invisible to the eye) and Q1 is the transistor that switches its current, because the LED wants ~100 mA pulses and no ESP32 pin can supply that directly.
+
+**What you draw.** For the receiver: U11 with its 3 pins — a 100 Ω resistor feeding its VS pin from `3V3`, a 1 µF cap beside it, GND, and its OUT wire straight to ESP32 IO1. For the transmitter: ESP32 IO2 → 1 kΩ resistor → Q1's base; Q1's emitter to GND; Q1's collector to D1's cathode; D1's anode → 18 Ω resistor → `3V3`.
 
 Sources: Vishay **TSOP382../TSOP384.. datasheet, Doc. 82491** (Rev. 2.1 current; Rev. 1.0 for the filter-component range).
 
@@ -329,37 +589,51 @@ Sources: Vishay **TSOP382../TSOP384.. datasheet, Doc. 82491** (Rev. 2.1 current;
 
 U11 = TSOP38438, Minicast **leaded** package. Pin order for THIS series: **1 = OUT, 2 = GND, 3 = VS** (sibling series swap VS/GND — do not cross-wire).
 
+*Plain terms:* "Leaded" = it has three wire legs (through-hole — the part from erratum 3). The pin-order warning is real and worth heeding: Vishay makes near-identical receivers whose legs are in a different order, so when you place the U11 symbol, check its pins read 1 = OUT, 2 = GND, 3 = VS in that order — if a symbol you find has them swapped, fix the symbol, don't wire around it.
+
 | Pin | Connection |
 |---|---|
 | 3 (VS) | ← **R1001 = 100 Ω** ← net `3V3`; **C1001 = 1 µF** VS→GND at the device. The series-R + shunt-C supply filter is Vishay's application circuit (diagram 17170): Rev. 1.0 gives the ranges **33 Ω < R1 < 1 kΩ** and **C1 > 0.1 µF** — 100 Ω and 1 µF sit inside both. (The often-quoted "100 Ω + 0.1 µF" pair comes from *other* Vishay families' datasheets; 0.1 µF does not satisfy this family's "> 0.1 µF") |
 | 2 (GND) | GND |
 | 1 (OUT) | → ESP32 IO1, direct. OUT has an **internal 30 kΩ pull-up** and is specified to connect straight to a microprocessor — no external pull-up (Vishay DS block diagram). Active-low: high = no carrier, low during a received 38 kHz burst |
 
+*Plain terms:* VS is the receiver's power pin, and it gets its power through a little filter: R1001 (100 Ω, in series) then C1001 (1 µF, from VS down to ground) — the resistor + capacitor smooth out supply noise, which IR receivers are notoriously sensitive to (noise on VS turns into phantom remote signals). Vishay's own application circuit specifies exactly this arrangement, with allowed ranges; our values sit inside them. Note the trap the table flags: a lot of hobby write-ups use 0.1 µF for the cap, but that value belongs to *other* receiver families — this one requires *more than* 0.1 µF, hence 1 µF. OUT is the signal: it has its own 30 kΩ pull-up built inside the part, so it wires straight to IO1 with no resistor, and it idles high, dropping low for each burst of 38 kHz it sees.
+
 Supply: 2.0–5.5 V (Rev. 2.1) — our 3.3 V is mid-range; draw ≈ 0.35 mA.
 
-**Placement:** at the case edge with an unobstructed view out (IR window in the enclosure); keep it away from D1's direct blast (a few mm of separation and the case's internal wall do the job) and away from the boost's SW node noise.
+**Placement:** at the case edge with an unobstructed view out (IR window in the enclosure); keep it away from D1's direct blast (a few mm of separation and the case's internal wall do the job) and away from the boost's SW node noise. *(Layout notes — the receiver needs line-of-sight out of the case, and shouldn't stare straight into our own IR LED from point-blank.)*
 
 ### 10.2 Transmitter
 
 ESP32 IO2 → **R1003 = 1 kΩ** → Q1 base. Q1 = MMBT2222A (SOT-23: pin 1 = B, 2 = E, 3 = C); emitter → GND; collector → D1 cathode. D1 anode → **R1002 = 18 Ω** → net `3V3`. D1 = 940 nm SMD IR LED, 1206 (VSMB10940 class; LCSC ⚠️ confirm at BOM freeze).
 
+*Plain terms:* this is the standard one-transistor LED driver. IO2 can't power the LED, so it just whispers to Q1's base through R1003 (1 kΩ limits that whisper to 2.6 mA), and Q1 — switched on by the whisper — connects the LED's cathode to ground, letting ~100 mA flow from `3V3` through R1002 (the LED's current-limiting resistor, 18 Ω) and the LED. "B / E / C" = base / emitter / collector, the transistor's three legs; pin numbers are given so the symbol can't be wired backwards. The generic KiCad symbol is `Device:Q_NPN_BCE` (see FOOTPRINTS.md). The ⚠️ on D1 means the exact IR LED part gets picked at BOM freeze — and item 16 in Part E notes that if the chosen LED's forward voltage differs from the assumed 1.35 V, R1002's value gets re-trimmed (recalculated) to match. Draw 18 Ω now.
+
 **(CALC)** Target I_F ≈ 100 mA pulsed (DESIGN.md §2.5; the LED is driven from the transistor, never from the GPIO):
-- Base current: (3.3 − 0.7) / 1000 = **2.6 mA** from IO2 — comfortable for the GPIO; forced β at the collector ≈ 100/2.6 ≈ 38, so allow V_CE(sat) ≈ 0.2 V.
-- LED resistor: R = (3.3 − V_f − V_CE(sat)) / I_F = (3.3 − 1.35 − 0.2) / 0.100 = 17.5 Ω → **18 Ω** (E24). Assumes V_f ≈ 1.35 V at 100 mA for the 940 nm class — re-check against the finally-chosen LED's datasheet at BOM freeze and re-trim if its V_f differs materially.
-- R1002 dissipation at 100 mA: I²R ≈ 0.18 W during bursts — fit a **1206** (or pulse-rated 0805); IR duty cycle is low, but don't fit a plain 0603 here.
-- Bruce's DIY builds use exactly this topology (GPIO → 1 kΩ → 2N2222 → LED), per DESIGN.md §2.5.
+- Base current: (3.3 − 0.7) / 1000 = **2.6 mA** from IO2 — comfortable for the GPIO; forced β at the collector ≈ 100/2.6 ≈ 38, so allow V_CE(sat) ≈ 0.2 V. *(β (beta) = the transistor's current multiplication; "forced β ≈ 38" means we're deliberately running it so each 1 mA into the base switches ≈38 mA of LED current — deep enough that the transistor is fully on, and its on-state voltage drop V_CE(sat) is only ≈0.2 V. I_F = the LED's forward current.)*
+- LED resistor: R = (3.3 − V_f − V_CE(sat)) / I_F = (3.3 − 1.35 − 0.2) / 0.100 = 17.5 Ω → **18 Ω** (E24). Assumes V_f ≈ 1.35 V at 100 mA for the 940 nm class — re-check against the finally-chosen LED's datasheet at BOM freeze and re-trim if its V_f differs materially. *(Same LED math as §1.3, with one extra drop: the transistor's 0.2 V. E24 = the standard resistor value series the round-up to 18 Ω comes from.)*
+- R1002 dissipation at 100 mA: I²R ≈ 0.18 W during bursts — fit a **1206** (or pulse-rated 0805); IR duty cycle is low, but don't fit a plain 0603 here. *(The resistor turns ~0.18 W into heat while the LED pulses. A 0603 resistor is typically rated ~0.1 W — too small. 1206 is the bigger body size; that's why R1002 is the one resistor on the board with a 1206 footprint — see FOOTPRINTS.md.)*
+- Bruce's DIY builds use exactly this topology (GPIO → 1 kΩ → 2N2222 → LED), per DESIGN.md §2.5. *("Topology" = the shape of the circuit — which parts connect to which, regardless of values.)*
 
 ---
 
 ## 11. Pi interface
 
+**What this section does.** Everything that connects the HAT board to the Raspberry Pi and the user: the 40-pin header itself (§11.1), the display connector and its backlight transistor (§11.2), the little ID EEPROM chip that tells the Pi what HAT is attached (§11.3), the four navigation buttons (§11.4), and the green power-on LED (§11.5).
+
 ### 11.1 40-pin header (J1)
 
 The full pin-by-pin net list **is** Part B, §3.1 below — every header pin's HAT-side connection is named there, and each subsystem section above names the component at the other end of the net (e.g. header pin 11 → R502 → U5 EN). Two routing notes from DESIGN.md §3.1 worth repeating at the schematic stage: both 5 V pins (2 + 4) are fed from `5V_SYS` with a wide, via-stitched pour (a single pin is not a 4 A path), and header pin 17 (Pi 3V3) is **not connected** — the board never back-powers the Pi's 3V3 rail. Pin 1 feeds only the EEPROM (§11.3).
 
+*Plain terms:* J1 is the 2 × 20 connector that plugs Loki onto the Pi's GPIO header. In the schematic you draw it as a 40-pin connector symbol and land each pin on the net Part B §3.1 assigns — §3.1 is the checklist for this section. The two notes: pins 2 and 4 both carry `5V_SYS` into the Pi because one pin can't safely carry the Pi 5's current (at layout they'll be joined by a wide copper pour stitched with vias — a layout detail, but in the schematic both pins simply land on `5V_SYS`); and pin 17, which is the Pi's *own* 3.3 V output, is deliberately left unconnected (no-connect flag) — powering the Pi's 3V3 rail from our board ("back-powering") could fight the Pi's own regulator. Pin 1 is also Pi 3.3 V, but by HAT rules it feeds only the ID EEPROM.
+
 ### 11.2 Display header (J5) + backlight FET (Q2)
 
+**What this sub-section does.** J5 is where the colour display module plugs in — the common 2.8″ ILI9341 SPI display module. It speaks SPI to the Pi. Its backlight is a hungry LED (50–90 mA), so it gets its own transistor switch, Q2, controlled by a Pi PWM pin — that's also how the Pi dims the screen.
+
 J5 = 2 × 7 (14-pin) 2.54 mm female header, top side, matching the ubiquitous ILI9341 SPI module. Standard module pin order (⚠️ VERIFY against the specific sourced module at build time — the order below is the near-universal one for this module class, but the module is a builder-sourced part):
+
+*About the ⚠️:* these displays are generic modules sold by many makers, and the pin order below is the one nearly all of them use — but "nearly all" isn't "all", so when the actual display is in hand (build time, not now), compare its printed pin labels against this table before plugging it in. Draw the header per the table now. (Part E, item 15.)
 
 | J5 pin | Module signal | HAT connection |
 |---|---|---|
@@ -375,11 +649,17 @@ J5 = 2 × 7 (14-pin) 2.54 mm female header, top side, matching the ubiquitous IL
 | 10–14 | T_CLK, T_CS, T_DIN, T_DO, T_IRQ | **No connect** (non-touch build per spec) |
 | (module SD_CS pad, where the module provides it separately) | SD chip-select | ← Pi GPIO7 (header pin 26) — DESIGN.md §2.7's "bonus socket"; module-variant-dependent ⚠️ |
 
+*Plain terms for the signal names:* CS = chip-select (the Pi pulls it low to talk to the display), DC/RS = data/command select (tells the display "this byte is a pixel" vs "this byte is an instruction"), SDI/SDO = data in/out (the SPI MOSI/MISO wires), SCK = SPI clock. The display itself never sends data back — pin 9 (SDO) exists to read the microSD socket built into the display module, which gets its own chip-select on the last row (that's why GPIO7 is spent there). Pins 10–14 are the module's *touchscreen* signals; Loki's display is non-touch, so all five get no-connect flags. The last row's ⚠️ means exactly what it says: whether the module even exposes a separate SD_CS pad depends on the variant — check the physical module at build time.
+
 **Backlight switch:** Q2 = AO3400A N-FET (SOT-23: pin 1 = G, 2 = S, 3 = D; LCSC ⚠️ confirm). Gate ← Pi GPIO18 (header pin 12, hardware PWM) via **R1101 = 100 Ω** series (EC — limits gate-edge current/ringing); **R1102 = 100 kΩ** gate→GND pull-down (backlight deterministically OFF until the Pi drives it — including while the Pi is absent or booting); source → GND; drain → J5 pin 8. Backlight draw is 50–90 mA (DESIGN.md §2.7) — trivial for the AO3400A, far beyond a bare GPIO, which is the point of the FET.
+
+*Plain terms:* Q2 is a MOSFET used as an electrically controlled switch. Its three legs: **G** (gate — the control input; voltage here turns the switch on/off, and it draws essentially no current), **S** (source — wired to GND), **D** (drain — wired to the backlight pin). When the Pi's GPIO18 outputs 3.3 V, the switch closes and the backlight's current flows display → Q2 drain → source → GND. GPIO18 is a PWM pin (pulse-width modulation — it flickers the switch thousands of times a second, and the on/off ratio looks like brightness to the eye), so the Pi can dim the screen. R1101 (100 Ω, in series with the gate) softens the switching edges. R1102 (100 kΩ pull-down) is the safety default: without it the gate would float and the backlight could glow randomly whenever the Pi isn't actively driving it — with it, backlight is guaranteed OFF until the Pi says otherwise. The LCSC ⚠️ just means the exact orderable AO3400A variant gets confirmed at BOM freeze; the symbol is `Device:Q_NMOS_GDS` (FOOTPRINTS.md).
 
 ### 11.3 HAT ID EEPROM — 24C32 (U9)
 
-U9 = 24C32, SOIC-8 (LCSC ⚠️ generic, confirm at BOM freeze). Per the official HAT specification.
+**What this sub-section does.** Every official-style Pi HAT carries a tiny memory chip (EEPROM) holding the HAT's ID data, which the Pi reads at boot to know what's plugged into it. U9 is that chip. It lives on its own private two-wire bus (the Pi's ID_SD/ID_SC pins), powered from the Pi's pin 1 — it belongs to the Pi's world, not to Loki's power rails.
+
+U9 = 24C32, SOIC-8 (LCSC ⚠️ generic, confirm at BOM freeze). Per the official HAT specification. *(The ⚠️ means the 24C32 is a commodity chip made by many vendors; any standard 24C32 in SOIC-8 (the 8-pin legged package) works, and the exact one gets picked at BOM freeze. The "24C32" name itself encodes the size: 32 kilobits of EEPROM.)*
 
 | Pin | Name | Connection |
 |---|---|---|
@@ -390,54 +670,70 @@ U9 = 24C32, SOIC-8 (LCSC ⚠️ generic, confirm at BOM freeze). Per the officia
 | 1, 2, 3 | A0, A1, A2 | All → GND → I²C address **0x50** |
 | 7 | WP | → **SJ1 solder jumper**: default position WP→GND (writable — factory flashes the ID blob, incl. the Pi 5 PSU-capability declaration, DESIGN.md §2.7/§5.3); alternate position WP→VCC (write-protected/locked after flashing) |
 
-**No pull-ups on the ID bus on the HAT** — the HAT specification puts the ID_SD/ID_SC pull-ups on the Pi side; adding our own would violate the spec's bus model. Nothing else may ever connect to ID_SD/ID_SC. **Placement:** bottom side (low profile, §2.11 plan).
+*Plain terms:* A0/A1/A2 are the chip's address-select pins — wiring all three to ground sets its I²C address to 0x50, the address the Pi expects a HAT EEPROM at. WP is the write-protect pin, and SJ1 is a solder jumper (three bare pads; a blob of solder connects the middle pad to one side or the other): bridged to GND = the EEPROM can be written (how it leaves the factory, so the ID data can be flashed in); bridged to VCC = locked forever against accidental writes. In KiCad, SJ1 is a solder-jumper symbol and the footprint is in FOOTPRINTS.md — draw WP → SJ1, and the jumper's two throws to GND and to the `3V3_ID` net (that's this chip's VCC). The "ID blob" is just the data block the Pi reads — including a declaration of how much power the HAT can supply a Pi 5, which is part of why this chip exists on Loki at all.
+
+**No pull-ups on the ID bus on the HAT** — the HAT specification puts the ID_SD/ID_SC pull-ups on the Pi side; adding our own would violate the spec's bus model. Nothing else may ever connect to ID_SD/ID_SC. **Placement:** bottom side (low profile, §2.11 plan). *(This is the one place in the design where the absence of pull-ups is itself a rule: the Pi provides them, and doubling up would break the HAT spec's electrical model. In the schematic: SDA and SCL go straight from J1 pins 27/28 to U9 pins 5/6, nothing else on those nets, ever.)*
 
 ### 11.4 Buttons ×4 (SW2–SW5) — shared nets
 
-One circuit ×4 (DESIGN.md §3.3). Nets: `BTN_UP` (SW2), `BTN_DOWN` (SW3), `BTN_LEFT` (SW4), `BTN_RIGHT` (SW5). Buttons = 6 × 6 mm SMD tact, LCSC C11135 ✅.
+**What this sub-section does.** The four face buttons (up/down/left/right). "Shared" is the clever part: each button is read by *both* brains — the ESP32 reads it directly, and the Pi reads the same wire through a protective resistor — so the buttons work in Bruce's ESP32 menus even with the Pi completely off, and in the Pi's UI when it's on. One identical small circuit, drawn four times.
+
+One circuit ×4 (DESIGN.md §3.3). Nets: `BTN_UP` (SW2), `BTN_DOWN` (SW3), `BTN_LEFT` (SW4), `BTN_RIGHT` (SW5). Buttons = 6 × 6 mm SMD tact, LCSC C11135 ✅. *("Tact" = tactile push-button switch, the little clicky 6 × 6 mm kind. Each button's whole circuit lives on one net named after the button.)*
 
 Per net:
-- Switch: one terminal → the button net, other → GND.
-- **R1110–R1113 = 10 kΩ** pull-up, button net → `3V3` (one per net, on the board — neither MCU's internal pull-up is relied on, since both chips read the same net).
+- Switch: one terminal → the button net, other → GND. *(Pressing the button connects the net to ground. That's the entire input mechanism: net resting high = not pressed; net pulled to ground = pressed.)*
+- **R1110–R1113 = 10 kΩ** pull-up, button net → `3V3` (one per net, on the board — neither MCU's internal pull-up is relied on, since both chips read the same net). *(The pull-up is what "resting high" means: the resistor gently holds the net at 3.3 V whenever the button isn't pressed. When you press, the button's dead-short to ground easily overpowers the gentle 10 kΩ resistor, and the tiny current through it (3.3 V ÷ 10 kΩ ≈ 0.33 mA) is the small price of the arrangement. A real resistor is fitted instead of using a chip's built-in one because two different chips read this net.)*
 - Button net → ESP32 GPIO **direct** (UP→IO15, DOWN→IO16, LEFT→IO38, RIGHT→IO39).
-- Button net → **R1114–R1117 = 1 kΩ** series → Pi header pin (UP→pin 29/GPIO5, DOWN→pin 31/GPIO6, LEFT→pin 33/GPIO13, RIGHT→pin 37/GPIO26). The 1 kΩ limits ESD-clamp backfeed into an unpowered Pi to < 3.3 mA (§3.3).
-- **C1110–C1113 = 100 nF** button net → GND (hardware debounce; τ ≈ 10 kΩ × 100 nF = 1 ms — (EC); firmware debounce also applies, and the caps may be left DNP if proto testing prefers pure firmware debounce).
+- Button net → **R1114–R1117 = 1 kΩ** series → Pi header pin (UP→pin 29/GPIO5, DOWN→pin 31/GPIO6, LEFT→pin 33/GPIO13, RIGHT→pin 37/GPIO26). The 1 kΩ limits ESD-clamp backfeed into an unpowered Pi to < 3.3 mA (§3.3). *(Same protection idea as R502/R504 in §5: if the ESP32 side is powered and the Pi is off, this resistor caps any current sneaking into the unpowered Pi at a harmless < 3.3 mA. The Pi reads the button just fine through it, because its input draws ~no current.)*
+- **C1110–C1113 = 100 nF** button net → GND (hardware debounce; τ ≈ 10 kΩ × 100 nF = 1 ms — (EC); firmware debounce also applies, and the caps may be left DNP if proto testing prefers pure firmware debounce). *("Debounce": a real button's contacts bounce — they make and break contact a few times in the first millisecond, which a fast chip would read as several presses. The capacitor smooths those bounces (τ is the smoothing time constant: 10 kΩ × 100 nF = 1 ms), and the firmware ignores changes faster than a human anyway. If prototype testing shows the caps unnecessary, they're a DNP candidate — draw them, decide later.)*
 
-Neither chip ever drives these nets. ESD: the buttons sit inside the enclosure under case plungers (not user-exposed ports), and the series resistor + both chips' clamp structures are the accepted protection — no dedicated ESD array is fitted, by design decision, stated here so it's a decision and not an omission.
+Neither chip ever drives these nets. ESD: the buttons sit inside the enclosure under case plungers (not user-exposed ports), and the series resistor + both chips' clamp structures are the accepted protection — no dedicated ESD array is fitted, by design decision, stated here so it's a decision and not an omission. *("Plungers" are the case's plastic posts that press the board-mounted buttons. The ESD sentence records a deliberate choice: button nets get the resistor + the chips' built-in protection only, because fingers never touch these contacts directly.)*
 
-**Placement:** along the board edge, aligned to the enclosure's button plungers — freeze positions together with the case (DESIGN.md §6.6).
+**Placement:** along the board edge, aligned to the enclosure's button plungers — freeze positions together with the case (DESIGN.md §6.6). *(Layout/packaging note: the buttons' physical spots are decided together with the enclosure design.)*
 
 ### 11.5 Green "power on" LED (D2)
 
 `5V_SYS` → **R1120 = 1.0 kΩ** → D2 anode; cathode → GND. D2 = 0805 green, LCSC C19171391 ✅.
 **(CALC)** (5.1 − 2.1) / 1000 = **3.0 mA** (green Vf ≈ 2.1 V). Lit exactly when 5V_SYS exists = device on. Hardware-driven, per spec.
 
+*Plain terms:* the simplest circuit on the board, and by now a familiar pattern: supply → current-limiting resistor → LED → ground. Because it hangs on `5V_SYS`, it is lit exactly when the device is switched on — no software, no chip involved, so it can never lie about whether the boost is running.
+
 ---
 
 ## 12. Expansion header (J6)
 
+**What this section does.** J6 is the tinkering port: a 2 × 8 header on the board's top edge that brings out spare Pi GPIOs, the Pi's I²C and SPI buses, and fused power, so future add-on boards (or your own experiments) can plug into Loki. There are almost no components here — it's mostly straight wires from the Pi header nets — and the one component, F2, is a fuse protecting the 5 V pin.
+
 J6 = 2 × 8, 2.54 mm, top edge. Full signal table in Part B, §3.4. Components:
 
-- Pin 1 (5V_SYS feed): via **F2 = PPTC, 500 mA hold** (1812) from `5V_SYS` (per §3.4's "fused 500 mA").
-- Pin 3 (board 3V3, ≤ 300 mA budget): direct from `3V3` — the budget is a build-guide rule, not a component.
-- All signal pins (I²C1, SPI0, GPIOs, ESP_IRQ): **direct, no series resistors, no ESD parts** — these are the Pi's/ESP32's own GPIOs brought out; add-on designers own their side's protection. Stated explicitly so the absence is a decision: the header is a hobby interconnect inside a case slot, not an external port.
+- Pin 1 (5V_SYS feed): via **F2 = PPTC, 500 mA hold** (1812) from `5V_SYS` (per §3.4's "fused 500 mA"). *(Anything plugged into the expansion port gets its 5 V through this resettable fuse: if an add-on shorts out, F2 chokes at ~500 mA instead of taking the whole board down. 1812 = its physical size, the larger chip package.)*
+- Pin 3 (board 3V3, ≤ 300 mA budget): direct from `3V3` — the budget is a build-guide rule, not a component. *("Budget" here is just a promise in the documentation: add-ons may draw at most 300 mA from this pin. Nothing on the board enforces it — it's a rule for whoever designs the add-on.)*
+- All signal pins (I²C1, SPI0, GPIOs, ESP_IRQ): **direct, no series resistors, no ESD parts** — these are the Pi's/ESP32's own GPIOs brought out; add-on designers own their side's protection. Stated explicitly so the absence is a decision: the header is a hobby interconnect inside a case slot, not an external port. *(Unlike §11.4's buttons, these wires get no protective resistors — deliberately. The header lives inside the case, and protection is the add-on designer's job. Recorded here so a reviewer doesn't mistake the omission for a mistake.)*
 
 ---
 
 ## 13. Battery connector (J4)
 
-J4 = JST-PH 2-pin SMD (B2B-PH-K-S), LCSC C131337 ✅.
+**What this section does.** Where the battery plugs in, and the board's main safety fuse. J4 is the battery socket; F1, a resettable fuse, sits between the socket and everything else, so a short anywhere downstream (or a faulty cell) gets choked off here first.
+
+J4 = JST-PH 2-pin SMD (B2B-PH-K-S), LCSC C131337 ✅. *(JST-PH: the small white 2-pin plug/socket system used on most hobby lithium packs — the battery's lead ends in the plug, this is the board-side socket, surface-mount version.)*
 
 | J4 pin | Connection |
 |---|---|
 | 1 | Net `VBAT_RAW` (+). **Silk-screen "+" beside the connector** — PH plugs are keyed, but clone harnesses vary; the build guide must tell builders to verify red-wire polarity against the silk before first power |
 | 2 | GND (−) |
 
+*Plain terms:* pin 1 is battery positive and starts the `VBAT_RAW` net; pin 2 is negative = GND. The silkscreen warning matters: the plug is keyed (it only fits one way), but cheap clone harnesses are sometimes wired backwards, so the board prints a "+" and the build guide tells builders to check red wire = "+" before first power-up. A reversed lithium battery is one of the few mistakes that can actually burn a board — the silk is cheap insurance.
+
 `VBAT_RAW` → **F1 = PPTC (hold ≈ 3 A / trip ≈ 6 A, 1812)** → net `VBAT` (→ U1 BAT pins, U2 VDD). F1 value per DESIGN.md §2.6. ⚠️ **Design tension to resolve on proto #1:** DESIGN.md §4.3 puts worst-case cell draw at ≈5.2 A (Pi 5 stress, near-empty cell) — above F1's 3 A hold. A PPTC's hold is a no-trip guarantee at 23 °C, not a fuse point, and it derates with temperature; under sustained worst-case load F1 may nuisance-trip. Options: accept (fault protection wins; worst case is a corner), or uprate F1 to a 5 A-hold 1812 part. Flagged for Justin — do not silently change it here. The cell's own PCM remains the last line of defense either way (DESIGN.md §2.6).
+
+*Plain terms — read this one, it's a genuine open decision (also item 18 in Part E):* F1 is specified to *hold* (never trip) up to ≈3 A and to trip by ≈6 A. But the design's own worst-case estimate says a stressed Pi 5 on a nearly-empty battery could draw ≈5.2 A continuously — inside the grey zone between hold and trip, where the fuse *might* trip mid-use (a "nuisance trip": Loki just turns off under heavy load, then works again when the fuse cools). It gets worse on a hot day, because the hold rating drops with temperature. The choice, to be made on prototype #1 with real measurements: **(a)** keep the 3 A part — the worst case is a rare corner (full-stress Pi 5 + nearly flat battery, simultaneously), and stronger fault protection wins; or **(b)** fit a 5 A-hold 1812 PPTC — headroom for the worst case, but a lazier fuse. Nothing to draw differently either way (same footprint, same nets), and the battery pack's own built-in protection board (PCM) is the final backstop regardless. Do not change F1's value in the schematic on your own — this decision is flagged for Justin explicitly.
 
 ---
 
 # Part B — Pin assignment tables (from DESIGN.md §3, verbatim)
+
+*What Part B is for: these are the master reference tables — what every pin of the Pi header, the ESP32, and the expansion header does on Loki. You don't usually draw from Part B directly; you use it to check a wire while drawing Part A ("wait, which header pin is the backlight again?" — §3.1, pin 12). The tables are reproduced exactly as written in the design document; plain-English notes are added before and after them, never inside the table cells. "BCM numbering" means the pin functions are named by the Pi chip's own GPIO numbers (GPIO14, GPIO15, …), which is how all Pi documentation refers to them — not by the physical pin's position, which is the "Pin" column.*
 
 ## 3. Pin Assignment Tables
 
@@ -490,11 +786,15 @@ BCM numbering. "Free" = routed to the expansion header (§3.4).
 
 **UART note (all three Pis):** use the PL011 (UART0) on GPIO14/15 — on the Zero 2 W that means the `dtoverlay=disable-bt` (or `miniuart-bt`) overlay so the PL011 isn't stolen by Bluetooth; on Pi 5, GPIO14/15 is UART0 by default and the dedicated debug header stays free. 115200 baud is the locked protocol rate; esptool flashing over the same wires can run faster after sync, but the protocol doesn't need it.
 
+*Plain terms:* the Pi has two serial ports of different quality; the good one (the PL011) is sometimes assigned to Bluetooth. The overlay settings named here are Pi software configuration (a line in the Pi's config file) that reserves the good UART for Loki's Pi↔ESP32 link on header pins 8/10. Firmware/config note, not a schematic item — the schematic just wires pins 8 and 10 as the table says. "PU" = pull-up.
+
 **Left free on the Pi:** GPIO12, 16, 19, 20, 21, 23 (all to expansion), GPIO7 (display SD). Nothing else is spare — the header is fully committed, which is fine because the ESP32 owns everything radio.
 
 ### 3.2 ESP32-S3-WROOM-1-N16R8 GPIO map
 
 Aligned with the pin conventions of existing DIY Bruce boards wherever Loki's scope allows (less fork work): shared SPI on IO11/12/13, PN532 on I2C, IR on IO1/IO2, buttons on IO15/16/38/39.
+
+*Plain terms: this is the ESP32's half of the map — which of its IO pins runs which job. Loki deliberately copies the pin choices of existing DIY Bruce (ESP32 firmware) boards wherever possible, so the Bruce fork needs less modification. The "Forbidden" row at the bottom is Espressif's rule: those pins are wired inside the module to its flash memory and RAM or are boot straps — they must stay unconnected.*
 
 | GPIO | Function | Notes |
 |---|---|---|
@@ -534,9 +834,13 @@ Aligned with the pin conventions of existing DIY Bruce boards wherever Loki's sc
 
 **SPI bus sharing:** CC1101, nRF24 and microSD share SPI2 with per-device CS and per-device SPI settings (ESP-IDF/Arduino `SPISettings` transactions). Known friction, handled in the fork: Bruce's CC1101 driver and the SD library both like owning the bus — all three are polled devices with no DMA contention in practice, and the existing DIY Bruce boards already run CC1101 + dual nRF24 + SD on this exact bus topology. PN532 is deliberately **not** on SPI (I2C instead) to keep one slow, chatty device off the RF bus. The Pi's display SPI is a completely separate bus on the Pi — no interaction.
 
+*Plain terms:* three devices sharing one SPI bus works because only one is spoken to at a time — each has its own chip-select wire, like extensions on one phone line. The software caveat (two libraries both assuming they own the bus) is a known, already-solved problem in the Bruce fork, not a hardware issue: nothing in the schematic changes because of it. And the NFC chip is intentionally on the slower I²C bus instead, so its chatter can't delay the radios.
+
 ### 3.3 Shared buttons (one net, two readers)
 
 Each button net connects to: the button (to GND), one 10 kΩ pull-up to board 3V3, the ESP32 GPIO directly, and the Pi header pin through a 1 kΩ series resistor. The series resistor limits ESD-clamp backfeed into an unpowered Pi to < 3.3 mA while costing the Pi nothing in signal quality (its input is high-impedance; the button is a DC signal). Payoff: the ESP32 can take on-device confirmations (the BadUSB arm gate) and even run Bruce's standalone menus with the Pi fully off — which the architecture requires — and Loki's Pi UI uses the same four buttons when the Pi is up. Neither chip ever *drives* these nets.
+
+*This is the design explanation for the §11.4 circuit — the "why" behind the button topology, if you want it in one paragraph. Same content, already decoded piece by piece in §11.4.*
 
 ### 3.4 Expansion header (2 × 8, 2.54 mm, top edge)
 
@@ -553,9 +857,13 @@ Each button net connects to: the button (to GND), one 10 kΩ pull-up to board 3V
 
 Honest note for the build guide: this is **signal-compatible, not pin-compatible** with a Flipper Zero's 18-pin GPIO header — Flipper add-ons that speak I2C/SPI/UART will work through a passive adapter or jumper wires, but nobody should promise a Cardputer or Flipper module will plug straight in and enumerate. (A true Flipper-pinout adapter board is a natural future add-on — the signals are all here.)
 
+*Plain terms:* the signals on this header are the same *kinds* a Flipper Zero speaks, so Flipper-style add-ons can work — but the connector shape and pin order are different, so nothing plugs straight in; you'd use jumper wires or a small adapter board. "Enumerate" is USB-speak for "be recognised when plugged in" — borrowed here to mean: don't promise plug-and-play.
+
 ---
 
 # Part C — Complete BOM
+
+*What Part C is for: the shopping list. One row per part (or group of identical parts): its refdes, quantity, value/part name, physical package, and LCSC stock number. Rows marked ✅ have a confirmed LCSC number carried over from DESIGN.md §8; "confirm" means the exact orderable part gets picked at BOM freeze. Resistors and capacitors are 0603 size unless a row says otherwise; all ceramic caps are X7R/X5R type. When you order, this table plus FOOTPRINTS.md (for footprints) are the two documents to work from. The cells below are unchanged from the original.*
 
 LCSC numbers marked ✅ are carried over from DESIGN.md §8 (verified there). Everything else is **confirm at BOM freeze**. Resistors/caps are 0603 unless a section says otherwise; all ceramic caps X7R/X5R.
 
@@ -664,45 +972,78 @@ LCSC numbers marked ✅ are carried over from DESIGN.md §8 (verified there). Ev
 
 Builder-sourced (not on the PCB BOM): Raspberry Pi, ILI9341 display module, 5000 mAh 1S high-drain (≥3C) pouch cell with JST-PH lead, adhesive 13.56 MHz loop antenna + U.FL pigtail, SMA whip (868/915), IPEX whip (2.4 GHz), enclosure.
 
+*Plain terms for the last two rows: "TP" = test pads — bare copper pads (not parts at all) placed so you can touch a multimeter or oscilloscope probe to those signals during testing. "Builder-sourced" = things you buy separately that don't solder onto this PCB: the Pi itself, the display, the battery, the antennas and the case.*
+
 ---
 
 # Part D — Placement rules summary
 
+*What Part D is for: the short list of rules that matter when you arrange the physical parts on the board (the PCB layout step — after the schematic is done and checked). You do not need these while drawing the schematic. Each rule is stated first in its original wording, then translated: why it exists and what it physically means.*
+
 The short list of layout-critical items. (DESIGN.md §6 has the full checklist; this is the distilled version, with the datasheet-derived items added.)
 
 1. **Boost SW loop first.** TPS61088: L1 + C301–C304 within 5 mm of the VIN/SW pins; SW-node copper minimum area; thermal vias under U3's pad; FB/COMP/SS parts on the far side of the package from SW. ("Minimize the length and area of all traces connected to the SW pin" — SLVSCM8D §10.1.)
+   - *In plain terms:* the boost converter's switching loop is the loudest, most interference-prone circuit on the board. Lay it out first, keep it tiny (inductor and input caps within 5 mm of the chip), keep the SW node's copper as small as possible, put heat vias under the chip, and put the quiet setting parts (FB/COMP/SS) on the opposite side of the chip from the SW pins.
 2. **Decoupling proximity.** Every IC's caps within ~3 mm of their pins, via-free where possible: U1 (C101–C103), U2 (C201), U4 (C401 at IN, C402/403 at LX output), U5 (C501/C502 at pin 2), U6 (C601/C602), U7 (C701/C702), U8 (full §8.1 set), SD1 (C901/C902).
-3. **PN532 network is one cluster.** TX pins → EMC (L801/L802, C809/C810) → matching (C811–C814, R801/R802) → J8, all within 10 mm of the U.FL, no digital crossings, no ground-pour games. Y1 crystal tight to pins 14/15.
+   - *In plain terms:* every chip's little power capacitors must sit within ~3 mm of the pins they serve, ideally connected by plain surface copper with no vias in between (a via adds a small coil-like effect that weakens the capacitor). This is the "at the pin" rule from Part A, collected in one place.
+3. **PN532 network is one cluster.** TX pins → EMC (L801/L802, C809/C810) → matching (C811–C814, R801/R802) → J8, all within 10 mm of the U.FL, no digital crossings, no ground-pour games.
+   - *In plain terms:* the NFC antenna network (§8.4) is placed as one tight bunch between the chip and its connector, nothing digital routed through it, and no clever ground-pour shapes underneath it — the tuning depends on the physical geometry staying clean and predictable.
 4. **Antenna keep-outs.** ESP32 module antenna overhangs/edges the board with **zero copper on all layers** beneath it and ≥15 mm housing clearance; CC1101 (U6) and nRF24 (U7) at opposite corners from the ESP32 antenna and from each other where the outline allows (U7 and the ESP32 both live at 2.4 GHz); nothing on this board overhangs the **Pi's** WiFi antenna corner below.
+   - *In plain terms:* antennas need empty space around them — copper underneath an antenna absorbs and detunes it. The ESP32's antenna hangs off the board edge; the two radio modules go in far corners away from it and from each other (two of the three radios share the 2.4 GHz band and would interfere); and no part of Loki may sit over the Pi's own WiFi antenna corner on the board below.
 5. **USB pairs.** J3 D+/D−: 90 Ω ±10 % differential, length-matched, solid ground beneath, U10 immediately behind the connector, R507/R508 immediately behind U10. J2 is power-only — keep its VBUS run short and wide to U1 IN.
+   - *In plain terms:* the two USB data wires for port #2 travel as a matched pair — same length, side by side, over unbroken ground — with the protection chip U10 right behind the connector and the little series resistors right behind U10. Port #1 has no data; just keep its power wire short and fat.
 6. **Ground strategy.** 4-layer stackup, L2 solid GND, no splits under RF or the boost. AGND (U3 pin 20) ties into the plane at the pad; every module's ground pads stitched down (U6 has nine ground pads for a reason — PA/RF return currents).
+   - *In plain terms:* the board is four copper layers; layer 2 is one unbroken sheet of ground. Don't cut slots in it under the radios or the boost — high-frequency and high currents return through that sheet directly under their paths. Every ground pad on the radio modules gets its own via(s) down into the sheet.
 7. **High-current paths are pours, not traces.** Battery → F1 → VBAT → U1; VSYS → U3 VIN; 5V_SYS → header pins 2+4 (wide, via-stitched). Size for 5 A peaks, not averages.
+   - *In plain terms:* any path that carries amps gets drawn as a wide filled copper area, not a thin line, and is sized for the 5 A peak current, not the average — thin traces would heat up and waste voltage.
 8. **Bottom-side discipline.** Only low-profile parts (U9, U2, U10, passives, Q2) below, ≤ 1.2 mm within Pi keep-out zones (DESIGN.md §6.7); standoff budget is the enclosure's problem only if this rule holds.
+   - *In plain terms:* the underside of the board faces the Pi with only a few millimetres of gap. Only flat parts may live there (the EEPROM, fuel gauge, ESD chip, passives, the backlight FET), nothing taller than 1.2 mm near the Pi. Keep this rule and the boards stack without touching.
 9. **Edges are functional.** SD1 on the case edge (hot-swappable cards); SW2–SW5 and D2–D4 aligned to enclosure plungers/light pipes (freeze with the case, §6.6); U11 at an edge with a clear IR view; J7 pigtail exit at the case edge.
+   - *In plain terms:* parts the user physically interacts with go at the edges: the SD slot so cards swap without opening the case ("hot-swappable"), the buttons and LEDs aligned with the case's plungers and light pipes (clear plastic rods that carry LED light to the case surface), the IR receiver where it can see out, and the antenna cable exit. These positions are frozen together with the enclosure design.
 
 ---
 
 # Part E — Sources & verification status
+
+*What Part E is for: the audit trail. First, the list of official documents every value in Part A came from. Second — the important part — the numbered double-check list: everything that could NOT be fully confirmed from an official source, why, and what to do about it. Nothing on this list blocks drawing the schematic. Most items resolve at BOM freeze (when the exact parts are picked) or on the first prototype. Each item below keeps its original wording and gains a plain-English "what this means / what you do" note.*
 
 **Primary sources used for Part A values:** TI SLUS810N (bq24074); TI SLVSCM8D (TPS61088) + Absurd Industries "Boosty" repo BOM/design notes; Analog Devices MAX17048/49 datasheet doc. 19-6171 Rev 7; Silergy AN_SY8089/A Rev. 0.9A; Espressif ESP32-S3-WROOM-1 Datasheet v1.2 + ESP32-S3 Hardware Design Guidelines; EBYTE E07-900M10S User Manual v1.0; EBYTE E01-ML01SP4 Datasheet V1.0 + E01 User Manual; NXP AN1445 Rev. 1.2, PN532/C1 Data Sheet Rev. 3.6, UM0701-02, AN10609; Vishay Doc. 82491 (TSOP384xx) Rev. 1.0/1.6/2.1; Raspberry Pi HAT specification (EEPROM/ID bus).
 
 **Values that could NOT be verified from a primary source (double-check list for Justin):**
 
 1. **bq24074 EN1/EN2 abs-max voltage** — the tie of EN2 to the 5 V IN net assumes the family's 7 V logic-pin class (verified for CHG/PGOOD in §8.1, not explicitly extracted for EN1/EN2).
+   - *What you do:* at BOM freeze, open SLUS810N's absolute-maximum table and confirm EN1/EN2 are rated above 5 V. Expected to pass (the family's other logic pins are 7 V-class). §1.2.
 2. **bq24074 K_ILIM** — the datasheet is internally inconsistent: 1550 A·Ω (design example) vs 1610 typ (electrical table). ILIM current therefore carries ±~10 % tolerance; the 1.5 A ceiling conclusion is unaffected.
+   - *What you do:* nothing. TI's own document disagrees with itself slightly; either number gives ~1.4–1.5 A max input, and R102 = 1.1 kΩ stays as drawn.
 3. **TPS61088 COMP values (R305/C311)** — Boosty's proven values; the datasheet prints only equations. Validate with a load-step test on proto #1.
+   - *What you do:* draw as written (§3). On the first prototype, someone does a load-step test — suddenly change the boost's load and watch the 5.1 V output on a scope for ringing or slowness. If it misbehaves, these two values are the knobs.
 4. **TPS61088 R_ILIM allowed range** — no explicit min/max in the datasheet; 100 kΩ is the datasheet's own example value.
+   - *What you do:* nothing — R303 = 100 kΩ is TI's own worked-example value; the gap is only that TI never printed an allowed range for it.
 5. **PN532 C1/C2/Rq/R2 (R801/R802, C811–C814, R804)** — AN1445 *worked-example* values for a 2.9 µH loop. They are starting points by construction; final values come from bench tuning with the real case-back loop + cable (VNA or at minimum a field-strength/read-range sweep).
+   - *What you do:* draw as written (§8.4). At prototype stage, these parts get tuned with the real antenna and its final cable fitted — measured with a VNA (a vector network analyzer, the instrument that measures antenna matching) or, at minimum, by testing card read-range while trying nearby values. Expect the values to change; that's the plan, not a problem.
 6. **PN532 TX1/TX2/RX pad numbers** — connections are specified by pin name; numbers ride on the KiCad symbol (verify against PN532/C1 data sheet Table 3 when placing). Verified numbers used: VBAT 40, DVDD 39, RSTPD_N 38, SVDD 37, SDA 28, SCL 27, P70_IRQ 25, PVDD 23, I1 17, I0 16, OSCOUT 15, OSCIN 14, AVSS 11, VMID 9, AVDD 8, TVSS2 7, TVDD 5, TVSS1 3.
+   - *What you do:* when you place the U8 symbol in KiCad, compare its pin numbers against the verified list in this item (and Table 3 of the PN532 datasheet) — especially TX1/TX2/RX, whose connections in §8.4 are given by name. A five-minute check at symbol-placement time.
 7. **PN532 Fig. 51 per-pin capacitor assignment** — partially illegible in the PDF; §8.1's set satisfies the §8.4 decoupling requirement and matches the figure's component inventory, but the exact 100 nF-to-pin mapping in NXP's drawing could not be read with certainty.
+   - *What you do:* nothing beyond drawing §8.1 as written — every power pin gets its decoupling in the required sizes either way; the uncertainty is only about which specific 0.1 µF in NXP's drawing belongs to which pin.
 8. **USBLC6-2SC6 pin numbering** — flow-through arrangement as standard for the part; confirm against ST's datasheet for the exact order code.
+   - *What you do:* at BOM freeze, when the exact USBLC6 variant is picked, check its datasheet pinout against §5.1's description (pin 5 = VBUS, pin 2 = GND, flow-through I/O). A pre-order checklist item.
 9. **ESP32 IO0 pull-up value (10 kΩ)** — the Hardware Design Guidelines require a pull-up but state no value; 10 kΩ is from DESIGN.md and Espressif reference designs.
+   - *What you do:* nothing — draw R503 = 10 kΩ as written (§5). The value matches Espressif's own reference boards.
 10. **E07-900M10S decoupling values (C601/C602)** — EBYTE requires "an external ceramic filter capacitor" at VCC but gives no value; §5's recommended-circuit diagram values were not legibly extractable.
+    - *What you do:* nothing — draw the standard 0.1 µF + 10 µF pair (§6). Optionally, if a legible copy of the E07 manual's recommended circuit turns up, compare values then.
 11. **E07-900M10S supply range** — the manual contradicts itself (1.8–3.6 V vs 3.0–3.6 V at pin 9). Our regulated 3.3 V satisfies all versions.
+    - *What you do:* nothing — 3.3 V is inside every version of the spec.
 12. **E01-ML01SP4 reservoir values (C701/C702)** — EBYTE specifies no values (π-filter + margin guidance only). 10 µF + 0.1 µF is DESIGN.md's requirement and standard PA-module practice.
+    - *What you do:* nothing — draw as written (§7); the pair plus the 2 A rail covers the module's 120 mA bursts with margin.
 13. **E01-ML01SP4 IPEX generation** (MHF1 vs U.FL compatibility) and the FCC datasheet's conflicting 1.5 dBm/PCB-antenna figures vs the manual's 20 dBm/IPEX — confirm the exact hardware revision when ordering modules.
+    - *What you do:* when ordering the U7 modules, confirm the antenna connector type on the actual part (MHF1 vs U.FL) matches the whip/pigtail being bought, and that the part is the +20 dBm IPEX version (not a low-power PCB-antenna variant that appears in one FCC document). An ordering-time check, nothing in the schematic.
 14. **microSD CD-contact polarity (R903/SD1)** — assumes contact closes to GND on insertion; confirm against the chosen slot's datasheet.
+    - *What you do:* at BOM freeze, read the chosen slot's datasheet card-detect description. If it's the opposite polarity, firmware inverts the reading — the board doesn't change. §9.
 15. **Display module (J5) pin order and SD_CS routing** — the module is builder-sourced; the near-universal ILI9341-module order is tabulated, but verify against the actual module in hand.
+    - *What you do:* when the physical display module is in hand, compare its printed pin labels to §11.2's table before plugging it in. Draw per the table now.
 16. **IR LED V_f (R1002 = 18 Ω)** — calculated at V_f ≈ 1.35 V @ 100 mA for the 940 nm class; re-trim if the frozen LED part's datasheet says otherwise.
+    - *What you do:* at BOM freeze, when D1's exact part is picked, check its datasheet forward voltage at 100 mA. If it's materially different from 1.35 V, R1002 gets recalculated with the §10.2 formula (a two-minute job — ask and it can be redone). Draw 18 Ω now.
 17. **SY8089 EN-to-IN tie** — within the pin's abs-max (V_IN + 0.6 V) per the datasheet table; the datasheet prints no explicit "tie EN to IN" sentence.
+    - *What you do:* nothing — §4's wiring keeps EN at the same voltage as the chip's own input pin, inside its rated limit. Recorded for honesty, not action.
 18. **F1 PPTC sizing tension** (§13) — DESIGN.md's 3 A-hold choice vs its own 5.2 A worst-case draw estimate. A decision for Justin, not a calculation error.
+    - *What you do:* this one is a real decision, deferred to prototype #1 (see §13's plain-terms note): keep the 3 A-hold fuse (stronger protection, rare worst-case may nuisance-trip) or uprate to a 5 A-hold 1812 part. Same footprint either way — the schematic doesn't change, only the ordered part. Flagged for Justin; do not silently change it.
