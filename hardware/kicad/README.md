@@ -16,6 +16,28 @@ section before ordering boards.
 
 All files are KiCad 8 footprint format (version 20240108).
 
+## Custom symbols — `loki.kicad_sym`
+
+`loki.kicad_sym` (this folder) holds the matching symbols for the custom
+footprints above, plus the SY8089AAAC. Symbol pin numbers match the footprint
+pad numbers exactly (PINOUT.md §3/§6/§7/§10), and each symbol's Footprint
+field already points at its `Loki:` footprint.
+
+| Symbol | Part | Footprint |
+|---|---|---|
+| `SY8089AAAC` | U4 — Silergy SY8089AAAC 3.3 V buck | `Package_TO_SOT_SMD:SOT-23-5` (standard) |
+| `TPS61088` | U3 — TI TPS61088 boost | `Loki:TPS61088_RHL_VQFN-20_3.5x4.5_P0.5` |
+| `EBYTE_E07-900M10S` | U6 — EBYTE CC1101 module | `Loki:EBYTE_E07-900M10S` |
+| `EBYTE_E01-ML01SP4` | U7 — EBYTE nRF24 PA/LNA module | `Loki:EBYTE_E01-ML01SP4` |
+| `TSOP38438` | U11 — Vishay IR receiver | `Loki:TSOP38438_Minicast_THT` |
+
+The file is KiCad 7 symbol format (20211014), which KiCad 7/8/9 all read.
+Add it via **Preferences → Manage Symbol Libraries…** → Project tab → **+**,
+nickname `Loki`, path pointing at this `loki.kicad_sym` file. Symbol and
+footprint library tables are separate — using the nickname `Loki` for both
+is expected. (`gen_symbols.py` regenerates the four footprint-matched
+symbols; edit it rather than the merged file where practical.)
+
 ## Add the library in KiCad
 
 1. In the PCB Editor (or Footprint Editor): **Preferences → Manage Footprint Libraries…**
