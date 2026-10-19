@@ -81,7 +81,7 @@ def symbol(name, value, footprint, descr, keywords, body, pins, ref_y, val_y):
   )"""
 
 
-PI, IN, OUT, PAS = "power_input", "input", "output", "passive"
+PI, IN, OUT, PAS = "power_in", "input", "output", "passive"
 
 SYMBOLS = []
 
@@ -141,12 +141,12 @@ pins = [
     ("FSW", 3, PAS, -10.16, -1.27, 0),
     ("SS", 10, PAS, -10.16, -3.81, 0),
     ("ILIM", 19, PAS, -10.16, -6.35, 0),
-    ("VOUT", 14, "power_output", 10.16, 6.35, 180),
-    ("VOUT", 15, "power_output", 10.16, 3.81, 180),
-    ("VOUT", 16, "power_output", 10.16, 1.27, 180),
+    ("VOUT", 14, "power_out", 10.16, 6.35, 180),
+    ("VOUT", 15, "power_out", 10.16, 3.81, 180),
+    ("VOUT", 16, "power_out", 10.16, 1.27, 180),
     ("FB", 17, IN, 10.16, -1.27, 180),
     ("COMP", 18, PAS, 10.16, -3.81, 180),
-    ("VCC", 1, "power_output", 10.16, -6.35, 180),
+    ("VCC", 1, "power_out", 10.16, -6.35, 180),
     ("SW", 4, OUT, -5.08, 10.16, 270),
     ("SW", 5, OUT, -2.54, 10.16, 270),
     ("SW", 6, OUT, 0, 10.16, 270),
