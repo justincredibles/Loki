@@ -65,8 +65,8 @@
   |     |- CC1101 module  CS IO10, GDO0 IO9, GDO2 IO17  -> U.FL -> SMA whip / spring   |
   |     |- nRF24 module   CSN IO5, CE IO4, IRQ IO6      -> IPEX or PCB antenna          |
   |     '- microSD slot   CS IO14, CD IO7                                               |
-  |  I2C (IO8 SDA / IO18 SCL): PN532 NFC  IRQ IO40, RST IO41 -> matching net -> U.FL    |
-  |     -> adhesive loop antenna inside case back                                      |
+  |  I2C (IO8 SDA / IO18 SCL): PN532 NFC module via J8 header  IRQ IO40, RST IO41       |
+  |  -> external module (builder-sourced); its antenna is on the module                |
   |  IR: RX IO1 (TSOP38438), TX IO2 -> MMBT2222A -> 940 nm IR LED                       |
   |  Buttons IO15/16/38/39 (shared with Pi), spares IO47/48 -> test pads               |
   +-------------------------------------------------------------------------------------+
@@ -106,11 +106,11 @@ Bruce's nRF24 features (spectrum, jammer; MouseJack-class attacks) are range-lim
 
 | Candidate | Bruce support | Capability | PCBA notes | Verdict |
 |---|---|---|---|---|
-| **NXP PN532** (bare chip, HVQFN-40 + 27.12 MHz crystal) | ✅ **Native** — Bruce's RFID config lists PN532 (and PN532Killer) as its supported modules; DIY Bruce builds run it on I2C @ 0x24 | ISO14443A/B, MIFARE, FeliCa, card emulation, peer modes | Needs external matching network + antenna (see below) | **RECOMMENDED** |
+| **NXP PN532** (bare chip, HVQFN-40 + 27.12 MHz crystal) | ✅ **Native** — Bruce's RFID config lists PN532 (and PN532Killer) as its supported modules; DIY Bruce builds run it on I2C @ 0x24 | ISO14443A/B, MIFARE, FeliCa, card emulation, peer modes | Needs external matching network + antenna (see below) | **Was RECOMMENDED — superseded 2026-10-18: external module instead (see Antenna strategy)** |
 | MFRC522 | ❌ Not in Bruce's supported-module list (older forks only) — choosing it means writing/maintaining a driver in our fork | ISO14443A only, no emulation | Cheapest, simplest antenna | Rejected: firmware cost |
 | ST25R3911B/3916 (Flipper Zero's chip) | ❌ No Bruce support at all | Best-in-class range + auto antenna tuning | QFN-32, needs full RF design + new driver | Rejected for v1: zero firmware support |
 
-**Antenna strategy (the honest hard part):** there is no PCBA-friendly PN532 *module* at HAT scale (the common modules are 43 × 41 mm hand-solder boards). So: bare PN532 on the HAT → EMC filter + matching network per NXP AN1445 (+ PN532/C1 data sheet §13) [errata 2026-10-16: an earlier draft cited 'AN10688', which is not a PN532 document] → **U.FL connector → adhesive 13.56 MHz loop antenna stuck inside the case back** (a standard, builder-sourced part listed in the build guide; the same cabled-loop approach used by commercial readers). This keeps the tuned loop away from the Pi's ground plane (an etched loop on the HAT itself would sit ~11 mm above the Pi and detune badly). DNP pads for an etched-loop experiment are a rev-2 idea, not v1 (§7, D1). PN532 runs on I2C (matches Bruce's existing board definitions, keeps SPI bus loading down).
+**Antenna strategy — superseded 2026-10-18.** The bare-chip plan above was dropped before layout, for two reasons: the bare PN532/C1 was the BOM's only part with **no LCSC listing** (a JLC sourcing gamble on every kit run), and its AN1445 matching network feeding a cabled case-back loop would have needed bench tuning on every prototype. **Current design:** NFC is an **external PN532 I2C module** (the common Elechouse-type board, builder-sourced like the Pi, display and battery) plugged into a dedicated 1×6 header **J8** — GND, 3V3, SCL (IO18), SDA (IO8), RST (IO41), IRQ (IO40); full spec in PINOUT.md §8. The module's antenna is factory-tuned; Bruce sees the same chip at the same 0x24 address on the same pins; and roughly 25 on-board parts (chip, crystal, decoupling set, EMC/matching network, U.FL) leave the BOM. The honest cost: NFC becomes a plug-in pod rather than an invisible case-back loop, and the module is hand-solder hobby-board grade rather than PCBA-integrated. The original D1 reasoning is kept in §7 for the record.
 
 ### 2.5 Infrared
 
@@ -157,7 +157,7 @@ Push-push TF slot (LCSC C91145 ✅ / C112217 ✅), on the ESP32's shared SPI bus
 | ESP32-S3 (BLE/WiFi) | Module PCB antenna | Board corner, keep-out all layers, away from Pi header |
 | CC1101 | U.FL → SMA whip (or spring) | Opposite corner from ESP32; SMA on case edge |
 | nRF24 (SP4) | IPEX whip inside case / (S) PCB antenna | Away from ESP32 antenna (both live at 2.4 GHz) |
-| PN532 | Cabled adhesive loop | Case back, builder-placed per build guide |
+| PN532 module (external) | J8 header (1×6) on the HAT | Builder-sourced module plugs into J8; antenna is on the module |
 | Pi WiFi (nexmon) | On the Pi itself | Nothing on the HAT may overhang the Pi's antenna corner — HAT outline keep-out note for Pi 4/5 and Zero 2 W antenna zones |
 
 ### 2.11 Assembly reality check
@@ -351,7 +351,7 @@ The slide switch gates converter EN pins only. VSYS (and therefore the gauge + c
 2. ESP32 antenna keep-out: no copper any layer under/past the module antenna; HAT must also not overhang the **Pi's** WiFi antenna zone (Pi antenna sits at the far end from the header on Zero 2 W; corner notch on Pi 4/5) — verify against each Pi's mechanical drawing at layout.
 3. TPS61088: copy TI's reference layout geometry for the SW-node loop; inductor + input caps within 5 mm; thermal vias under the pad.
 4. CC1101 / nRF24 modules at opposite board corners from the ESP32 antenna; U.FL connectors at the case edge; keep module RF pads clear of the display header's ground pins.
-5. PN532 matching network within 10 mm of the U.FL; no ground pour tricks — copy the NXP reference values, tune on the bench (§7 D1).
+5. J8 NFC header at a board edge; keep its I2C run short and clear of the boost SW node. (The on-board PN532 matching network was deleted 2026-10-18 — NFC is an external module; §7 D1 is superseded.)
 6. Button/LED edge placement must match the enclosure's plungers/openings — freeze case + PCB outlines together (Fusion 360 ↔ KiCad step exchange).
 7. Bottom-side parts limited to ≤ 1.2 mm height within the HAT-over-Pi keep-out zones; nothing under the Pi's SoC/RAM area taller than the standoff budget.
 8. microSD slot on the case edge (card must be insertable without opening the case — builders will swap payload cards constantly).
@@ -364,7 +364,7 @@ Justin accepted every recommendation below as written on 2026-10-16; the Recomme
 
 | # | Decision | Options | **Recommendation** |
 |---|---|---|---|
-| D1 | NFC antenna | (a) U.FL → adhesive loop in case back (b) etched loop on HAT (c) revisit ST25R + write driver | **(a)** — lowest RF risk, proven pattern; etched loop detunes over the Pi. Revisit (b) in rev 2 with bench tuning time. |
+| D1 | NFC antenna | (a) U.FL → adhesive loop in case back (b) etched loop on HAT (c) revisit ST25R + write driver | **(a)** — lowest RF risk, proven pattern; etched loop detunes over the Pi. Revisit (b) in rev 2 with bench tuning time. **Superseded 2026-10-18:** NFC left the board entirely — external PN532 module on header J8 (§2.4); neither (a) nor (b) ships. |
 | D2 | CC1101 band(s) | (a) one footprint, BOM picks E07-900M10S (868/915) or E07-400M10S (433) (b) dual footprints, both populated | **(a)** for v1 — one module, region-chosen. (b) doubles RF area and antenna count; Flipper-envy is not a v1 requirement. |
 | D3 | nRF24 variant | (a) E01-ML01SP4 PA+LNA + IPEX (b) E01-ML01S 0 dBm PCB antenna | **(a)** — Bruce's nRF24 tricks are range games; PCB-antenna range disappoints. (b) is the fallback if area runs out. |
 | D4 | Battery capacity | (a) 5000 mAh (b) 3500 mAh slimmer (c) 8000 mAh chunkier | **(a) 5000 mAh high-drain (≥3C) pouch, max cell envelope ≈ 68 × 54 × 11 mm** — Zero 2 W gets a real 3.5–4.5 h; a 3500 cell makes the Pi 5 config a <1 h toy. |
@@ -381,6 +381,6 @@ Justin accepted every recommendation below as written on 2026-10-16; the Recomme
 
 Verified live during research (Oct 2026): ESP32-S3-WROOM-1-N16R8 = LCSC C2913202 (JLCPCB listing, multiple projects); SY8089AAAC = C78988 Basic; HRO TYPE-C-31-M-12 = C165948; IP5306 = C181692 (considered, rejected on boost current); TF slots C91145/C112217; tact switches C11135/C318884; 0805 LEDs C84256/C19171391; JST B2B-PH-K-S = C131337. TPS61088 5 V/5 A-from-1S design point: Absurd Industries "Boosty" open design (TI datasheet topology). E07-900M10S / E07-400M10S / E01-ML01S / E01-ML01SP4: EBYTE official datasheets (LCSC hosts the E01/E07 family datasheets). Bruce PN532-over-I2C + shared-SPI + IO1/IO2 IR conventions: pr3y/Bruce supported-module list and multiple DIY Bruce board definitions (e.g. modabucksmain-pixel/bruce-diy-flipper pinout). bq24074 power-path/DPPM/4.4 V-class system rail behaviour: TI bq2407x datasheet (hosted at LCSC). MAX17048 ModelGauge + ALRT: Analog Devices datasheet.
 
-**To confirm at BOM freeze (flagged ⚠️ in §2):** exact LCSC numbers for TPS61088RHLT, bq24074RGTR, MAX17048G+T10, PN532/C1, E07-900M10S, E01-ML01SP4, TSOP38438, 940 nm SMD IR LED, 24C32 SOIC, 0805 blue LED. If MAX17048 is unstocked at order time, evaluate CW2015 (LCSC-native) — the Pi-side driver is ours either way.
+**To confirm at BOM freeze (flagged ⚠️ in §2):** exact LCSC numbers for TPS61088RHLT, bq24074RGTR, MAX17048G+T10, E07-900M10S, E01-ML01SP4, TSOP38438, 940 nm SMD IR LED, 24C32 SOIC, 0805 blue LED. If MAX17048 is unstocked at order time, evaluate CW2015 (LCSC-native) — the Pi-side driver is ours either way.
 
-**Not verified / known-unknowns:** real-world runtime (bench-measure on proto #1 and update §4); PN532 match values with the chosen adhesive loop (bench tune); Pi 5 sustained current through header pins under thermal load (test with the worst-case cell at 3.4 V).
+**Not verified / known-unknowns:** real-world runtime (bench-measure on proto #1 and update §4); PN532 module variant quirks (I2C-mode switches, onboard pull-ups) — confirm on the reference module at bring-up; Pi 5 sustained current through header pins under thermal load (test with the worst-case cell at 3.4 V).

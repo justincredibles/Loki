@@ -9,7 +9,7 @@ own library — not typed from memory. Custom footprints live in this repo under
 `hardware/kicad/loki.pretty/` (library nickname **Loki**) — see `hardware/kicad/README.md`
 for how to add it. The Espressif library is installed separately (also in the README).
 
-**Result summary (102 BOM rows):**
+**Result summary (88 BOM rows; revised 2026-10-18 — bare PN532 and its network removed, J8 NFC header added):**
 
 | Source | Rows |
 |---|---|
@@ -42,7 +42,6 @@ pin count; the footprint assignment is unaffected.
 | U5 | ESP32-S3-WROOM-1-N16R8 | SMD module, 41 pads | `Espressif:ESP32-S3-WROOM-1` (Espressif lib) | `Espressif:ESP32-S3-WROOM-1` | Manufacturer library — github.com/espressif/kicad-libraries (also in KiCad PCM) | **Not** in KiCad's standard RF_Module library (verified — it has ESP32-WROOM-32/32U, S2-WROVER, but no S3-WROOM-1). Do not substitute the WROOM-32 footprint: different pad map. Antenna keep-out per PINOUT §5 still applies at layout. |
 | U6 | EBYTE E07-900M10S (or E07-400M10S) | Stamp-hole SMD, 22 pads | custom/generic 22-pad module | `Loki:EBYTE_E07-900M10S` | **Custom in repo — ⚠️ GEOMETRY UNVERIFIED** | Body 14×20 mm, 1.27 mm pitch, pad functions per EBYTE manual §3 — those are datasheet facts. Pad size, row inset, pin-1 corner and numbering direction are **not** confirmed (manual dimension drawing is graphical). See unverified list, item 1. Same footprint serves the 433 MHz E07-400M10S (pin-compatible). |
 | U7 | EBYTE E01-ML01SP4 | Stamp-hole SMD, 10 pads | custom/generic 10-pad module | `Loki:EBYTE_E01-ML01SP4` | **Custom in repo — ⚠️ GEOMETRY UNVERIFIED** | Body 14.5×18 mm, 1.27 mm interface, pad functions per EBYTE datasheet — datasheet facts. Two-row arrangement, pad size, row inset, pin-1 corner **not** confirmed. See unverified list, item 2. Pad order is NOT the DIP nRF24 order (PINOUT §7). |
-| U8 | NXP PN532/C1 | HVQFN-40 5×5, P0.4, EP | custom (40-pin + EP) | `Package_DFN_QFN:QFN-40-1EP_5x5mm_P0.4mm_EP3.6x3.6mm` | KiCad standard | ⚠️ NXP SOT618-1 exposed-pad exact size not verified from the package drawing. Only other standard option is EP3.8x3.8 — check SOT618-1 and swap if needed. Pin *numbers* ride on your symbol (PINOUT §8, unverified item 6 there). |
 | U9 | 24C32 EEPROM | SOIC-8 | generic 24Cxx SOIC-8 symbol | `Package_SO:SOIC-8_3.9x4.9mm_P1.27mm` | KiCad standard | |
 | U10 | ST USBLC6-2SC6 ESD | SOT-23-6 | custom (flow-through pinout) | `Package_TO_SOT_SMD:SOT-23-6` | KiCad standard | ⚠️ Pin numbering is the part's flow-through arrangement — confirm against ST datasheet for the exact order code (PINOUT Part E item 8). |
 | U11 | Vishay TSOP38438 IR receiver | Minicast **THT**, SIP-3 | generic 3-pin (Device-level) | `Loki:TSOP38438_Minicast_THT` | **Custom in repo** | Through-hole part (PINOUT erratum 3) — JLCPCB THT assembly or hand-solder. Lead pitch 2.54 nom; pin order **1=OUT, 2=GND, 3=VS** (sibling series swap VS/GND — do not cross-wire). Body silk outline approximate; see unverified list, item 4. |
@@ -55,7 +54,6 @@ pin count; the footprint assignment is unaffected.
 | L1 | 2.2 µH power inductor (Cyntec PIMB065T class) | ~6.5×6.5 mm | `Device:L` | `Inductor_SMD:L_6.3x6.3_H3` | KiCad standard | ⚠️ Closest standard body (6.3 vs 6.5 mm nominal). Verify pad size/position against the frozen inductor's recommended land pattern; widen pads in a local copy if its datasheet shows larger pads. |
 | L401 | 2.2 µH | 2520/2525 class | `Device:L` | `Inductor_SMD:L_1008_2520Metric` | KiCad standard | |
 | L801, L802 | 560 nH RF | 0603/0805 | `Device:L` | `Inductor_SMD:L_0603_1608Metric` (alt `L_0805_2012Metric`) | KiCad standard | Pick per the frozen part's case size. |
-| Y1 | 27.12 MHz crystal, CL 10 pF | 3225, 4-pin | `Device:Crystal_GND24` | `Crystal:Crystal_SMD_3225-4Pin_3.2x2.5mm` | KiCad standard | Library nickname is `Crystal` (not Crystal_SMD). Pads 2/4 are the case/GND pads on this footprint family — ground them. |
 
 ### Connectors, switches, protection
 
@@ -66,7 +64,8 @@ pin count; the footprint assignment is unaffected.
 | J4 | JST-PH battery connector, LCSC C131337 | see note | generic 2-pin | `Connector_JST:JST_PH_B2B-PH-K_1x02_P2.00mm_Vertical` | KiCad standard | ⚠️ **Part-name vs BOM conflict:** PINOUT §13/Part C names **B2B-PH-K-S**, which is JST's **through-hole** vertical part — the footprint at left matches the named part. The BOM's package column says "SMD"; if the physical C131337 part you receive is the surface-mount version, use `Connector_JST:JST_PH_B2B-PH-SM4-TB_1x02-1MP_P2.00mm_Vertical` instead. Confirm which part C131337 actually is before layout freeze. |
 | J5 | 2×7 female header (display) | THT | generic 2×7 socket | `Connector_PinSocket_2.54mm:PinSocket_2x07_P2.54mm_Vertical` | KiCad standard | |
 | J6 | 2×8 expansion header | THT | generic 2×8 | `Connector_PinHeader_2.54mm:PinHeader_2x08_P2.54mm_Vertical` | KiCad standard | If you want a female expansion socket instead: `Connector_PinSocket_2.54mm:PinSocket_2x08_P2.54mm_Vertical` (SMD PinHeader variant also exists). |
-| J7, J8 | U.FL / IPEX RF connector | SMD | generic coax | `Connector_Coaxial:U.FL_Hirose_U.FL-R-SMT-1_Vertical` | KiCad standard | Generic U.FL/MHF1-class land pattern — fits the clone connectors in this class. |
+| J7 | U.FL / IPEX RF connector | SMD | generic coax | `Connector_Coaxial:U.FL_Hirose_U.FL-R-SMT-1_Vertical` | KiCad standard | Generic U.FL/MHF1-class land pattern — fits the clone connectors in this class. (Was 'J7, J8' until 2026-10-18; the second U.FL belonged to the removed on-board NFC antenna.) |
+| J8 | 1×6 2.54 mm pin header — NFC module | THT | `Connector_Generic:Conn_01x06_P2.54mm` | `Connector_PinHeader_2.54mm:PinHeader_1x06_P2.54mm_Vertical` | KiCad standard | Carries the external PN532 module (PINOUT.md §8). Signal names are silkscreened at every pin — module pin orders vary by vendor. |
 | SD1 | microSD push-push slot, LCSC C91145 / C112217 | SMD | custom card-slot symbol | **— none assigned —** | **⚠️ UNVERIFIED** | No standard or community footprint matches this generic push-push slot class. KiCad's Connector_Card microSD options (Hirose DM3 hinged, Molex 104031-0811 push-**pull**, Würth 693072010801) have different shells/tabs/contact positions — **do not substitute**. Build the footprint from the chosen slot's LCSC datasheet land pattern. See unverified list, item 5. |
 | SW1 | Slide switch, SPDT (power, EN-level) | SMD | generic SPDT switch | `Button_Switch_SMD:SW_SPDT_CK-JS102011SAQN` | KiCad standard | Carries only TPS61088 EN current (µA), so any small SPDT works electrically. Alt: `Button_Switch_SMD:SW_SPDT_PCM12`. Verify pad layout against the actual switch purchased — slide-switch footprints are not interchangeable between families. |
 | SW2–SW5 | Tact switch 6×6 mm, LCSC C11135 | SMD | `Device:SW_SPST` ×4 | `Button_Switch_SMD:SW_Push_1P1T_NO_6x6mm_H9.5mm` | KiCad standard | The 6×6 SMD tact pad pattern is common across stem heights (the H9.5 in the name is the modelled stem, pads are the standard 6×6 pattern). Verify against the C11135 drawing at BOM freeze. |
@@ -101,9 +100,6 @@ pin count; the footprint assignment is unaffected.
 | R507, R508 | 0 Ω (USB series; accepts 22 Ω) | |
 | R509, R510 | 100 kΩ (VBUS detect divider) | |
 | R601 | 0 Ω (CC1101 antenna selector) | |
-| R801, R802 | 3.3 Ω (PN532 Rq — bench-tune) | |
-| R803 | 1 kΩ (PN532 RX R1) | |
-| R804 | 2.7 kΩ (PN532 RX R2 — bench-tune) | |
 | R901, R902, R903 | 10 kΩ (SD pull-ups) | |
 | R1001 | 100 Ω (TSOP supply filter) | |
 | R1002 | 18 Ω (IR LED current) | **`Resistor_SMD:R_1206_3216Metric`** — 1206 for pulse dissipation (PINOUT §10.2) |
@@ -138,13 +134,6 @@ pin count; the footprint assignment is unaffected.
 | C602 | 10 µF (CC1101 supply) | `Capacitor_SMD:C_0805_2012Metric` |
 | C701 | 10 µF (nRF24 reservoir) | `Capacitor_SMD:C_0805_2012Metric` |
 | C702 | 0.1 µF (nRF24 supply) | 0603 |
-| C801, C803, C805, C806, C807, C808 | 0.1 µF (PN532 decoupling) | 0603 |
-| C802, C804 | 4.7 µF (PN532 DVDD / TVDD) | `Capacitor_SMD:C_0805_2012Metric` |
-| C809, C810 | 220 pF (PN532 EMC C0) | 0603 |
-| C811, C812 | 18 pF C0G (PN532 C1 — bench-tune) | 0603 |
-| C813, C814 | 56 pF C0G (PN532 C2 — bench-tune) | 0603 |
-| C815, C816 | 22 pF C0G (crystal load) | 0603 |
-| C817 | 1 nF (PN532 CRX) | 0603 |
 | C901 | 0.1 µF (SD supply) | 0603 |
 | C902 | 10 µF (SD supply) | `Capacitor_SMD:C_0805_2012Metric` |
 | C1001 | 1 µF (TSOP filter) | 0603 |
@@ -169,7 +158,7 @@ pin count; the footprint assignment is unaffected.
 3. **U3 TPS61088 (custom footprint).** Body, pitch, EP (3.05×2.05), pad length (0.6) and the 7-pin sides' outer span (4.3 mm) are from TI's RHL0020A drawing. **Assumed:** the 3-pin (top/bottom) rows use the same 0.4 mm toe as the sides (centres at ±2.35 mm) — the drawing's second span dimension could not be decoded with certainty from the datasheet text. Cross-check this one dimension against the TI drawing before fab; everything else is drawing-sourced. TI's stencil example also segments the EP paste into 6 windows ≈0.92×1.05 mm — optional refinement; the file ships a single EP pad (fine for proto/hot-air assembly).
 4. **U11 TSOP38438 (custom footprint).** Lead pitch 2.54 mm nom and pin order are datasheet values (Vishay Doc. 82491; PINOUT §10.1). **Approximate:** the silkscreen body outline (drawn 6.0×4.8 mm from the sibling Minicast-family drawing 6.550-5263.01-4) — it affects only silk/courtyard, not the holes. Pin 1 = OUT is the leftmost lead with the lens facing you, leads down; the footprint marks pin 1 with a square pad and silk dot — confirm orientation against the datasheet drawing when placing.
 5. **SD1 microSD slot — no footprint.** Missing: the LCSC C91145 / C112217 datasheet land pattern (contact positions, shell solder tabs, card-detect contact position). Get it from the datasheet link on the LCSC product page of whichever part is frozen, then draw the footprint from it. Do not substitute KiCad's Molex/Hirose/Würth card footprints. CD-contact polarity assumption is also still open (PINOUT Part E item 14).
-6. **Standard-library EP sizes (U1, U2, U8).** The QFN/DFN picks are the nearest standard exposed-pad sizes: U1 EP1.7×1.7 (variants 1.45/1.75/1.9 exist), U2 EP0.9×1.5 (ADI ≈0.95×1.55), U8 EP3.6×3.6 (variant 3.8×3.8 exists; NXP SOT618-1 exact EP unverified). All three EPs are ground/thermal — a small EP mismatch solders fine, but swap the suffix if the package drawing disagrees.
+6. **Standard-library EP sizes (U1, U2).** The QFN/DFN picks are the nearest standard exposed-pad sizes: U1 EP1.7×1.7 (variants 1.45/1.75/1.9 exist), U2 EP0.9×1.5 (ADI ≈0.95×1.55). Both EPs are ground/thermal — a small EP mismatch solders fine, but swap the suffix if the package drawing disagrees. (This item also covered U8's EP until 2026-10-18, when the bare PN532 left the design entirely — NFC is an external module on J8 now, and the 5×5/P0.4-vs-6×6/P0.5 question left with it.)
 7. **J4 JST-PH (see table).** Named part (B2B-PH-K-S) is THT; BOM package column says SMD. The two candidate footprints are both standard — pick after confirming what LCSC C131337 physically is.
 
 ## Sources

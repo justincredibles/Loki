@@ -388,12 +388,12 @@ Sources: Espressif **ESP32-S3-WROOM-1 Datasheet v1.2** §3.2/§6 (cited "Module 
 | IO20 / USB_D+ (pin 14) | → **R508 = 0 Ω** → U10 → J3 D+ | As above |
 | IO21 | VBUS detect ← divider **R509 = 100 kΩ / R510 = 100 kΩ** from J3 VBUS; **C504 = 0.1 µF** at IO21 | Divider per DESIGN.md §3.2 (USB present → ≈2.5 V at IO21). C504 is an (EC) noise/debounce addition |
 | IO11 (MOSI), IO12 (SCK), IO13 (MISO) | Shared SPI2 bus → U6, U7, SD1 (§6, §7, §9) | Per-device CS and SPI settings; see DESIGN.md §3.2 bus-sharing note |
-| IO8 (SDA), IO18 (SCL) | ESP32 I²C bus → U8 PN532 (§8); pull-ups **R513/R514 = 4.7 kΩ** → 3V3 | Separate bus from the Pi's I²C1 (§2.2). 4.7 kΩ (EC, standard I²C value for a short bus) |
+| IO8 (SDA), IO18 (SCL) | ESP32 I²C bus → PN532 module via J8 (§8); pull-ups **R513/R514 = 4.7 kΩ** → 3V3 | Separate bus from the Pi's I²C1 (§2.2). 4.7 kΩ (EC, standard I²C value for a short bus) |
 | IO15, IO16, IO38, IO39 | Button nets UP/DOWN/LEFT/RIGHT (§11.4) | Direct — no series resistor on the ESP32 side (§3.3) |
 | IO4, IO5, IO6 | U7 nRF24 CE / CSN / IRQ (§7) | |
 | IO10, IO9, IO17 | U6 CC1101 CS / GDO0 / GDO2 (§6) | |
 | IO14, IO7 | SD1 CS / card-detect (§9) | |
-| IO40, IO41 | U8 PN532 IRQ / RSTPDN (§8) | |
+| IO40, IO41 | PN532 module IRQ / RSTPDN via J8 (§8) | |
 | IO3, IO47, IO48 | Test pads only | IO3 is a strapping pin (JTAG source) — do not load it (DESIGN.md §3.2). IO45/IO46 stay unconnected (strapping); IO26–32 and IO33–37 do not exist as usable pads (flash/PSRAM) |
 
 *Plain terms for the patterns in this table (they repeat all over the board, so they're worth learning once):*
@@ -480,76 +480,28 @@ Sources: EBYTE **E01-ML01SP4 Datasheet V1.0** + **E01 User Manual** (cited "E01 
 
 ---
 
-## 8. NFC / RFID — NXP PN532 (U8, bare chip, I²C)
+## 8. NFC / RFID — external PN532 module on header J8
 
-**What this section does.** U8 is the NFC/RFID chip — the thing that reads and emulates 13.56 MHz cards and tags (door badges, transit cards, Amiibo-class NFC). Unlike U6/U7 it is a **bare chip**, not a module: it needs its own crystal, its own power wiring (unusual — see §8.1), and a whole antenna-tuning network (§8.4) between the chip and the U.FL connector that leads to the adhesive loop antenna in the case back. The ESP32 talks to it over I²C. This is the most component-dense section on the board — expect ~25 small parts around this one chip, all of them in §8.1–§8.4.
+**What this section does.** NFC/RFID — reading and emulating 13.56 MHz cards and tags (door badges, transit cards, Amiibo-class NFC) — no longer lives on this board. The original design carried a **bare PN532 chip** here: some 25 parts (the chip, a crystal, an unusual power-wiring set, and a hand-tuned antenna network) including the BOM's only component with **no LCSC listing at all** — a JLC sourcing gamble on every kit run — and antenna values that could only be finalised by bench-tuning a prototype. **Decision (2026-10-18, supersedes D1):** the PN532 moves off-board onto a standard, builder-sourced **PN532 I2C module** (the common Elechouse-type board) that plugs into a dedicated 6-pin header, **J8**. The module brings its own factory-tuned antenna. Electrically nothing changes for the ESP32 or the firmware: same I2C bus, same fixed address **0x24**, same four ESP32 pins as the bare chip used — the Bruce fork cannot tell the difference. This board now carries just the header and six wires.
 
-**What you draw.** The U8 symbol (40 pins); a capacitor on nearly every power pin, in the exact pairings of §8.1; the crystal Y1 with two 22 pF caps (§8.2); six interface wires (§8.3); and the symmetrical antenna network (§8.4) — inductors, capacitors and resistors mirrored identically on the TX1 and TX2 sides, plus the small RX tap-off network.
+**What you draw.** One 1×6 pin-header symbol and six short wires landing on net labels you already placed in §5. This is the shortest section on the board. (The refdes **J8 is reused**: it used to be the NFC antenna's U.FL connector, deleted with the bare chip. If you ever drew the old §8, delete U8, Y1, C801–C817, L801/L802 and R801–R804 — they no longer exist.)
 
-Sources: NXP **AN1445 Rev. 1.2** (antenna design guide — see erratum 2 about "AN10688"), **PN532/C1 Data Sheet Rev. 3.6** §7.2/§8.4/§13 (cited "PN532 DS"), **UM0701-02** (user manual). U8 = PN532/C1, HVQFN-40. Pin numbers below are the HVQFN-40 numbers verified from the data sheet; TX1/TX2/RX are named (their pad numbers ride on the KiCad symbol — confirm against PN532 DS Table 3 when the symbol is placed ⚠️). *(HVQFN-40: flat 40-pad package. The ⚠️ on the TX/RX pins: the *connections* in §8.4 are specified by pin name because the exact pin numbers for TX1/TX2/RX come from the KiCad symbol we use — when you place the U8 symbol, cross-check those three pins against Table 3 of the PN532 datasheet. Part E, item 6 lists every other pin number, already verified, for the same cross-check. Draw §8.4 by name and verify numbers at that moment.)*
+J8 = 1 × 6, 2.54 mm pin header (through-hole). KiCad symbol: search `Conn_01x06` in **Connector_Generic**; footprint `Connector_PinHeader_2.54mm:PinHeader_1x06_P2.54mm_Vertical`.
 
-### 8.1 Power — read carefully, PN532 generates its own rails
-
-**What this sub-section does.** Most chips take one supply voltage and that's it. The PN532 takes battery-level power on VBAT and internally manufactures a second, cleaner ~3.0 V rail called DVDD, which then feeds its own analog (AVDD) and transmitter (TVDD) supplies. So several pins that *sound* like power inputs are actually **outputs or distribution points of that internal rail** — wire them exactly as the table says, especially DVDD: capacitor on it, wire to AVDD and TVDD, but never feed power *into* it.
-
-| Pin | Name | Connection |
+| J8 pin | Signal | Connection |
 |---|---|---|
-| 40 | VBAT | Net `3V3`; **C801 = 0.1 µF** → GND at the pin. VBAT (2.7–5.5 V) is the **only** supply input; an internal LDO makes DVDD (PN532 DS §8.4, §10) |
-| 39 | DVDD | **OUTPUT of the internal LDO (≈3.0 V) — do not feed it.** Route DVDD → AVDD and TVDD. Decouple: **C802 = 4.7 µF** + **C803 = 0.1 µF** → GND (PN532 DS §8.4 Fig. 19, §13 Fig. 51: DVDD/AVDD/TVDD each separately decoupled, X7R/X5R low-ESR) |
-| 5 | TVDD | ← DVDD net; **C804 = 4.7 µF** + **C805 = 0.1 µF** → GND at the pin |
-| 8 | AVDD | ← DVDD net; **C806 = 0.1 µF** → GND at the pin |
-| 3, 7 | TVSS1, TVSS2 | GND |
-| 11 | AVSS | GND |
-| 23 | PVDD | Net `3V3`; **C807 = 0.1 µF** → GND. PVDD is the host-interface pad supply (1.6–3.6 V) — this is what makes the I²C/IRQ/RST levels 3.3 V |
-| 37 | SVDD | **No connect** (switchable supply *output* for an NFC-WI secure element we don't fit; leave unloaded, PN532 DS §8.4.2) |
-| 9 | VMID | **C808 = 0.1 µF** → GND (internal RX reference, decoupled per AN1445 §4.6.1 / Fig. 51) |
+| 1 | GND | GND |
+| 2 | 3V3 | Net `3V3` — module power (the PN532's field draw is already in the 3V3 rail budget, DESIGN.md §4) |
+| 3 | SCL | Net `ESP_SCL` (ESP32 IO18) |
+| 4 | SDA | Net `ESP_SDA` (ESP32 IO8) |
+| 5 | RST | Net `PN532_RST` (ESP32 IO41) |
+| 6 | IRQ | Net `PN532_IRQ` (ESP32 IO40) |
 
-*Plain terms:* treat `DVDD` as its own little net: it leaves pin 39, gets C802 (bulk) + C803 (bypass) to ground, and continues on to pins 5 (TVDD, the transmitter supply — it gets its own pair, C804 + C805) and 8 (AVDD, the analog supply — C806). TVSS1/TVSS2/AVSS are just ground pins with radio-section names — wire them to GND. PVDD is separate and important: it's the supply for the chip's communication pins, and feeding it from `3V3` is what makes its I²C and interrupt signals speak 3.3 V like the ESP32 expects. SVDD is an output for an accessory we don't fit — no-connect flag. VMID is an internal reference voltage the chip generates for its receiver; it only needs its capacitor (C808) to ground.
+*Plain terms:* the pin order is ours, chosen so power sits at one end and the I2C pair (SCL/SDA — the two wires the ESP32 talks over) travels together. **Module pin orders vary by vendor**, so the silkscreen prints the signal name beside every J8 pin and the build-guide rule is *match names, not positions* — most modules ship with a 6-wire cable that lands each wire on its named pin, and a module whose order happens to match can plug straight in. Two builder notes for the guide: (1) most PN532 modules leave the factory switched to UART or SPI — the module's mode switches/jumpers must be set to **I2C** (its address is fixed at 0x24, nothing to configure); (2) some modules carry their own I2C pull-up resistors — harmless here, they simply parallel this board's R513/R514 (§5), which stay fitted so the bus is well-defined even with no module plugged in.
 
-⚠️ Cap-assignment note: Fig. 51's exact per-pin capacitor placement is partially illegible in the PDF; the set above follows the DS §8.4 requirement (separate decoupling on DVDD, AVDD, TVDD; 4.7 µF + 100 nF pairs on DVDD and TVDD; 100 nF on AVDD/PVDD/VMID). This matches the reference circuit's component inventory. *(In plain terms: one page of NXP's PDF is blurry, so the exact "which 0.1 µF belongs to which pin" mapping couldn't be read with certainty. The set in the table satisfies the datasheet's written requirement — every one of those pins gets its own decoupling, in the stated sizes — and uses exactly the components NXP's reference circuit lists. Draw the table as written. 100 nF is the same thing as 0.1 µF, by the way — the note just uses the other unit. Part E, item 7.)*
-
-### 8.2 Crystal
-
-**Y1 = 27.12 MHz** between OSCIN (pin 14) and OSCOUT (pin 15); **C815 = 22 pF** (OSCIN→GND), **C816 = 22 pF** (OSCOUT→GND) (PN532 DS §13 Fig. 51). Crystal spec per DS §12.5: 27.12 MHz ± ~480 ppm, ESR ≤ 50 Ω, load capacitance 10 pF, drive 100 µW (e.g. TAS-3225A class). Keep Y1 and its caps within a few mm of pins 14/15, ground-guarded, away from the antenna network.
-
-*Plain terms:* the crystal (Y1) is the chip's metronome — a tiny quartz part that vibrates at exactly 27.12 MHz (twice the 13.56 MHz NFC frequency) and gives the chip its timing. It wires between pins 14 and 15, and each of those pins also gets a small 22 pF capacitor down to ground (C815/C816, the "load" capacitors that the crystal needs to run at the right frequency — use C0G-type caps here; exact values matter). The spec numbers are for choosing the crystal part at BOM freeze: accuracy ±~480 ppm (parts per million), ESR ≤ 50 Ω (its internal resistance), load capacitance 10 pF, drive level 100 µW (don't overdrive it). "Ground-guarded" is a layout note: surround the crystal traces with ground copper at PCB time, and keep the whole trio close to the pins and away from the antenna network.
-
-### 8.3 Host interface (I²C)
-
-**What this sub-section does.** Six wires between the ESP32 and the PN532: the I²C pair, the two interface-select straps that tell the chip "speak I²C", the reset line, and the interrupt line.
-
-| Pin | Name | Connection |
-|---|---|---|
-| 16 | I0 | → **DVDD net** (interface select: I0=1, I1=0 = I²C — UM0701-02 Table 7) |
-| 17 | I1 | → GND |
-| 27 | SCL | ← ESP32 IO18 (pull-up R514, §5) |
-| 28 | SDA | ↔ ESP32 IO8 (pull-up R513, §5) |
-| 38 | RSTPD_N | ← ESP32 IO41. Active-low reset / hard power-down; the DS states no pull requirement — the ESP32 must drive it high for operation (PN532 DS §7.2) |
-| 25 | P70_IRQ | → ESP32 IO40. Driven GPIO-style interrupt; no external resistors required (AN10609) |
-
-I²C address is fixed at **0x24** (7-bit; UM0701-02 §6.2.4 gives the 8-bit form 0x48). There are no address-select pins.
-
-*Plain terms:* the PN532 can speak three languages (I²C, SPI, serial); pins I0 and I1 are the selector switch, read at power-up — I0 wired to DVDD (a logic "1") and I1 to GND (a "0") selects I²C permanently. The pull-ups for SDA/SCL (R513/R514) live in §5's table — if you've drawn §5 already, they're placed; here you just land the wires. RSTPD_N is the reset pin: the "_N" marks it active-low (pull it to ground = chip off/reset; the ESP32 holds it high for normal operation, and no pull-up/pull-down resistor is fitted because the ESP32 always drives it). P70_IRQ is the chip's "I have something to tell you" interrupt to the ESP32 — a plain driven signal, no resistors needed. The I²C address 0x24 is fixed in the silicon — there's nothing to wire for it; it's a firmware fact.
-
-### 8.4 Antenna network — EMC filter + matching (AN1445 §4, Fig. 1; §4.7 worked example)
-
-**What this sub-section does.** The PN532's transmitter pins don't connect straight to the antenna. Between them sits a small network of inductors, capacitors and resistors with two jobs: the **EMC filter** (L801/L802 + C809/C810) cleans up the harsh square-wave energy the transmitter produces so the board doesn't radiate illegal interference, and the **matching network** (C811–C814 + R801/R802) translates between the chip and the loop antenna so power transfers efficiently — like matching a gearbox between an engine and wheels. The network is **symmetrical**: the TX1 side and TX2 side are built identically, mirror images. A third mini-network (R803/R804/C817) taps a sample of the signal off to the receiver pin so the chip can hear the card's answer.
-
-Symmetrical: build the TX1 half and the TX2 half identically. Per side:
-
-TX pin → **L801/L802 = 560 nH** (EMC inductor) → node `EMC_A` / `EMC_B`; **C809/C810 = 220 pF** from each EMC node → TVSS (GND); EMC node → **C811/C812 = 18 pF** (series matching cap C1) → **R801/R802 = 3.3 Ω** (damping Rq) → loop terminal `ANT_A` / `ANT_B`; **C813/C814 = 56 pF** from each loop terminal → TVSS (GND) (shunt matching cap C2).
-
-*How to read that paragraph (and how to draw it):* follow one side as a chain. Starting at the TX1 pin: first L801 (560 nH inductor) in series; where the inductor ends is a node (call it `EMC_A`); from `EMC_A`, C809 (220 pF) goes down to ground (a shunt cap), and the main path continues through C811 (18 pF, in series) then R801 (3.3 Ω, in series) to the loop terminal `ANT_A`; from `ANT_A`, C813 (56 pF) shunts to ground, and `ANT_A` itself runs on to the J8 connector. Now draw the exact same chain again for TX2 with L802, C810, C812, R802, C814 and node `EMC_B` / terminal `ANT_B`. In the schematic, giving the nodes the names `EMC_A`, `EMC_B`, `ANT_A`, `ANT_B` as net labels makes the mirror structure obvious. "TVSS" is the transmitter ground — plain GND on this board.
-
-- EMC filter: L0 = 560 nH with C0 = 220 pF sets fr0 ≈ 14.3 MHz — AN1445 §4.2 worked example (allowed L0 range 390 nH–1 µH, fr0 target 14.1–14.5 MHz). *(fr0 is the filter's resonant frequency — the point it filters around. 14.3 MHz sits just above the 13.56 MHz operating frequency: the wanted signal passes, its higher harmonics get shaved off.)*
-- C1/C2/Rq values are the AN1445 §4.7 evaluation-board results for a loop of La ≈ 2.9 µH, Ra ≈ 1.9 Ω, Ca ≈ 11 pF, tuned to Rmatch ≈ 50 Ω at Q ≈ 35. **They are starting values, not final values** — C1, C2 and Rq are antenna-dependent by construction (AN1445 Eqs. 7–10) and **must be bench-tuned with the actual adhesive loop and its cable fitted** (DESIGN.md §6.5 already calls for this). The note's design envelope: La 0.3–3 µH, Ra 0.3–8 Ω, Q target 35 ± 10 %. *(In plain terms: 18 pF / 56 pF / 3.3 Ω are the values that worked on NXP's test board with a test loop of about that size (La/Ra/Ca are the loop's own inductance, resistance and capacitance). Our real loop is a different physical object, so on the first prototype these parts get adjusted — swapped up/down in value while measuring read range — until the real antenna is tuned. That is normal NFC engineering, planned for, not a flaw: draw them as written now, expect C811–C814 and R801/R802 to change value at prototype stage. The "design envelope" is NXP saying the method works for loops anywhere in those ranges.)*
-- **ANT_A → J8** (U.FL) centre; **ANT_B → J8** shell/GND. J8 → coax pigtail → adhesive 13.56 MHz loop in the case back (decision D1). The cable is part of the antenna — tune with the final cable length. *(J8 is the same kind of tiny snap-on coax connector as J7. `ANT_A` lands on its centre contact; `ANT_B` lands on its shell, which is ground. The adhesive loop is a flat sticker-like antenna that lives in the case's back panel, joined by a short coax pigtail — and because that cable is electrically part of the antenna, the bench tuning above happens with the final cable in place.)*
-- RX path (from the TX1-side EMC node `EMC_A`): **R803 = 1 kΩ** (R1, predefined) → node `RXD`; **R804 = 2.7 kΩ** (R2) from `RXD` → GND; **C817 = 1 nF** (CRX) from `RXD` → RX pin. R1 and CRX/Cvmid are fixed by AN1445 §4.6.1; R2 = 2.7 kΩ is the PN532 DS Fig. 51 instance value — it is calculated per-loop (AN1445 Eq. 11, target U_RX ≈ 1 Vpp), so treat 2.7 kΩ as the starting value alongside C1/C2/Rq tuning. *(The receiver tap: from `EMC_A`, R803 (1 kΩ, in series) leads to a node called `RXD`; R804 (2.7 kΩ) shunts `RXD` to ground — together they scale the big transmit signal down to a safe ~1 V peak-to-peak sample (that's the "U_RX ≈ 1 Vpp" target) — and C817 (1 nF) passes that sample into the RX pin while blocking DC. R2 joins the bench-tune list for the same reason as the matching parts.)*
-
-**Placement:** the entire network (L801/L802 → J8) is one compact cluster: EMC parts adjacent to the TX pins, matching caps adjacent to J8, **whole network within 10 mm of the U.FL** (DESIGN.md §6.5), no ground-pour tricks under the network, no digital traces crossing it. PN532 sits on the case-back side of the board so the J8 run is short. *(Layout notes: at PCB time this whole network is one tight cluster with nothing digital running through it — RF tuning parts only behave if the physical geometry matches the design assumptions.)*
+**Placement:** J8 on a board edge, clear of the U6/U7 antenna zones; keep the ESP_SCL/ESP_SDA run short and away from the boost converter's SW node. Everything RF about NFC — chip, crystal, matching network, antenna — now lives on the module, on the far side of this connector.
 
 ---
-
 ## 9. microSD slot (SD1)
 
 **What this section does.** SD1 is the microSD card slot — removable storage the ESP32 uses (for Bruce firmware files, captured data, BadUSB payloads). The card talks SPI (the same shared bus as the two radios, with its own chip-select wire), and a card-detect contact tells the ESP32 whether a card is physically inserted.
@@ -876,7 +828,6 @@ LCSC numbers marked ✅ are carried over from DESIGN.md §8 (verified there). Ev
 | U5 | 1 | ESP32-S3-WROOM-1-N16R8 module | SMD module | **C2913202 ✅** |
 | U6 | 1 | EBYTE E07-900M10S CC1101 module (433 build: E07-400M10S) | Stamp-hole SMD | confirm |
 | U7 | 1 | EBYTE E01-ML01SP4 nRF24 PA module | Stamp-hole SMD | confirm |
-| U8 | 1 | NXP PN532/C1 NFC controller | HVQFN-40 | confirm |
 | U9 | 1 | 24C32 EEPROM | SOIC-8 | confirm |
 | U10 | 1 | ST USBLC6-2SC6 USB ESD | SOT-23-6 | confirm |
 | U11 | 1 | Vishay TSOP38438 IR receiver | Minicast **THT** | confirm |
@@ -888,14 +839,13 @@ LCSC numbers marked ✅ are carried over from DESIGN.md §8 (verified there). Ev
 | D4 | 1 | LED blue 0805 | 0805 | confirm |
 | L1 | 1 | 2.2 µH power inductor, Isat ≥ 12 A (Cyntec PIMB065T-2R2M class) | ~6.5 × 6.5 mm | confirm |
 | L401 | 1 | 2.2 µH, Isat > 2.3 A, DCR < 50 mΩ | 2520/2525 class | confirm |
-| L801, L802 | 2 | 560 nH RF inductor (tight tolerance, high Q) | 0603/0805 | confirm |
-| Y1 | 1 | 27.12 MHz crystal, CL 10 pF, ESR ≤ 50 Ω | 3225 | confirm |
 | J1 | 1 | 2 × 20 2.54 mm stacking header (Pi HAT) | THT | confirm |
 | J2, J3 | 2 | HRO TYPE-C-31-M-12 USB-C | SMD mid-mount | **C165948 ✅** |
 | J4 | 1 | JST-PH B2B-PH-K-S battery connector | SMD | **C131337 ✅** |
 | J5 | 1 | 2 × 7 2.54 mm female header (display) | THT/SMD | confirm |
 | J6 | 1 | 2 × 8 2.54 mm header (expansion) | THT/SMD | confirm |
-| J7, J8 | 2 | U.FL/IPEX RF connector | SMD | confirm |
+| J7 | 1 | U.FL/IPEX RF connector | SMD | confirm |
+| J8 | 1 | 1 × 6 2.54 mm pin header (NFC module, §8) | THT | — |
 | SD1 | 1 | microSD push-push slot | SMD | **C91145 ✅ / C112217 ✅** |
 | SW1 | 1 | Slide switch (power, EN-level current) | SMD | confirm |
 | SW2–SW5 | 4 | Tact switch 6 × 6 mm | SMD | **C11135 ✅** |
@@ -923,9 +873,6 @@ LCSC numbers marked ✅ are carried over from DESIGN.md §8 (verified there). Ev
 | R507, R508 | 2 | 0 Ω (USB series, 0603; footprint accepts 22 Ω) | 0603 | — |
 | R509, R510 | 2 | 100 kΩ (VBUS detect divider) | 0603 | — |
 | R601 | 1 | 0 Ω (CC1101 antenna selector) | 0603 | — |
-| R801, R802 | 2 | 3.3 Ω (PN532 Rq — tune) | 0603 | — |
-| R803 | 1 | 1 kΩ (PN532 RX R1) | 0603 | — |
-| R804 | 1 | 2.7 kΩ (PN532 RX R2 — tune) | 0603 | — |
 | R901, R902, R903 | 3 | 10 kΩ (SD pull-ups) | 0603 | — |
 | R1001 | 1 | 100 Ω (TSOP supply filter) | 0603 | — |
 | R1002 | 1 | 18 Ω (IR LED current set) | **1206** | — |
@@ -955,13 +902,6 @@ LCSC numbers marked ✅ are carried over from DESIGN.md §8 (verified there). Ev
 | C602 | 1 | 10 µF (CC1101 supply) | 0805 | — |
 | C701 | 1 | 10 µF (nRF24 reservoir) | 0805 | — |
 | C702 | 1 | 0.1 µF (nRF24 supply) | 0603 | — |
-| C801, C803, C805, C806, C807, C808 | 6 | 0.1 µF (PN532 decoupling set) | 0603 | — |
-| C802, C804 | 2 | 4.7 µF (PN532 DVDD / TVDD) | 0805 | — |
-| C809, C810 | 2 | 220 pF (PN532 EMC C0) | 0603 | — |
-| C811, C812 | 2 | 18 pF (PN532 C1 — tune) | 0603 C0G | — |
-| C813, C814 | 2 | 56 pF (PN532 C2 — tune) | 0603 C0G | — |
-| C815, C816 | 2 | 22 pF (PN532 crystal load) | 0603 C0G | — |
-| C817 | 1 | 1 nF (PN532 CRX) | 0603 | — |
 | C901 | 1 | 0.1 µF (SD supply) | 0603 | — |
 | C902 | 1 | 10 µF (SD supply) | 0805 | — |
 | C1001 | 1 | 1 µF (TSOP filter) | 0603 | — |
@@ -970,7 +910,7 @@ LCSC numbers marked ✅ are carried over from DESIGN.md §8 (verified there). Ev
 | TP | ~6 | Test pads: IO3, IO47, IO48, VSYS, 3V3, PGOOD | — | — |
 | Spring antenna | 0/1 | CC1101 spring antenna (DNP unless the SMA-whip path is deleted) | — | builder option |
 
-Builder-sourced (not on the PCB BOM): Raspberry Pi, ILI9341 display module, 5000 mAh 1S high-drain (≥3C) pouch cell with JST-PH lead, adhesive 13.56 MHz loop antenna + U.FL pigtail, SMA whip (868/915), IPEX whip (2.4 GHz), enclosure.
+Builder-sourced (not on the PCB BOM): Raspberry Pi, ILI9341 display module, 5000 mAh 1S high-drain (≥3C) pouch cell with JST-PH lead, PN532 I2C NFC module (Elechouse-type, for J8), SMA whip (868/915), IPEX whip (2.4 GHz), enclosure.
 
 *Plain terms for the last two rows: "TP" = test pads — bare copper pads (not parts at all) placed so you can touch a multimeter or oscilloscope probe to those signals during testing. "Builder-sourced" = things you buy separately that don't solder onto this PCB: the Pi itself, the display, the battery, the antennas and the case.*
 
@@ -984,10 +924,10 @@ The short list of layout-critical items. (DESIGN.md §6 has the full checklist; 
 
 1. **Boost SW loop first.** TPS61088: L1 + C301–C304 within 5 mm of the VIN/SW pins; SW-node copper minimum area; thermal vias under U3's pad; FB/COMP/SS parts on the far side of the package from SW. ("Minimize the length and area of all traces connected to the SW pin" — SLVSCM8D §10.1.)
    - *In plain terms:* the boost converter's switching loop is the loudest, most interference-prone circuit on the board. Lay it out first, keep it tiny (inductor and input caps within 5 mm of the chip), keep the SW node's copper as small as possible, put heat vias under the chip, and put the quiet setting parts (FB/COMP/SS) on the opposite side of the chip from the SW pins.
-2. **Decoupling proximity.** Every IC's caps within ~3 mm of their pins, via-free where possible: U1 (C101–C103), U2 (C201), U4 (C401 at IN, C402/403 at LX output), U5 (C501/C502 at pin 2), U6 (C601/C602), U7 (C701/C702), U8 (full §8.1 set), SD1 (C901/C902).
+2. **Decoupling proximity.** Every IC's caps within ~3 mm of their pins, via-free where possible: U1 (C101–C103), U2 (C201), U4 (C401 at IN, C402/403 at LX output), U5 (C501/C502 at pin 2), U6 (C601/C602), U7 (C701/C702), SD1 (C901/C902).
    - *In plain terms:* every chip's little power capacitors must sit within ~3 mm of the pins they serve, ideally connected by plain surface copper with no vias in between (a via adds a small coil-like effect that weakens the capacitor). This is the "at the pin" rule from Part A, collected in one place.
-3. **PN532 network is one cluster.** TX pins → EMC (L801/L802, C809/C810) → matching (C811–C814, R801/R802) → J8, all within 10 mm of the U.FL, no digital crossings, no ground-pour games.
-   - *In plain terms:* the NFC antenna network (§8.4) is placed as one tight bunch between the chip and its connector, nothing digital routed through it, and no clever ground-pour shapes underneath it — the tuning depends on the physical geometry staying clean and predictable.
+3. **NFC header J8.** J8 sits on a board edge, clear of the U6/U7 antenna zones, with its I2C run (ESP_SDA/ESP_SCL) short, direct, and away from the boost SW node. Nothing else — since 2026-10-18 the PN532 and its tuned antenna live on the external module; there is no on-board NFC matching network.
+   - *In plain terms:* the NFC connector just needs a sensible seat at the board's edge and a short, quiet path back to the ESP32. All the RF cleverness moved off-board with the module.
 4. **Antenna keep-outs.** ESP32 module antenna overhangs/edges the board with **zero copper on all layers** beneath it and ≥15 mm housing clearance; CC1101 (U6) and nRF24 (U7) at opposite corners from the ESP32 antenna and from each other where the outline allows (U7 and the ESP32 both live at 2.4 GHz); nothing on this board overhangs the **Pi's** WiFi antenna corner below.
    - *In plain terms:* antennas need empty space around them — copper underneath an antenna absorbs and detunes it. The ESP32's antenna hangs off the board edge; the two radio modules go in far corners away from it and from each other (two of the three radios share the 2.4 GHz band and would interfere); and no part of Loki may sit over the Pi's own WiFi antenna corner on the board below.
 5. **USB pairs.** J3 D+/D−: 90 Ω ±10 % differential, length-matched, solid ground beneath, U10 immediately behind the connector, R507/R508 immediately behind U10. J2 is power-only — keep its VBUS run short and wide to U1 IN.
@@ -1019,12 +959,12 @@ The short list of layout-critical items. (DESIGN.md §6 has the full checklist; 
    - *What you do:* draw as written (§3). On the first prototype, someone does a load-step test — suddenly change the boost's load and watch the 5.1 V output on a scope for ringing or slowness. If it misbehaves, these two values are the knobs.
 4. **TPS61088 R_ILIM allowed range** — no explicit min/max in the datasheet; 100 kΩ is the datasheet's own example value.
    - *What you do:* nothing — R303 = 100 kΩ is TI's own worked-example value; the gap is only that TI never printed an allowed range for it.
-5. **PN532 C1/C2/Rq/R2 (R801/R802, C811–C814, R804)** — AN1445 *worked-example* values for a 2.9 µH loop. They are starting points by construction; final values come from bench tuning with the real case-back loop + cable (VNA or at minimum a field-strength/read-range sweep).
-   - *What you do:* draw as written (§8.4). At prototype stage, these parts get tuned with the real antenna and its final cable fitted — measured with a VNA (a vector network analyzer, the instrument that measures antenna matching) or, at minimum, by testing card read-range while trying nearby values. Expect the values to change; that's the plan, not a problem.
-6. **PN532 TX1/TX2/RX pad numbers** — connections are specified by pin name; numbers ride on the KiCad symbol (verify against PN532/C1 data sheet Table 3 when placing). Verified numbers used: VBAT 40, DVDD 39, RSTPD_N 38, SVDD 37, SDA 28, SCL 27, P70_IRQ 25, PVDD 23, I1 17, I0 16, OSCOUT 15, OSCIN 14, AVSS 11, VMID 9, AVDD 8, TVSS2 7, TVDD 5, TVSS1 3.
-   - *What you do:* when you place the U8 symbol in KiCad, compare its pin numbers against the verified list in this item (and Table 3 of the PN532 datasheet) — especially TX1/TX2/RX, whose connections in §8.4 are given by name. A five-minute check at symbol-placement time.
-7. **PN532 Fig. 51 per-pin capacitor assignment** — partially illegible in the PDF; §8.1's set satisfies the §8.4 decoupling requirement and matches the figure's component inventory, but the exact 100 nF-to-pin mapping in NXP's drawing could not be read with certainty.
-   - *What you do:* nothing beyond drawing §8.1 as written — every power pin gets its decoupling in the required sizes either way; the uncertainty is only about which specific 0.1 µF in NXP's drawing belongs to which pin.
+5. **PN532 C1/C2/Rq/R2 (R801/R802, C811–C814, R804) — MOOT.** These were the AN1445 *worked-example* antenna-matching values for the bare-chip design, always intended as bench-tuning starting points. The bare PN532 was removed on 2026-10-18 (NFC is an external module on header J8, §8); the parts and the tuning question left with it — the module's antenna is factory-tuned.
+   - *What you do:* nothing — the item is closed by the redesign.
+6. **PN532 TX1/TX2/RX pad numbers — MOOT.** The bare PN532 was removed from the design on 2026-10-18 (NFC is an external module on header J8, §8); there are no on-board PN532 pads left to verify.
+   - *What you do:* nothing — the item is closed by the redesign.
+7. **PN532 Fig. 51 per-pin capacitor assignment — MOOT.** Same 2026-10-18 change: the bare-chip decoupling set (C801–C817) no longer exists.
+   - *What you do:* nothing — the item is closed by the redesign.
 8. **USBLC6-2SC6 pin numbering** — flow-through arrangement as standard for the part; confirm against ST's datasheet for the exact order code.
    - *What you do:* at BOM freeze, when the exact USBLC6 variant is picked, check its datasheet pinout against §5.1's description (pin 5 = VBUS, pin 2 = GND, flow-through I/O). A pre-order checklist item.
 9. **ESP32 IO0 pull-up value (10 kΩ)** — the Hardware Design Guidelines require a pull-up but state no value; 10 kΩ is from DESIGN.md and Espressif reference designs.
