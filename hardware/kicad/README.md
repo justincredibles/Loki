@@ -13,6 +13,7 @@ section before ordering boards.
 | `EBYTE_E01-ML01SP4` | U7 — EBYTE E01-ML01SP4 nRF24 PA/LNA module | ⚠️ Pad arrangement unverified (see FOOTPRINTS.md) |
 | `TPS61088_RHL_VQFN-20_3.5x4.5_P0.5` | U3 — TI TPS61088 boost | From TI drawing RHL0020A; one assumed dimension flagged |
 | `TSOP38438_Minicast_THT` | U11 — Vishay TSOP38438 IR receiver | Hole pitch/pin order from datasheet; body silk approximate |
+| `Hirose_DM3D-SF` | SD1 — Hirose DM3D-SF microSD slot | From Hirose's published land pattern (vector extraction + calibrated render cross-check); three pad sizes measured from the drawing, not labelled — see `dm3d-sf-footprint-notes.md` |
 
 All files are KiCad 8 footprint format (version 20240108).
 
