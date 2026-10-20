@@ -508,7 +508,7 @@ J8 = 1 × 6, 2.54 mm pin header (through-hole). KiCad symbol: search `Conn_01x06
 
 **What you draw.** The SD1 slot symbol; two power caps at its VDD contact; three wires to the shared SPI bus plus CS to IO14; a 10 kΩ pull-up resistor on each of CMD, DAT0 and the card-detect contact; and no-connect flags on DAT1/DAT2.
 
-SD1 = push-push TF slot, LCSC C91145 ✅ / C112217 ✅. SPI mode on the ESP32's shared SPI2 bus (DESIGN.md §2.8, decision D5). *("Push-push" = push the card in until it clicks; push again to eject — like a ballpoint pen. "TF" is the old name for microSD. A microSD card can speak two protocols; this design uses its slower-but-simple SPI mode, not the fast 4-bit SD mode, because the ESP32 shares the bus with the radios.)*
+SD1 = **Hirose DM3D-SF** microSD slot (JLC **C719027**, ~$1.16 as an extended part) — push-pull: push the card in, pull it out; no click-eject spring. Decided 2026-10-19, replacing the earlier generic push-push slot (LCSC C91145/C112217), whose footprint could never be identified. SPI mode on the ESP32's shared SPI2 bus (DESIGN.md §2.8, decision D5). *("TF" is the old name for microSD. "Push-pull" means you push the card in and pull it straight back out — no spring eject like the push-push ballpoint-pen mechanism. A microSD card can speak two protocols; this design uses its slower-but-simple SPI mode, not the fast 4-bit SD mode, because the ESP32 shares the bus with the radios.)*
 
 | Slot contact | Connection |
 |---|---|
@@ -519,9 +519,9 @@ SD1 = push-push TF slot, LCSC C91145 ✅ / C112217 ✅. SPI mode on the ESP32's 
 | DAT0 (MISO) | → ESP32 IO13; **R902 = 10 kΩ** pull-up → 3V3 |
 | DAT3 (CS) | ← ESP32 IO14 |
 | DAT1, DAT2 | No connect (unused in SPI mode) |
-| CD (card-detect contact) | → ESP32 IO7; **R903 = 10 kΩ** pull-up → 3V3. ⚠️ VERIFY: assumes the slot's CD contact closes to GND with a card inserted (the common arrangement for this slot class) — confirm against the chosen slot's datasheet at BOM freeze |
+| CD (card-detect switch) | The DM3D-SF has a dedicated detection switch with two terminals, A and B: **A → ESP32 IO7** with **R903 = 10 kΩ** pull-up → 3V3; **B → GND**. Per the Hirose DM3 datasheet the switch is open with no card and **closes when a card is inserted** — so inserting a card pulls CD to ground (card present = IO7 reads low), exactly what this design assumed. (JLC's listing claims this part has no detection pins — the manufacturer's datasheet says otherwise, and the datasheet wins.) |
 
-*Plain terms:* the contact names are the card's own pin names — in SPI mode, CMD carries data *to* the card (it's the MOSI wire), DAT0 carries data *back* (MISO), and DAT3 works as the chip-select. DAT1/DAT2 are only used in 4-bit SD mode, so here they're no-connects. The pull-ups on CMD/DAT0 aren't our whim — the SD card specification requires them in SPI mode (they're what the lines rest against between transfers). The CD contact is a tiny switch inside the slot. The ⚠️ VERIFY: this design assumes the switch closes to ground when a card goes in (line pulled up to 3.3 V by R903 normally; reads ground = card present). That's the common arrangement for these slots, but slots exist both ways — what you do: when the exact slot is ordered (BOM freeze), check its datasheet's card-detect description. If it turns out opposite, the fix is firmware (invert the reading), not the board. Draw as written. (Part E, item 14.)
+*Plain terms:* the contact names are the card's own pin names — in SPI mode, CMD carries data *to* the card (it's the MOSI wire), DAT0 carries data *back* (MISO), and DAT3 works as the chip-select. DAT1/DAT2 are only used in 4-bit SD mode, so here they're no-connects. The pull-ups on CMD/DAT0 aren't our whim — the SD card specification requires them in SPI mode (they're what the lines rest against between transfers). The CD (card-detect) contact is a tiny switch built into the slot. On the DM3D-SF that switch is a separate two-terminal contact (A and B) that is open normally and closes when a card is pushed in (Hirose DM3 datasheet — so the polarity this design assumed is confirmed, not guessed: B goes to ground, A is the CD line, R903 pulls it up to 3.3 V, and a card present reads as ground on ESP32 IO7). This was Part E, item 14 — resolved 2026-10-19 when the DM3D-SF was chosen.
 
 No series damping resistors are fitted on the SD lines: Espressif's reference designs wire SD slots directly, and our runs are short. If proto testing shows ringing-related card errors, 33 Ω series pads near the slot are the rev-2 fix (note, not fitted). *("Series damping resistors" would be small resistors in each data wire to calm electrical ringing — deliberately omitted here; this sentence records that it was considered and why it's a prototype-stage decision, not an oversight.)*
 
@@ -846,7 +846,7 @@ LCSC numbers marked ✅ are carried over from DESIGN.md §8 (verified there). Ev
 | J6 | 1 | 2 × 8 2.54 mm header (expansion) | THT/SMD | confirm |
 | J7 | 1 | U.FL/IPEX RF connector | SMD | confirm |
 | J8 | 1 | 1 × 6 2.54 mm pin header (NFC module, §8) | THT | — |
-| SD1 | 1 | microSD push-push slot | SMD | **C91145 ✅ / C112217 ✅** |
+| SD1 | 1 | microSD slot — Hirose DM3D-SF (push-pull, card-detect switch) | SMD | **C719027** (JLC extended part, ~$1.16) |
 | SW1 | 1 | Slide switch (power, EN-level current) | SMD | confirm |
 | SW2–SW5 | 4 | Tact switch 6 × 6 mm | SMD | **C11135 ✅** |
 | SJ1 | 1 | Solder jumper (EEPROM WP select) | 0603 pads | — |
@@ -977,7 +977,7 @@ The short list of layout-critical items. (DESIGN.md §6 has the full checklist; 
     - *What you do:* nothing — draw as written (§7); the pair plus the 2 A rail covers the module's 120 mA bursts with margin.
 13. **E01-ML01SP4 IPEX generation** (MHF1 vs U.FL compatibility) and the FCC datasheet's conflicting 1.5 dBm/PCB-antenna figures vs the manual's 20 dBm/IPEX — confirm the exact hardware revision when ordering modules.
     - *What you do:* when ordering the U7 modules, confirm the antenna connector type on the actual part (MHF1 vs U.FL) matches the whip/pigtail being bought, and that the part is the +20 dBm IPEX version (not a low-power PCB-antenna variant that appears in one FCC document). An ordering-time check, nothing in the schematic.
-14. **microSD CD-contact polarity (R903/SD1)** — assumes contact closes to GND on insertion; confirm against the chosen slot's datasheet.
+14. **microSD CD-contact polarity (R903/SD1)** — ✅ RESOLVED 2026-10-19: SD1 is the Hirose DM3D-SF, whose datasheet detection switch is normally open and closes with a card inserted. Switch A → CD net (ESP32 IO7 + R903 pull-up), B → GND — the schematic as drawn is correct; no firmware inversion needed.
     - *What you do:* at BOM freeze, read the chosen slot's datasheet card-detect description. If it's the opposite polarity, firmware inverts the reading — the board doesn't change. §9.
 15. **Display module (J5) pin order and SD_CS routing** — the module is builder-sourced; the near-universal ILI9341-module order is tabulated, but verify against the actual module in hand.
     - *What you do:* when the physical display module is in hand, compare its printed pin labels to §11.2's table before plugging it in. Draw per the table now.

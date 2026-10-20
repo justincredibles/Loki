@@ -142,7 +142,7 @@ Bruce's nRF24 features (spectrum, jammer; MouseJack-class attacks) are range-lim
 
 ### 2.8 microSD (ESP32 storage)
 
-Push-push TF slot (LCSC C91145 ✅ / C112217 ✅), on the ESP32's shared SPI bus, CS = IO14. Bruce stores payloads, .sub files and PCAPs on SD; without it the fork leans on LittleFS and every capture has to squeeze through the 115200 UART to the Pi. The slot costs ~15 × 15 mm and one CS line — include it (§7, D5).
+Hirose DM3D-SF microSD slot (JLC C719027; push-pull, with card-detect switch — decided 2026-10-19, replacing the generic push-push slot whose footprint could not be identified), on the ESP32's shared SPI bus, CS = IO14. Bruce stores payloads, .sub files and PCAPs on SD; without it the fork leans on LittleFS and every capture has to squeeze through the 115200 UART to the Pi. The slot costs ~15 × 15 mm and one CS line — include it (§7, D5).
 
 ### 2.9 What was deliberately left off
 
