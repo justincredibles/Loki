@@ -9,11 +9,11 @@ own library — not typed from memory. Custom footprints live in this repo under
 `hardware/kicad/loki.pretty/` (library nickname **Loki**) — see `hardware/kicad/README.md`
 for how to add it. The Espressif library is installed separately (also in the README).
 
-**Result summary (88 BOM rows; revised 2026-10-18 — bare PN532 and its network removed, J8 NFC header added):**
+**Result summary (88 BOM rows at the 2026-10-18 revision; revised 2026-10-19 — the display/button redesign removed J5, Q2, SW2–SW5 and their passives: 8 BOM rows, 20 parts. The touch display is builder-sourced and has no footprint):**
 
 | Source | Rows |
 |---|---|
-| KiCad standard library | 95 |
+| KiCad standard library | 95 − 20 (parts removed 2026-10-19; their rows are marked superseded below) |
 | Manufacturer library (Espressif) | 1 (U5) |
 | Custom, in this repo (`Loki:`) | 5 (U3, U6, U7, U11, SD1) |
 | No footprint needed (builder option) | 1 (spring antenna) |
@@ -47,7 +47,7 @@ pin count; the footprint assignment is unaffected.
 | U10 | ST USBLC6-2SC6 ESD | SOT-23-6 | custom (flow-through pinout) | `Package_TO_SOT_SMD:SOT-23-6` | KiCad standard | ⚠️ Pin numbering is the part's flow-through arrangement — confirm against ST datasheet for the exact order code (PINOUT Part E item 8). |
 | U11 | Vishay TSOP38438 IR receiver | Minicast **THT**, SIP-3 | generic 3-pin (Device-level) | `Loki:TSOP38438_Minicast_THT` | **Custom in repo** | Through-hole part (PINOUT erratum 3) — JLCPCB THT assembly or hand-solder. Lead pitch 2.54 nom; pin order **1=OUT, 2=GND, 3=VS** (sibling series swap VS/GND — do not cross-wire). Body silk outline approximate; see unverified list, item 4. |
 | Q1 | MMBT2222A | SOT-23 | `Device:Q_NPN_BCE` | `Package_TO_SOT_SMD:SOT-23` | KiCad standard | Standard pinout 1=B, 2=E, 3=C matches the symbol. |
-| Q2 | AO3400A N-FET | SOT-23 | `Device:Q_NMOS_GDS` | `Package_TO_SOT_SMD:SOT-23` | KiCad standard | Pinout 1=G, 2=S, 3=D matches. |
+| Q2 | AO3400A N-FET (backlight switch) | SOT-23 | `Device:Q_NMOS_GDS` | `Package_TO_SOT_SMD:SOT-23` | KiCad standard | **SUPERSEDED 2026-10-19** — Q2 and its gate parts (R1101/R1102) removed: the stacked touch display runs its own backlight. Row kept for the record. (Pinout 1=G, 2=S, 3=D matched.) |
 | D1 | 940 nm IR LED (VSMB10940 class) | 1206 | `Device:LED` | `LED_SMD:LED_1206_3216Metric` | KiCad standard | Check polarity marks against the chosen LED's datasheet. |
 | D2 | LED green | 0805 | `Device:LED` | `LED_SMD:LED_0805_2012Metric` | KiCad standard | |
 | D3 | LED red | 0805 | `Device:LED` | `LED_SMD:LED_0805_2012Metric` | KiCad standard | |
@@ -60,16 +60,16 @@ pin count; the footprint assignment is unaffected.
 
 | Refdes | Part | Package | KiCad symbol | Footprint (Library:Name) | Source | Notes |
 |---|---|---|---|---|---|---|
-| J1 | 2×20 stacking header (Pi 40-pin) | THT socket | generic 2×20 | `Connector_PinSocket_2.54mm:PinSocket_2x20_P2.54mm_Vertical` | KiCad standard | A stacking header is a long-pin **socket** on the HAT side — use the PinSocket footprint, not PinHeader. |
+| J1 | 2×20 stacking header (Pi 40-pin, pass-through) | THT socket | generic 2×20 | `Connector_PinSocket_2.54mm:PinSocket_2x20_P2.54mm_Vertical` | KiCad standard | A stacking header is a long-pin **socket** on the HAT side — use the PinSocket footprint, not PinHeader. Physical part (2026-10-19 stack design): female socket on the **bottom** mates the Pi's pins; long pins out the **top** plug into the 3.5″ touch display (stack: display / Loki / Pi / battery). The pads are the standard 2.54 mm 2×20 pattern either way — only the plastic and pin length change. Exact physical part (pin length / standoff height to suit the stack) TBD. |
 | J2, J3 | HRO TYPE-C-31-M-12 USB-C | SMD mid-mount | generic USB-C receptacle | `Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12` | KiCad standard | ✅ Exact part footprint exists in the standard library. |
 | J4 | JST-PH battery connector, LCSC C131337 | see note | generic 2-pin | `Connector_JST:JST_PH_B2B-PH-K_1x02_P2.00mm_Vertical` | KiCad standard | ⚠️ **Part-name vs BOM conflict:** PINOUT §13/Part C names **B2B-PH-K-S**, which is JST's **through-hole** vertical part — the footprint at left matches the named part. The BOM's package column says "SMD"; if the physical C131337 part you receive is the surface-mount version, use `Connector_JST:JST_PH_B2B-PH-SM4-TB_1x02-1MP_P2.00mm_Vertical` instead. Confirm which part C131337 actually is before layout freeze. |
-| J5 | 2×7 female header (display) | THT | generic 2×7 socket | `Connector_PinSocket_2.54mm:PinSocket_2x07_P2.54mm_Vertical` | KiCad standard | |
+| J5 | 2×7 female header (display) | THT | generic 2×7 socket | `Connector_PinSocket_2.54mm:PinSocket_2x07_P2.54mm_Vertical` | KiCad standard | **SUPERSEDED 2026-10-19** — J5 removed: the touch display plugs onto J1's stacking pins instead. Row kept for the record. |
 | J6 | 2×8 expansion header | THT | generic 2×8 | `Connector_PinHeader_2.54mm:PinHeader_2x08_P2.54mm_Vertical` | KiCad standard | If you want a female expansion socket instead: `Connector_PinSocket_2.54mm:PinSocket_2x08_P2.54mm_Vertical` (SMD PinHeader variant also exists). |
 | J7 | U.FL / IPEX RF connector | SMD | generic coax | `Connector_Coaxial:U.FL_Hirose_U.FL-R-SMT-1_Vertical` | KiCad standard | Generic U.FL/MHF1-class land pattern — fits the clone connectors in this class. (Was 'J7, J8' until 2026-10-18; the second U.FL belonged to the removed on-board NFC antenna.) |
 | J8 | 1×6 2.54 mm pin header — NFC module | THT | `Connector_Generic:Conn_01x06_P2.54mm` | `Connector_PinHeader_2.54mm:PinHeader_1x06_P2.54mm_Vertical` | KiCad standard | Carries the external PN532 module (PINOUT.md §8). Signal names are silkscreened at every pin — module pin orders vary by vendor. |
 | SD1 | microSD slot — **Hirose DM3D-SF** (JLC C719027, ~$1.16 extended part) — decided 2026-10-19, replacing the generic C91145/C112217 plan | SMD, push-pull | TF-01A as drawn — note: the footprint's switch-B is **pad 10** and switch-A (the CD pin as drawn) is **pad 9**, so the SD1 symbol needs a pin 10 wired to GND | `Loki:Hirose_DM3D-SF` — drawn 2026-10-19 from Hirose's published recommended PCB mounting pattern (vector extraction + calibrated render cross-check; see `hardware/kicad/dm3d-sf-footprint-notes.md`) | Custom | Card-detection switch per the Hirose datasheet: terminals A/B, normally open, closed with a card inserted — A → CD net (ESP32 IO7 + R903 pull-up), B → GND, exactly as PINOUT §9 is drawn. JLC's page claims "Additional Card Detection Pins: No" — wrong; the manufacturer datasheet wins. Push-pull: no click-eject. The old "do not substitute KiCad's card footprints" warning is retired along with the generic slot. See unverified list, item 5. |
 | SW1 | Slide switch, SPDT (power, EN-level) | SMD | generic SPDT switch | `Button_Switch_SMD:SW_SPDT_CK-JS102011SAQN` | KiCad standard | Carries only TPS61088 EN current (µA), so any small SPDT works electrically. Alt: `Button_Switch_SMD:SW_SPDT_PCM12`. Verify pad layout against the actual switch purchased — slide-switch footprints are not interchangeable between families. |
-| SW2–SW5 | Tact switch 6×6 mm, LCSC C11135 | SMD | `Device:SW_SPST` ×4 | `Button_Switch_SMD:SW_Push_1TS009xxxx-xxxx-xxxx_6x6x5mm` | KiCad standard | Chosen by Justin from his KiCad 9.0.5 chooser 2026-10-19 — the generic `SW_Push_1P1T_NO_6x6mm_H9.5mm` named in earlier versions of this doc does not resolve in his Button_Switch_SMD library (ERC flagged it on all four switches). 6×6 mm body, 5 mm stem. Stem height is not an electrical spec — it only matters at enclosure design (a 5 mm stem means the case buttons need plungers/caps to reach, where the old 9.5 mm assumption would have poked through). Pads are the standard 6×6 SMD tact pattern. Verify against the C11135 drawing at BOM freeze. |
+| SW2–SW5 | Tact switch 6×6 mm, LCSC C11135 | SMD | `Device:SW_SPST` ×4 | `Button_Switch_SMD:SW_Push_1TS009xxxx-xxxx-xxxx_6x6x5mm` | KiCad standard | **SUPERSEDED 2026-10-19** — SW2–SW5 removed the same day this footprint was picked (the touch display replaced the buttons); row kept for the record. The footprint above was chosen by Justin from his KiCad 9.0.5 chooser 2026-10-19 — the generic `SW_Push_1P1T_NO_6x6mm_H9.5mm` named in earlier versions of this doc does not resolve in his Button_Switch_SMD library (ERC flagged it on all four switches). 6×6 mm body, 5 mm stem. Pads are the standard 6×6 SMD tact pattern. |
 | SJ1 | Solder jumper (EEPROM WP select) | 3-pad, 1.3 mm pitch | `Jumper:SolderJumper_3_Bridged12` | `Jumper:SolderJumper-3_P1.3mm_Bridged12_Pad1.0x1.5mm` | KiCad standard | 3-pole select per PINOUT §11.3: pin 2 (common) = WP, pin 1 = GND (bridged by default = EEPROM writable), pin 3 = 3V3_ID (move the blob to lock). Row corrected 2026-10-18 — an earlier version listed a 2-pad footprint, which cannot do the two-throw select. |
 | F1 | PPTC ≈3 A hold / ≈6 A trip | 1812 | generic polyfuse | `Fuse:Fuse_1812_4532Metric` | KiCad standard | Sizing tension is a design decision, not a footprint issue — see PINOUT §13. |
 | F2 | PPTC 500 mA hold | 1812 | generic polyfuse | `Fuse:Fuse_1812_4532Metric` | KiCad standard | |
@@ -105,10 +105,10 @@ pin count; the footprint assignment is unaffected.
 | R1001 | 100 Ω (TSOP supply filter) | |
 | R1002 | 18 Ω (IR LED current) | **`Resistor_SMD:R_1206_3216Metric`** — 1206 for pulse dissipation (PINOUT §10.2) |
 | R1003 | 1 kΩ (IR TX base) | |
-| R1101 | 100 Ω (backlight FET gate) | |
-| R1102 | 100 kΩ (gate pull-down) | |
-| R1110–R1113 | 10 kΩ (button pull-ups) | |
-| R1114–R1117 | 1 kΩ (button series to Pi) | |
+| R1101 | 100 Ω (backlight FET gate) | **Removed 2026-10-19** with Q2 |
+| R1102 | 100 kΩ (gate pull-down) | **Removed 2026-10-19** with Q2 |
+| R1110–R1113 | 10 kΩ (button pull-ups) | **Removed 2026-10-19** with SW2–SW5 |
+| R1114–R1117 | 1 kΩ (button series to Pi) | **Removed 2026-10-19** with SW2–SW5 |
 | R1120 | 1.0 kΩ (D2 green LED) | |
 
 ### Capacitors (all `Device:C`, X7R/X5R; footprint `Capacitor_SMD:C_0603_1608Metric` unless noted)
@@ -139,7 +139,7 @@ pin count; the footprint assignment is unaffected.
 | C902 | 10 µF (SD supply) | `Capacitor_SMD:C_0805_2012Metric` |
 | C1001 | 1 µF (TSOP filter) | 0603 |
 | C1101 | 0.1 µF (EEPROM VCC) | 0603 |
-| C1110–C1113 | 100 nF (button debounce, may be DNP) | 0603 |
+| C1110–C1113 | 100 nF (button debounce, may be DNP) | **Removed 2026-10-19** with SW2–SW5 |
 
 ---
 

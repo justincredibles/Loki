@@ -39,24 +39,24 @@
                                 |  +---------------------+                  |               |
                                 |        |                                  |               | 3V3 rail
                                 |        |  pins 2+4                        v               v
-                                |        |                          Display module   ESP32-S3, CC1101,
-                                |        |                          VCC + BL FET     nRF24, PN532,
+                                |        |                          Touch display    ESP32-S3, CC1101,
+                                |        |                          via J1 stack     nRF24, PN532,
                        +--------+--------+----------------+              |           EEPROM*, SD
                        |  RASPBERRY PI (host, under HAT)   |              |
-                       |  Zero 2 W min / Pi 4 / Pi 5       |        2x7 header
-                       |  WiFi attacks via onboard radio  |        (ILI9341-class
-                       |  + nexmon patch                  |         module, SPI0)
+                       |  Zero 2 W min / Pi 4 / Pi 5       |        40-pin hdr
+                       |  WiFi attacks via onboard radio  |        (3.5in touch,
+                       |  + nexmon patch                  |         on top, SPI0)
                        +--------+--------+----------------+
                                 |
         Pi 40-pin header nets (see §3.1):
           UART0 GPIO14/15 <=====> ESP32-S3 UART0 (protocol + esptool flashing)
-          GPIO17 ----------------> ESP32 EN   (Pi can reset / reflash ESP32)
+          GPIO26 ----------------> ESP32 EN   (Pi can reset / reflash ESP32)
           GPIO27 ----------------> ESP32 IO0  (boot-mode control)
           GPIO22 <---------------- ESP32 IO42 (ESP -> Pi attention IRQ)
-          SPI0 GPIO8-11 ---------> display module (CS/DC/RST/BL on GPIO8/25/24/18)
+          SPI0 GPIO8-11 ---------> touch display via the stacking header (MHS35 class; pin map in §3.1)
           I2C1 GPIO2/3 ----------> MAX17048 + expansion header
           I2C0 GPIO0/1 (ID pins) -> 24C32 HAT EEPROM @ 0x50 (only device on ID bus)
-          GPIO5/6/13/26 <-------- buttons (SHARED nets: also wired to ESP32, §3.3)
+          GPIO5/6/13/26 ---------- spare (buttons removed 2026-10-19 — touch is the input now)
           GPIO12/16/19/20/21/23 -> expansion header (free IO)
 
   +------------------------------- ESP32-S3-WROOM-1-N16R8 -------------------------------+
@@ -68,7 +68,7 @@
   |  I2C (IO8 SDA / IO18 SCL): PN532 NFC module via J8 header  IRQ IO40, RST IO41       |
   |  -> external module (builder-sourced); its antenna is on the module                |
   |  IR: RX IO1 (TSOP38438), TX IO2 -> MMBT2222A -> 940 nm IR LED                       |
-  |  Buttons IO15/16/38/39 (shared with Pi), spares IO47/48 -> test pads               |
+  |  IO15/16/38/39 spare (buttons until 2026-10-19), spares IO47/48 -> test pads       |
   +-------------------------------------------------------------------------------------+
 
   Expansion header (2x8, 2.54 mm): 5V, 3V3, GND x2, I2C1, SPI0, GPIO x6, ESP_IRQ
@@ -136,9 +136,11 @@ Bruce's nRF24 features (spectrum, jammer; MouseJack-class attacks) are range-lim
 |---|---|---|
 | USB-C ×2 | **HRO TYPE-C-31-M-12** (16-pin mid-mount) — LCSC **C165948** ✅ (multiple independent BOMs) | Port 1 = charge-only: VBUS → bq24074 IN, CC1/CC2 each 5.1 kΩ Rd to GND, D+/D− unconnected. Port 2 = ESP32-S3 native USB: D+/D− → IO20/IO19 with **USBLC6-2SC6** ESD array, CC 5.1 kΩ Rd, VBUS → divider → IO21 (VBUS detect for HID host-presence). Keeping the two ports physically separate kills the classic "charging or BadUSB, pick one" mux problem. |
 | HAT ID EEPROM | **24C32** (SOIC-8, I2C 0x50) ⚠️ generic part, stocked everywhere at LCSC; C# at BOM freeze | Per the official HAT spec: lives on the ID pins (GPIO0/1), powered from header pin 1 (Pi 3V3), WP tied to GND through a solder jumper so the ID blob can be flashed at the factory and locked later. The EEPROM blob is also where we declare PSU capability for the Pi 5 (§5.3). |
-| Buttons ×4 | 6 × 6 mm SMD tact (LCSC C11135 ✅ Basic class / C318884 ✅) | To GND, one shared 10 kΩ pull-up per button on the board (neither MCU's internal pull-up is relied on — both chips read the same net, §3.3). Caps in the enclosure press them; place along the board edge under the case button plungers. |
+| Buttons ×4 | **Removed 2026-10-19** (was: 6 × 6 mm SMD tact, LCSC C11135) | The stacked touch display is the input device now — there are no buttons. The shared-net design (§3.3) and decision D7 are superseded; the four Pi pins (GPIO5/6/13/26) and four ESP32 pins (IO15/16/38/39) the buttons used are spare. Row kept for the record. |
 | LEDs | 0805: green C19171391 ✅, red C84256 ✅, blue (0805 generic) ⚠️ | Green ← 5V_SYS (lit = device on). Red ← MAX17048 ALRT sink, anode to VSYS (lit = low battery, **works with device off**). Blue ← bq24074 CHG sink, anode to VSYS (lit = charging, works with device off). All anodes on VSYS/5V rails — the LEDs are hardware-driven, zero firmware involvement, exactly per spec. |
-| Display connector | 2 × 7 (14-pin) 2.54 mm female header, top side | Matches the ubiquitous ILI9341 SPI module pinout (VCC/GND/CS/RST/DC/MOSI/SCK/LED/MISO + touch + SD pins). Module VCC fed 5V_SYS (module's own regulator makes its 3.3 V). Backlight pin driven through an **AO3400A** N-FET (LCSC-basic MOSFET) switched by Pi GPIO18 hardware PWM — the backlight draws 50–90 mA, far more than a GPIO pin may source. Touch pins = NC (non-touch build per spec). Module's microSD CS routed to Pi GPIO7 as a free bonus socket. |
+| Display | **3.5″ color touch display with its own 40-pin header** (builder-sourced; MHS35 class, SKU MHS3528 — ILI9486 + XPT2046 resistive touch, 50 FPS, Pi driver `MHS35-show`; chosen 2026-10-20) — **changed 2026-10-19** | The display plugs straight onto the long pins of J1's stacking header: every header pin is a shared node between the Pi below and the display above, and the display's own electronics handle its backlight — there is no on-board backlight FET anymore (the AO3400A circuit, and GPIO18's old job, are gone; GPIO18 is spare). Its pin usage is folded into §3.1 — the socket contacts pins 1–26 only, and the one conflict (touch IRQ on GPIO17) moved ESP32 EN to GPIO26 on 2026-10-20. Replaces the 2 × 7 ILI9341-module header (J5), which is deleted along with its pin table. |
+
+**Display/stack redesign — 2026-10-19.** The build is now a four-layer sandwich, top to bottom: **3.5″ touch display / Loki PCB / Raspberry Pi 4/5 / battery pack**. J1 is a stacking (pass-through) header — female socket on the bottom mating the Pi, long pins out the top that the display plugs onto — so the display and the Pi share all 40 header nodes, and Loki taps the ones it needs. This change deletes: the 2 × 7 display header J5 and its whole pin table, the AO3400A backlight FET (Q2 + R1101/R1102), and the four tact buttons with their pull-ups, series resistors and debounce caps (SW2–SW5, R1110–R1117, C1110–C1113). Input is the touchscreen now. The display was identified the same evening (MHS35 class, MHS3528) and its pin usage is folded into §3.1; because the header is a pure pass-through, its only demand on Loki was moving ESP32 EN off GPIO17 (its touch-interrupt line) to GPIO26.
 
 ### 2.8 microSD (ESP32 storage)
 
@@ -162,7 +164,7 @@ Hirose DM3D-SF microSD slot (JLC C719027; push-pull, with card-detect switch —
 
 ### 2.11 Assembly reality check
 
-Everything listed above is SMT and JLCPCB-placeable, **but not all on one side at HAT clearances**: the underside of a HAT faces the Pi's tall parts (USB/Ethernet on Pi 4/5), leaving room only for low-profile parts (EEPROM, gauge, passives, the FET) with standard 11 mm standoffs. Plan: **top side** = ESP32 module, both RF modules, SD slot, display header, buttons, USB-C ×2 (edge), charger/boost/buck power train; **bottom side** = 24C32, MAX17048, USBLC6, passives only. That means double-sided assembly at JLCPCB (a modest per-order surcharge) or JLC assembles the top and the few bottom parts are large-pad 0603/SOIC a builder can hand-solder in minutes. Flagged as Decision D8 — recommended: pay for double-sided; a "solder these 6 parts" step breaks the kit promise.
+Everything listed above is SMT and JLCPCB-placeable, **but not all on one side at HAT clearances**: the underside of a HAT faces the Pi's tall parts (USB/Ethernet on Pi 4/5), leaving room only for low-profile parts (EEPROM, gauge, passives) with standard 11 mm standoffs. Plan: **top side** = ESP32 module, both RF modules, SD slot, USB-C ×2 (edge), charger/boost/buck power train (J1's socket sits on the bottom; its long pins pass through to the display on top); **bottom side** = 24C32, MAX17048, USBLC6, passives only. That means double-sided assembly at JLCPCB (a modest per-order surcharge) or JLC assembles the top and the few bottom parts are large-pad 0603/SOIC a builder can hand-solder in minutes. Flagged as Decision D8 — recommended: pay for double-sided; a "solder these 6 parts" step breaks the kit promise.
 
 ---
 
@@ -184,44 +186,44 @@ BCM numbering. "Free" = routed to the expansion header (§3.4).
 | 8 | GPIO14 / TXD0 | UART TX → ESP32 IO44 (RX0) | PL011 UART0 (see note below) |
 | 9 | GND | GND | |
 | 10 | GPIO15 / RXD0 | UART RX ← ESP32 IO43 (TX0) | 115200 8N1 protocol + flashing |
-| 11 | GPIO17 | → ESP32 **EN** (reset) | 1 kΩ series; ESP32 side has 10 kΩ PU + 1 µF |
-| 12 | GPIO18 / PWM0 | Display backlight FET gate | Hardware PWM dimming |
+| 11 | GPIO17 | Display **TP_IRQ** (pass-through) — no Loki connection | The touch display's interrupt line to the Pi (pulses low while touched). **Was ESP32 EN until 2026-10-20** — EN moved to pin 37, because this line would otherwise reset the ESP32 on every touch |
+| 12 | GPIO18 / PWM0 | Spare — pass-through node | Was the backlight FET gate until 2026-10-19; the MHS35 display leaves this pin NC (not connected) |
 | 13 | GPIO27 | → ESP32 **IO0** (boot strap) | 1 kΩ series; ESP32 side 10 kΩ PU |
 | 14 | GND | GND | |
 | 15 | GPIO22 | ← ESP32 IO42 **attention IRQ** | ESP32 raises on BadUSB-done / RF event |
 | 16 | GPIO23 | FREE → expansion | |
 | 17 | 3V3 | NC | Not used (avoid back-powering Pi rail) |
-| 18 | GPIO24 | Display **RST** | |
-| 19 | GPIO10 / MOSI0 | SPI0 MOSI → display (+ expansion) | |
+| 18 | GPIO24 | Display **DC** (pass-through) | The stacked MHS35's data/command select (LCD_RS on the MHS3528 pin table) |
+| 19 | GPIO10 / MOSI0 | SPI0 MOSI → touch display via pass-through header (+ expansion) | |
 | 20 | GND | GND | |
-| 21 | GPIO9 / MISO0 | SPI0 MISO ← display module SD | LCD itself is write-only; MISO serves module SD |
-| 22 | GPIO25 | Display **DC** | |
-| 23 | GPIO11 / SCLK0 | SPI0 SCLK → display (+ expansion) | |
-| 24 | GPIO8 / CE0 | Display **CS** | |
+| 21 | GPIO9 / MISO0 | SPI0 MISO ← touch display via pass-through header (+ expansion) | Carries the touch panel's data back to the Pi (TP_SO); the LCD itself is write-only |
+| 22 | GPIO25 | Display **RST** (pass-through) | The stacked MHS35's reset line, per the MHS3528 pin table |
+| 23 | GPIO11 / SCLK0 | SPI0 SCLK → touch display via pass-through header (+ expansion) | |
+| 24 | GPIO8 / CE0 | Display **LCD CS** (pass-through) | The same chip-select job the old J5 display had |
 | 25 | GND | GND | |
-| 26 | GPIO7 / CE1 | Display-module microSD **CS** | Optional socket on the display module itself |
+| 26 | GPIO7 / CE1 | Display **touch CS** (pass-through) | Was the display-module microSD CS until 2026-10-19 — that socket left with J5. Now the MHS35's touch-panel chip-select (TP_CS) |
 | 27 | GPIO0 / ID_SD | 24C32 SDA | HAT ID bus — nothing else, ever |
 | 28 | GPIO1 / ID_SC | 24C32 SCL | HAT ID bus |
-| 29 | GPIO5 | Button **UP** | Shared net (§3.3), 1 kΩ series to header |
+| 29 | GPIO5 | Spare — pass-through node | Was Button UP (shared net) until 2026-10-19 — buttons removed, touch is the input now. Not used by Loki |
 | 30 | GND | GND | |
-| 31 | GPIO6 | Button **DOWN** | Shared net |
+| 31 | GPIO6 | Spare — pass-through node | Was Button DOWN until 2026-10-19 — see pin 29 |
 | 32 | GPIO12 | FREE → expansion (PWM1 capable) | |
-| 33 | GPIO13 | Button **LEFT** | Shared net |
+| 33 | GPIO13 | Spare — pass-through node | Was Button LEFT until 2026-10-19 — see pin 29 |
 | 34 | GND | GND | |
 | 35 | GPIO19 | FREE → expansion | |
 | 36 | GPIO16 | FREE → expansion | |
-| 37 | GPIO26 | Button **RIGHT** | Shared net (long-press = Home, in Pi UI) |
+| 37 | GPIO26 | → ESP32 **EN** (reset) | **Moved here from pin 11 on 2026-10-20** — the touch display's TP_IRQ owns pin 11 now. Was Button RIGHT until 2026-10-19. 1 kΩ series; ESP32 side has 10 kΩ PU + 1 µF |
 | 38 | GPIO20 | FREE → expansion (default = expansion SPI CS) | |
 | 39 | GND | GND | |
 | 40 | GPIO21 | FREE → expansion | |
 
 **UART note (all three Pis):** use the PL011 (UART0) on GPIO14/15 — on the Zero 2 W that means the `dtoverlay=disable-bt` (or `miniuart-bt`) overlay so the PL011 isn't stolen by Bluetooth; on Pi 5, GPIO14/15 is UART0 by default and the dedicated debug header stays free. 115200 baud is the locked protocol rate; esptool flashing over the same wires can run faster after sync, but the protocol doesn't need it.
 
-**Left free on the Pi:** GPIO12, 16, 19, 20, 21, 23 (all to expansion), GPIO7 (display SD). Nothing else is spare — the header is fully committed, which is fine because the ESP32 owns everything radio.
+**Left free on the Pi:** GPIO12, 16, 19, 20, 21, 23 (all to expansion). Spare on Loki since the 2026-10-19 touch-display change: GPIO5, 6, 13 (were buttons) and GPIO18 (was the backlight FET gate; the display leaves it NC) — pass-through nodes Loki doesn't use. Two pins changed jobs instead of going spare: GPIO7 is now the display's touch chip-select, and GPIO17 is the display's touch interrupt — which is why ESP32 EN moved to GPIO26 (pin 37) on 2026-10-20.
 
 ### 3.2 ESP32-S3-WROOM-1-N16R8 GPIO map
 
-Aligned with the pin conventions of existing DIY Bruce boards wherever Loki's scope allows (less fork work): shared SPI on IO11/12/13, PN532 on I2C, IR on IO1/IO2, buttons on IO15/16/38/39.
+Aligned with the pin conventions of existing DIY Bruce boards wherever Loki's scope allows (less fork work): shared SPI on IO11/12/13, PN532 on I2C, IR on IO1/IO2. (IO15/16/38/39 were the button inputs until 2026-10-19 — spare now; the touch display replaced the buttons.)
 
 | GPIO | Function | Notes |
 |---|---|---|
@@ -240,15 +242,15 @@ Aligned with the pin conventions of existing DIY Bruce boards wherever Loki's sc
 | IO12 | SPI SCK (shared) | |
 | IO13 | SPI MISO (shared) | |
 | IO14 | microSD **CS** | |
-| IO15 | Button UP (shared with Pi GPIO5) | §3.3 |
-| IO16 | Button DOWN (shared with Pi GPIO6) | §3.3 |
+| IO15 | Spare | Was Button UP until 2026-10-19 (§3.3, superseded) |
+| IO16 | Spare | Was Button DOWN until 2026-10-19 |
 | IO17 | CC1101 **GDO2** | Async serial / carrier-sense out |
 | IO18 | I2C SCL → PN532 | |
 | IO19 | USB D− | → USB-C #2 via USBLC6 |
 | IO20 | USB D+ | → USB-C #2 via USBLC6 |
 | IO21 | USB VBUS detect | 100 k/100 k divider from port-2 VBUS |
-| IO38 | Button LEFT (shared with Pi GPIO13) | §3.3 |
-| IO39 | Button RIGHT (shared with Pi GPIO26) | §3.3 |
+| IO38 | Spare | Was Button LEFT until 2026-10-19 |
+| IO39 | Spare | Was Button RIGHT until 2026-10-19 |
 | IO40 | PN532 **IRQ** | |
 | IO41 | PN532 **RSTPDN** | |
 | IO42 | → Pi GPIO22 attention IRQ | Open-drain style: drive low / release |
@@ -256,12 +258,14 @@ Aligned with the pin conventions of existing DIY Bruce boards wherever Loki's sc
 | IO44 | UART0 RX ← Pi GPIO14 | |
 | IO47 | Spare → test pad / aux header | |
 | IO48 | Spare → test pad / aux header | |
-| EN | ← Pi GPIO17 | 10 kΩ PU + 1 µF to GND on board |
+| EN | ← Pi GPIO26 (header pin 37) | 10 kΩ PU + 1 µF to GND on board. Moved from GPIO17 on 2026-10-20 — the touch display's TP_IRQ owns GPIO17 |
 | — | **Forbidden:** IO26–32 (flash), IO33–37 (octal PSRAM), IO45/46 (strapping) | All left NC per Espressif guidance |
 
 **SPI bus sharing:** CC1101, nRF24 and microSD share SPI2 with per-device CS and per-device SPI settings (ESP-IDF/Arduino `SPISettings` transactions). Known friction, handled in the fork: Bruce's CC1101 driver and the SD library both like owning the bus — all three are polled devices with no DMA contention in practice, and the existing DIY Bruce boards already run CC1101 + dual nRF24 + SD on this exact bus topology. PN532 is deliberately **not** on SPI (I2C instead) to keep one slow, chatty device off the RF bus. The Pi's display SPI is a completely separate bus on the Pi — no interaction.
 
 ### 3.3 Shared buttons (one net, two readers)
+
+**Superseded 2026-10-19 — kept for the record.** The four buttons were removed when the stacked 3.5″ touch display became the input device (§2.7; decision D7). The BTN_* nets, their pull-ups / series resistors / debounce caps, and this shared-net arrangement no longer exist; GPIO5/6/13/26 and IO15/16/38/39 are spare. The text below is the original design, preserved so the reasoning isn't lost.
 
 Each button net connects to: the button (to GND), one 10 kΩ pull-up to board 3V3, the ESP32 GPIO directly, and the Pi header pin through a 1 kΩ series resistor. The series resistor limits ESD-clamp backfeed into an unpowered Pi to < 3.3 mA while costing the Pi nothing in signal quality (its input is high-impedance; the button is a DC signal). Payoff: the ESP32 can take on-device confirmations (the BadUSB arm gate) and even run Bruce's standalone menus with the Pi fully off — which the architecture requires — and Loki's Pi UI uses the same four buttons when the Pi is up. Neither chip ever *drives* these nets.
 
@@ -293,7 +297,7 @@ Estimates from published draw figures for each Pi class and module datasheets; �
 | Pi Zero 2 W (nexmon monitor/deauth) | 5 V × 0.55 A ≈ 2.8 W | Idle ≈ 1.6 W; CPU+radio peaks 3.2 W |
 | Pi 4 (same workload) | 5 V × 1.1 A ≈ 5.5 W | Peaks ≈ 7 W |
 | Pi 5 (same workload) | 5 V × 1.6 A ≈ 8 W | Stress peaks 12–15 W (see §5.3 caveat) |
-| Display module + backlight | ≈ 0.5 W | From 5V_SYS; backlight dominates |
+| Touch display | ≈ 0.8 W (rated) | Fed from 5V_SYS via the stacking header. MHS3528 rated draw 0.16 A × 5 V (LCDWiki spec, backlight-dominated). §4.2 roll-ups still carry the old ≈0.5 W placeholder — recompute at the next power pass; the ~0.3 W delta changes no part choice (boost and battery were sized with large headroom) |
 | ESP32-S3 (BLE active, CPU up) | 3.3 V × 0.15 A ≈ 0.5 W | TX bursts to 0.35 A |
 | CC1101 module | ≈ 0.12 W TX / 0.06 W RX | +10 dBm |
 | nRF24 SP4 (PA) | ≈ 0.4 W TX bursts / 0.05 W RX | Bursty; average far lower |
@@ -328,9 +332,9 @@ Estimates from published draw figures for each Pi class and module datasheets; �
 USB-C #1 VBUS ──> bq24074 IN ──> OUT = VSYS ──┬── battery (via BAT pin) ── 1S LiPo
                                               ├── MAX17048 (always on, µA)
                                               ├── red/blue LED anodes
-                                              ├── power switch ──> TPS61088 EN ──> 5V_SYS ──> Pi pins 2+4, display VCC, backlight FET, SY8089 IN
+                                              ├── power switch ──> TPS61088 EN ──> 5V_SYS ──> Pi pins 2+4 (display fed through the same header pins), SY8089 IN
                                               └── power switch ──> SY8089 EN (slaved to 5V_SYS PG region)
-                                                                 └── 3V3 ──> ESP32, RF modules, PN532, EEPROM*no, SD, button pull-ups
+                                                                 └── 3V3 ──> ESP32, RF modules, PN532, EEPROM*no, SD
 ```
 
 ### 5.2 "Off" semantics
@@ -350,9 +354,9 @@ The slide switch gates converter EN pins only. VSYS (and therefore the gauge + c
 1. 4-layer stackup (JLC 4-layer is the price sweet spot): L1 signals/RF, L2 solid GND, L3 power, L4 signals.
 2. ESP32 antenna keep-out: no copper any layer under/past the module antenna; HAT must also not overhang the **Pi's** WiFi antenna zone (Pi antenna sits at the far end from the header on Zero 2 W; corner notch on Pi 4/5) — verify against each Pi's mechanical drawing at layout.
 3. TPS61088: copy TI's reference layout geometry for the SW-node loop; inductor + input caps within 5 mm; thermal vias under the pad.
-4. CC1101 / nRF24 modules at opposite board corners from the ESP32 antenna; U.FL connectors at the case edge; keep module RF pads clear of the display header's ground pins.
+4. CC1101 / nRF24 modules at opposite board corners from the ESP32 antenna; U.FL connectors at the case edge; keep module RF pads clear of the stacking header's ground pins.
 5. J8 NFC header at a board edge; keep its I2C run short and clear of the boost SW node. (The on-board PN532 matching network was deleted 2026-10-18 — NFC is an external module; §7 D1 is superseded.)
-6. Button/LED edge placement must match the enclosure's plungers/openings — freeze case + PCB outlines together (Fusion 360 ↔ KiCad step exchange).
+6. LED edge placement must match the enclosure's light-pipe openings; the top of the stack is the display itself, so the case face is designed around it — freeze case + PCB outlines together (Fusion 360 ↔ KiCad step exchange). (Buttons/plungers deleted 2026-10-19 with the buttons.)
 7. Bottom-side parts limited to ≤ 1.2 mm height within the HAT-over-Pi keep-out zones; nothing under the Pi's SoC/RAM area taller than the standoff budget.
 8. microSD slot on the case edge (card must be insertable without opening the case — builders will swap payload cards constantly).
 
@@ -370,7 +374,7 @@ Justin accepted every recommendation below as written on 2026-10-16; the Recomme
 | D4 | Battery capacity | (a) 5000 mAh (b) 3500 mAh slimmer (c) 8000 mAh chunkier | **(a) 5000 mAh high-drain (≥3C) pouch, max cell envelope ≈ 68 × 54 × 11 mm** — Zero 2 W gets a real 3.5–4.5 h; a 3500 cell makes the Pi 5 config a <1 h toy. |
 | D5 | microSD on ESP32 | (a) include slot (b) LittleFS only | **(a)** — Bruce's storage model assumes SD; one CS line is cheap insurance. |
 | D6 | CC1101 antenna | (a) U.FL → SMA whip on case (b) spring antenna on module pad | **(a)** — Flipper-class range, and the whip unscrews for pocket carry. Footprint keeps (b) possible via the 0 Ω selector. |
-| D7 | Buttons wired to ESP32 as well as Pi | (a) shared nets (b) Pi-only | **(a)** — required for the ESP32-side BadUSB confirm gate with the Pi off; costs four 1 kΩ resistors. |
+| D7 | Buttons wired to ESP32 as well as Pi | (a) shared nets (b) Pi-only | **(a)** — required for the ESP32-side BadUSB confirm gate with the Pi off; costs four 1 kΩ resistors. **Superseded 2026-10-19:** the buttons were removed entirely — the stacked 3.5″ touch display is the input device (§2.7). Neither (a) nor (b) ships; the ESP32-side confirm gate moves to the touchscreen / Pi UI. |
 | D8 | Assembly sides | (a) JLC double-sided assembly (b) top-only + builder hand-solders ~6 bottom parts | **(a)** — the kit promise is "attach Pi, print case, flash, go." (b) quietly breaks it. |
 | D9 | Charge rate | (a) bq24074 @ ~1.0–1.5 A (b) I2C charger (BQ25895 class) @ 3 A | **(a)** for v1 — zero firmware, honest charge times. (b) is a rev-2 upgrade if builders complain. |
 | D10 | Second ESP32 USB port usage | (a) BadUSB + flashing only (b) also expose USB-serial console for debugging | **(a)** — the Pi UART is the debug/console path; one personality per port keeps the fork simple. (Revisit if standalone Bruce use grows.) |
