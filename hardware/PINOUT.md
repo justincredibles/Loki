@@ -1,8 +1,8 @@
-# Loki — Pin Mapping & Complete KiCad Build Sheet
+# Loki — Pin Mapping & Complete Build Sheet (EasyEDA edition)
 
 Complete schematic + placement reference for the Loki HAT PCB: every subsystem, every component, every net, and the placement rules that matter electrically. The pin tables in **Part B** are the original DESIGN.md §3 tables, kept verbatim. If this file and `hardware/DESIGN.md` ever disagree on architecture, DESIGN.md wins; if they disagree on a component value, **this file wins** (it is derived from the manufacturers' datasheets, cited per section).
 
-**Revision:** expanded 2026-10-16 from the §3 pin tables into the full build sheet. **Rewritten 2026-10-17 in beginner-friendly language** — every technical fact, value, and warning is identical to the original; plain-English explanations, a glossary, and drawing hints were added around them. If you ever need the dense original wording, it is preserved as `pinout-full-technical-backup-2026-10-17.md`.
+**Revision:** expanded 2026-10-16 from the §3 pin tables into the full build sheet. **Rewritten 2026-10-17 in beginner-friendly language** — every technical fact, value, and warning is identical to the original; plain-English explanations, a glossary, and drawing hints were added around them. **Updated 2026-10-21 for EasyEDA:** the build moved from KiCad to EasyEDA (EasyEDA Pro, desktop edition), and the schematic is being redrawn there from scratch. Every value, net name, and pin connection in Parts A–E is **unchanged** — what changed is the tooling guidance: a new "Building this schematic in EasyEDA" section up front, an **EasyEDA / LCSC pick** for every part in Part C, and short EasyEDA notes in the sections whose parts need hand-made footprints. Wherever older text says "set the Footprint field to `Library:Name`", read it the EasyEDA way: **you choose the footprint by choosing the LCSC part (the "device") in Part C's new column** — in EasyEDA the symbol, footprint, and orderable part are one pick, not three. `hardware/FOOTPRINTS.md` is no longer where you copy footprint strings from; it survives as the geometry reference (pad sizes and positions) for the few footprints you will draw by hand in EasyEDA. If you ever need the dense original wording, it is preserved as `pinout-full-technical-backup-2026-10-17.md`.
 
 ---
 
@@ -50,6 +50,58 @@ C101 works the same way: it is the capacitor on U1's pin 13 (IN) — `Device:C`,
 
 ---
 
+---
+
+## Building this schematic in EasyEDA (start here)
+
+*What this section is for: everything about the tool itself — how EasyEDA thinks, how you set the project up, and the handful of places where EasyEDA works differently from the KiCad instructions in the rest of this document. The circuit doesn't change at all; only the drawing mechanics do. Read this once, then work through Part A section by section exactly as before.*
+
+### The one big difference: a "device" is symbol + footprint + real part in a single pick
+
+In KiCad you drew in two steps: place a symbol now, assign a footprint later. **EasyEDA deletes the second step.** Parts live in the **Library** panel, and almost every part there is a **device** — one entry that bundles the schematic symbol, the PCB footprint, and the actual orderable LCSC part (its **C-number**, like C165948) into a single pick. When you place a device, the footprint question is already answered, and the same pick later tells JLCPCB exactly which physical part to solder on.
+
+Three consequences:
+
+1. **Choosing the part IS choosing the footprint.** If you grab the wrong variant (say, a 24C32 in the wrong package), the footprint is wrong too — there is no later step where you'd catch it. Part C's new **EasyEDA / LCSC** column exists to make this pick exact: it gives the C-number to search for, or the exact search words when any of several equivalents will do.
+2. **Search by C-number whenever the column gives one.** The Library search box accepts a C-number directly, and it lands on one exact part. Searching by name ("24C32") returns a page of near-identical variants in different packages — the C-number is the disambiguator.
+3. **Prefer parts marked "JLCPCB Basic" for the small stuff.** Basic parts live pre-loaded on JLCPCB's assembly machines, so they cost less to place and never add an extended-part fee or a stock surprise. Part C steers every resistor and capacitor to a Basic-class pick for this reason. (Extended parts — like SD1 — work fine; they just cost a small per-part-type fee at assembly time.)
+
+### Project setup (do this once)
+
+1. Create the project (e.g. `Loki`) in EasyEDA Pro.
+2. Inside it, create **one schematic page per section of this document** — EasyEDA Pro supports multiple schematic pages in one project. Name them after the sections: `01 Charger`, `02 Fuel gauge`, `03 Boost 5V`, `04 Buck 3V3`, `05 ESP32 + USB2`, `06 CC1101`, `07 nRF24`, `08 NFC header`, `09 microSD`, `10 IR`, `11 Pi interface`, `12 Expansion`, `13 Battery`. Thirteen small pages beat one giant sheet: each page is one sitting's work, and you can check it against its Part A section before moving on.
+3. You don't create the PCB yet. Schematic first, in full; converting to PCB is a later phase (Part D's rules apply then).
+
+### Drawing mechanics — the KiCad ideas, translated
+
+- **References (C101, R101, …):** EasyEDA auto-numbers parts as you place them, same as KiCad did. Rename each part's **Designator** (click the part, edit it in the properties panel on the right) to the reference this document gives, as you go. Your schematic, this document, and the BOM then all speak the same names.
+- **Values:** the value (e.g. `890`, `22uF`) goes in the part's **Value** field, same as before. For chips and modules the "value" is the part name from Part C (e.g. `bq24074RGTR`).
+- **Generic passives:** resistors, capacitors, and inductors are placed straight from the Library by value + package — e.g. search `0603 10k` and pick a JLCPCB Basic result. There is no separate "generic symbol, footprint later" step; the device you pick is 0603 because you picked a 0603 part.
+- **Ground:** place GND symbols from the Library's power/ground flags (search `GND`). Every GND on every page is the same net, exactly like KiCad's `power:GND`.
+- **Net labels — how wires jump across the drawing:** a named net is a connection, in EasyEDA just as in KiCad. Use **Place → Net Label** for nets that stay on one page. For nets that run between pages (all the power rails — `VBAT`, `VSYS`, `5V_SYS`, `3V3` — and shared signals like the I²C and UART lines), use **Place → Net Port** with the exact net name from the "Net names used throughout" table: a port is a visible doorway, and every port with the same name is connected, across all pages. Either way, **the name must match this document character-for-character** — `5V_SYS` and `5VSYS` are two different, unconnected nets as far as the tool is concerned.
+- **Deliberately unconnected pins (NC):** mark them with EasyEDA's **No Connect** flag (Place → No Connect), the same discipline as KiCad's little X: it tells the checker "this pin is empty on purpose" so real mistakes stand out.
+- **Power pins that hide:** some EasyEDA library symbols, like KiCad's, tuck power pins away or stack several same-name pins into one visible pin (the USB-C connectors' VBUS/GND pins and the ESP32 module's ground pads are the local examples). The pin-by-pin tables in Part A are the authority on what must end up connected — if a table says a pin goes to a net and you can't see the pin, check the symbol's full pin list in the Library before assuming it's handled.
+
+### Checking your work (EasyEDA's checker is lighter than KiCad's ERC — compensate)
+
+KiCad's ERC produced those error/warning lists we worked through. EasyEDA Pro's built-in schematic checking is thinner — it will catch some unconnected pins and missing footprints, especially when you run **Design → Schematic to PCB** later, but it will not audit you the way ERC did. So the checking discipline moves to a habit:
+
+- **After each page**, open the **Design Manager** panel and read the net list for that page's nets: every pin the Part A table names for a net should appear in it, and nothing extra should. Five minutes per page, while the section is fresh.
+- Keep the Part B pin tables open as the second opinion — they are the same tables, organized by chip instead of by net.
+- The known traps from the KiCad build all still apply electrically, even if the new tool doesn't flag them: U3's SW pins 4–7 and VOUT pins 14–16 are gangs (several physical pads, one connection — draw them all to the same net), and the ESP32 module has ground pads beyond the one obvious pin (pads 40/41 — draw them to GND in the schematic if the symbol exposes them; check at PCB time that they land on GND either way).
+
+### The five parts EasyEDA does not hand you ready-made
+
+Most of Loki is ordinary LCSC parts with ready devices. Five are not — for these, Part C's column and the section notes say which case you're in:
+
+- **U3 TPS61088** — not stocked by LCSC (this was already true in KiCad; it's the design's known sourcing gap). EasyEDA's library has a user-contributed section — search `TPS61088` there first. If nothing trustworthy turns up, you draw the symbol (21 pins, table in §3) and the VQFN-20 footprint yourself; the exact pad geometry is in `hardware/FOOTPRINTS.md`. The chip itself gets ordered from DigiKey/Mouser-class suppliers at build time and hand-soldered or placed as a customer-supplied part.
+- **U6 E07-900M10S and U7 E01-ML01SP4** — EBYTE modules are not standard LCSC stock either. Same recipe: search the library (including user-contributed) for `E07-900M10S` / `E01-ML01SP4`; otherwise draw them from the pin tables in §6/§7 (22 and 10 pins — the pin functions are fully listed there) with the pad layouts from FOOTPRINTS.md. ⚠️ The KiCad footprints for these two carry an honesty note that still applies: pad count, pitch, and pin functions are datasheet-confirmed, but pad size and pin-1 orientation were never verified against a physical module. Caliper a real module before the board is ordered — in either tool.
+- **SD1 Hirose DM3D-SF** — this one *is* a verified LCSC part (**C719027 ✅**, checked on JLCPCB's own page 2026-10-21, listed with an EasyEDA library), so a ready device should exist; still check its footprint against the land pattern before trusting it (JLC's attribute data for this part is already wrong once — it claims "no card detection"; Hirose's datasheet says otherwise). If it's missing or wrong, the full pad-coordinate table in `hardware/kicad/dm3d-sf-footprint-notes.md` lets you redraw it exactly (14 pads; pin 1 at the +X end; pad 9 = detect switch A, pad 10 = switch B to GND).
+- **U11 TSOP38438** — an LCSC part (C145271) with wire legs (through-hole). A library device should exist; if its footprint is missing, it's three holes on 2.54 mm pitch per §10.1.
+- **J1 stacking header (2×20)** — electrically it's just a 2×20, 2.54 mm through-hole header; the special part is mechanical (long pins that pass through to the display). Any 2×20 header device gives the right schematic; at PCB/order time the footprint is the standard 2×20 pattern and the physical part is the long-pin stacking type from Part C.
+
+---
+
 ## Glossary — every piece of jargon in this document, in plain English
 
 **Abs-max (absolute maximum ratings).** The datasheet table of hard limits — exceed them, even briefly, and the chip may be damaged. Different from the *recommended* operating range, which is where you're supposed to live.
@@ -67,6 +119,8 @@ C101 works the same way: it is the capacitor on U1's pin 13 (IN) — `Device:C`,
 **Capacitor size codes (0603, 0805, 1206, 1812, 2520, 3225).** Standard physical sizes for surface-mount parts, in hundredths of an inch (0603 = 0.06″ × 0.03″) or metric for the bigger ones. The size is part of the footprint choice — a 22 µF capacitor in this design is physically bigger (0805/1206) than a 0.1 µF one (0603) even though both are "a capacitor". Part C lists the package for every part.
 
 **Decoupling / bypass capacitor.** A small capacitor (usually 0.1 µF) wired from a chip's power pin straight to ground, placed right at the pin. Chips switch internally millions of times a second and make electrical noise while drawing current in tiny spikes; the decoupling cap is a tiny local reservoir + noise drain that keeps the chip's own supply clean and stops its noise spreading. "IN → GND at the pin" in a table means: one side of the cap to the IN pin's net, other side to ground, placed (at layout time) right next to that pin.
+
+**Device (EasyEDA).** One Library entry that bundles a schematic symbol, a PCB footprint, and a real orderable part (with its LCSC C-number) into a single pick. Placing a device answers the symbol, footprint, and sourcing questions in one move — which is why Part C now names the exact device (or search) for every part.
 
 **Differential pair.** Two wires that carry the same signal in opposite polarities (USB's D+ and D− are the classic pair). They must be routed together, the same length, with an unbroken ground beneath them, so interference cancels out. Applies here to the USB-C #2 data lines.
 
@@ -88,6 +142,8 @@ C101 works the same way: it is the capacitor on U1's pin 13 (IN) — `Device:C`,
 
 **I²C.** A two-wire communication bus (clock SCL + data SDA) that lets one chip talk to several others using addresses. Lines idle high, so each needs a **pull-up** resistor (see below). The Pi talks to the fuel gauge over I²C; the ESP32 talks to the PN532 over a separate I²C bus.
 
+**JLCPCB Basic / Extended part.** JLCPCB's assembly service keeps a set of common parts ("Basic") permanently loaded on its machines — cheapest to place, always stocked. Everything else is "Extended": fully supported, but each distinct Extended part on a board adds a small loading fee and a stock check. Steering the ~50 resistors and capacitors to Basic parts is real money on an assembled board.
+
 **Keep-out.** A zone on the board where copper (and sometimes parts) are forbidden — here, mainly under/around antennas, because copper near an antenna detunes it and absorbs the radio energy.
 
 **LCSC.** The parts distributor whose stock JLCPCB (the board fabricator/assembler used for this project) assembles from. An "LCSC number" like C165948 is the exact orderable part. ✅ means the number is verified; "confirm" means the exact part hasn't been picked yet.
@@ -95,6 +151,8 @@ C101 works the same way: it is the capacitor on U1's pin 13 (IN) — `Device:C`,
 **LDO.** A simple type of voltage regulator chip (low-dropout regulator). Mentioned here because some chips have one built in — the PN532 makes its own internal ~3.0 V rail with one, and the TPS61088's VCC pin is the *output* of its internal LDO: you put a capacitor on it, you never feed power into it.
 
 **Net.** Any set of pins that are wired together is one "net" — think of it as one electrical node, one connected piece of copper. Nets get names: `VSYS`, `3V3`, `USB1_VBUS`. In KiCad's schematic, two points with the same net label are connected even if no wire is drawn between them. When a table says pin X connects to "net `3V3`", it means: wire it to the board's 3.3 V supply web, wherever that is drawn.
+
+**Net port (EasyEDA).** A visible doorway symbol for a named net, used when a connection continues onto another schematic page. Every port with the same name is the same net, across all pages — the multi-page version of a net label.
 
 **NC / no-connect.** A pin that must be connected to *nothing* — deliberately left unconnected. In KiCad you mark these with the no-connect flag (the little X) so the checker knows it's intentional, not a mistake. NC sometimes also names a pin that exists physically but does nothing internally.
 
@@ -197,6 +255,8 @@ In plain terms, the power story of the whole board is: battery power enters as `
 
 Source for all values: TI **SLUS810N** (bq2407x family datasheet), sections cited per item.
 U1 = bq24074RGTR, VQFN-16 + thermal pad. (VQFN-16: a flat, square 16-pad chip package with a metal thermal pad in the middle of its underside — the pad is pin "EP" in the table below and must connect to GND.)
+
+> **⚠️ EasyEDA note — the charger's evil twin.** Library search will offer you the **BQ24075RGTR (C15464)** first — a different member of the charger family with different defaults, and **not** this design's part. Loki uses the **bq24074**; this entire section is written from its datasheet (SLUS810N). Search the full string `BQ24074RGTR`. The project-recorded LCSC number is C54313 — it could not be re-confirmed on an LCSC page in the 2026-10-21 check, so if the number doesn't resolve in the picker, pick by full part name + VQFN-16 package and write the number you landed on into Part C.
 
 ### 1.1 USB-C #1 — charge-only port (J2)
 
@@ -304,6 +364,10 @@ VSYS → **R201 = 1.0 kΩ** → D3 anode; D3 cathode → U2 pin 5 (ALRT). D3 = 0
 Sources: TI **SLVSCM8D** (TPS61088 datasheet; note — the correct document number is SLVSCM8**D**, there is no SLVSF01 for this part) and the open-source **Boosty** design (Absurd Industries, GitHub `absurd-industries/boosty`, CERN-OHL-S), whose component values are a proven 5 V/5 A-from-1S instantiation of the datasheet topology. *(Boosty is a published, working open-source board built around this same chip for this same job — where the datasheet gives equations instead of numbers, this design borrows Boosty's proven numbers and says so.)*
 U3 = TPS61088RHLT, VQFN-20 + thermal pad. Target: **5.1 V out, 4 A continuous / 5 A peak** from 1S. *("1S" = a single-cell lithium battery — one cell, 3.0–4.2 V.)*
 
+> **EasyEDA note.** U3 is the design's known sourcing gap: LCSC doesn't stock the TPS61088, so there may be no ready LCSC device for it. Search EasyEDA's library (including user-contributed parts) for `TPS61088` first; if you draw it yourself, the pin table below is the symbol (21 pins) and `hardware/FOOTPRINTS.md` has the VQFN-20 pad geometry. However you get the symbol, pins 4–7 (SW) all go to the one SW net and pins 14–16 (VOUT) all go to `5V_SYS` — draw every pad; ganged pads are real connections, not spares.
+>
+> And L1: TI's datasheet names its recommended inductor exactly — **Cyntec PIMB065T-2R2MS** (2.2 µH, Isat 12 A, DCR ≤ 12.5 mΩ) — search that string in the library. Its body is 7.4 × 6.8 mm, a bit larger than the "~6.5 mm class" shorthand in the pin table below, so the footprint follows whichever inductor is frozen at BOM time.
+
 | Pin | Name | Connection | Notes / source |
 |---|---|---|---|
 | 9 | VIN | Net `VSYS`; **C301/C302/C303 = 3 × 22 µF** X5R (≥10 V) VSYS→GND + **C304 = 0.1 µF** closest to the pin (at layout time this small cap goes physically right next to the VIN pin — small bypass caps only work up close) | Boosty BOM (input bulk) + DS §8.2.2.6 (0.1 µF bypass closest to VIN; ≥10 µF effective input capacitance, §6.3) |
@@ -373,7 +437,9 @@ U4 = SY8089AAAC, SOT-23-5. **Confirmed: this variant is adjustable** (V_REF = 0.
 
 **What you draw.** The U5 module symbol (Espressif's own KiCad library has it — see FOOTPRINTS.md); two power caps on its 3V3 pin; on EN: a pull-up, a 1 µF cap, and a 1 kΩ series resistor to a Pi header pin; the same pull-up + series pair on IO0; a 499 Ω series resistor on the UART TX line, a plain wire for RX; a pull-up on the IO42 attention line; 0 Ω series resistors on the two USB data lines (they run to U10 in §5.1); a two-resistor divider + cap for USB VBUS detection on IO21; and two 4.7 kΩ pull-ups for the ESP32's own I²C bus. Everything else is a wire from a module pad to another section's net.
 
-Sources: Espressif **ESP32-S3-WROOM-1 Datasheet v1.2** §3.2/§6 (cited "Module DS") and **ESP32-S3 Hardware Design Guidelines** (cited "HDG"). Module LCSC C2913202 ✅. Connections are named by GPIO (module pads are labelled by GPIO); module pin numbers are given where verified.
+Sources: Espressif **ESP32-S3-WROOM-1 Datasheet v1.2** §3.2/§6 (cited "Module DS") and **ESP32-S3 Hardware Design Guidelines** (cited "HDG"). Module LCSC: see the EasyEDA note directly below — the C-number recorded in older project documents (C2913202) belongs to a different module. Connections are named by GPIO (module pads are labelled by GPIO); module pin numbers are given where verified.
+
+> **⚠️ EasyEDA note — three near-identical listings will try to trip you.** The **bare ESP32-S3 chip** (C2913192 — a QFN chip, not the module), the **ESP32-S3-MINI-1** module (a different, smaller module — the number C2913202 recorded in older project documents belongs to *this* one; do not use it), and the part you actually want: the **ESP32-S3-WROOM-1-N16R8**. Search the full name and confirm "WROOM-1", "16 MB flash" and "8 MB PSRAM" in the listing title before placing it.
 
 | Module pad | Connection | Notes / source |
 |---|---|---|
@@ -434,6 +500,8 @@ U10 = USBLC6-2SC6 (SOT-23-6): flow-through routing — connector-side I/O pins f
 
 Source: EBYTE **E07-900M10S User Manual v1.0** (cited "E07 manual"). Module = TI CC1101 + integrated crystal/matching, 14 × 20 mm stamp-hole SMD, 22 pads. (433 MHz builds fit the pin-compatible E07-400M10S instead — decision D2.) *("Stamp-hole" = the module solders down by half-circle notches around its edges — the pads in the table are those notches. The module is 14 × 20 mm.)*
 
+> **EasyEDA note.** The E07 module is not standard LCSC stock. Search EasyEDA's library (including user-contributed parts) for `E07-900M10S`; if you draw it yourself, the 22-pin table below is the symbol, and FOOTPRINTS.md has the pad layout. Pin functions are datasheet-confirmed; pad size and pin-1 orientation were never verified against a physical module — caliper one before ordering boards.
+
 | Pad | Name | Connection |
 |---|---|---|
 | 9 | VCC | Net `3V3`; **C601 = 0.1 µF** + **C602 = 10 µF** at the pad (EC — the E07 manual §3 requires "an external ceramic filter capacitor" at VCC but **specifies no value**; 0.1 µF + 10 µF is standard module practice. TX draw is only ~36 mA typ, E07 manual §2.2) |
@@ -462,6 +530,8 @@ Supply range note: the E07 manual contradicts itself (1.8–3.6 V in §2.2 vs 3.
 **What you draw.** The module symbol (10 pads); C701 + C702 on VCC; three pads to GND; SPI wires plus CE, CSN and IRQ to the ESP32. And read the warning above the table twice: **this module's pad order is not the order used by the common breakout boards** — wire it by the table, not by habit.
 
 Sources: EBYTE **E01-ML01SP4 Datasheet V1.0** + **E01 User Manual** (cited "E01 manual"). ⚠️ **This SMD module's pin order is NOT the common 8-pin DIP nRF24 order** — it is a 10-pad SMD part; wire it exactly as below. Antenna = onboard IPEX, 50 Ω (§8 of the E01 manual; generation — MHF1/U.FL class — not specified by EBYTE ⚠️). *(The ⚠️ on the antenna connector means EBYTE doesn't state which micro-coax connector generation it is (MHF1 vs U.FL — near-identical snap connectors that are *mostly* intermateable). What to do: when the modules are ordered, confirm the connector on the actual part against the pigtail/whip being bought. Nothing to change in the schematic.)*
+
+> **EasyEDA note.** Same story as §6: search the library (including user-contributed) for `E01-ML01SP4`; the 10-pin table below is the symbol if you draw it, and FOOTPRINTS.md has the pads. Same caliper-before-ordering caution applies.
 
 | Pad | Name | Connection |
 |---|---|---|
@@ -510,6 +580,8 @@ J8 = 1 × 6, 2.54 mm pin header (through-hole). KiCad symbol: search `Conn_01x06
 
 SD1 = **Hirose DM3D-SF** microSD slot (JLC **C719027**, ~$1.16 as an extended part) — push-pull: push the card in, pull it out; no click-eject spring. Decided 2026-10-19, replacing the earlier generic push-push slot (LCSC C91145/C112217), whose footprint could never be identified. SPI mode on the ESP32's shared SPI2 bus (DESIGN.md §2.8, decision D5). *("TF" is the old name for microSD. "Push-pull" means you push the card in and pull it straight back out — no spring eject like the push-push ballpoint-pen mechanism. A microSD card can speak two protocols; this design uses its slower-but-simple SPI mode, not the fast 4-bit SD mode, because the ESP32 shares the bus with the radios.)*
 
+> **EasyEDA note.** SD1's LCSC number **C719027 was verified on JLCPCB's own page on 2026-10-21** (the listing even names its EasyEDA library), so search that C-number first — but verify any footprint you find against Hirose's land pattern before trusting it: pad 9 is the card-detect switch A (→ the CD net), pad 10 is switch B (→ GND), pin 1 sits at the +X end. The full pad-coordinate table for redrawing it exactly is in `hardware/kicad/dm3d-sf-footprint-notes.md`.
+
 | Slot contact | Connection |
 |---|---|
 | VDD | Net `3V3`; **C901 = 0.1 µF** + **C902 = 10 µF** at the slot (EC — standard card-edge practice) |
@@ -542,6 +614,8 @@ Sources: Vishay **TSOP382../TSOP384.. datasheet, Doc. 82491** (Rev. 2.1 current;
 U11 = TSOP38438, Minicast **leaded** package. Pin order for THIS series: **1 = OUT, 2 = GND, 3 = VS** (sibling series swap VS/GND — do not cross-wire).
 
 *Plain terms:* "Leaded" = it has three wire legs (through-hole — the part from erratum 3). The pin-order warning is real and worth heeding: Vishay makes near-identical receivers whose legs are in a different order, so when you place the U11 symbol, check its pins read 1 = OUT, 2 = GND, 3 = VS in that order — if a symbol you find has them swapped, fix the symbol, don't wire around it.
+
+> **EasyEDA note.** U11's project-recorded LCSC number is C145271 (picker-confirm it — it could not be re-checked on an LCSC page in 2026-10-21's pass); a library device should exist under `TSOP38438`. It's through-hole (three legs, 2.54 mm pitch) in a surface-mount world — if you have to draw the footprint, §10.1 and FOOTPRINTS.md have what you need.
 
 | Pin | Connection |
 |---|---|
@@ -580,6 +654,8 @@ ESP32 IO2 → **R1003 = 1 kΩ** → Q1 base. Q1 = MMBT2222A (SOT-23: pin 1 = B, 
 The full pin-by-pin net list **is** Part B, §3.1 below — every header pin's HAT-side connection is named there, and each subsystem section above names the component at the other end of the net (e.g. header pin 11 → R502 → U5 EN). Two routing notes from DESIGN.md §3.1 worth repeating at the schematic stage: both 5 V pins (2 + 4) are fed from `5V_SYS` with a wide, via-stitched pour (a single pin is not a 4 A path), and header pin 17 (Pi 3V3) is **not connected** — the board never back-powers the Pi's 3V3 rail. Pin 1 feeds only the EEPROM (§11.3).
 
 *Plain terms:* J1 is the 2 × 20 connector that plugs Loki onto the Pi's GPIO header. In the schematic you draw it as a 40-pin connector symbol and land each pin on the net Part B §3.1 assigns — §3.1 is the checklist for this section. The two notes: pins 2 and 4 both carry `5V_SYS` into the Pi because one pin can't safely carry the Pi 5's current (at layout they'll be joined by a wide copper pour stitched with vias — a layout detail, but in the schematic both pins simply land on `5V_SYS`); and pin 17, which is the Pi's *own* 3.3 V output, is deliberately left unconnected (no-connect flag) — powering the Pi's 3V3 rail from our board ("back-powering") could fight the Pi's own regulator. Pin 1 is also Pi 3.3 V, but by HAT rules it feeds only the ID EEPROM.
+
+> **EasyEDA note.** On the schematic J1 is an ordinary 2×20, 2.54 mm header — any matching library device draws correctly. The special requirement is physical (long pass-through pins for the display stack) and bites at PCB/order time, not now: the footprint is the standard 2×20 through-hole pattern, and the part ordered is the stacking type in Part C.
 
 ### 11.2 Display header (J5) + backlight FET (Q2) — REMOVED 2026-10-19
 
@@ -634,6 +710,8 @@ J6 = 2 × 8, 2.54 mm, top edge. Full signal table in Part B, §3.4. Components:
 **What this section does.** Where the battery plugs in, and the board's main safety fuse. J4 is the battery socket; F1, a resettable fuse, sits between the socket and everything else, so a short anywhere downstream (or a faulty cell) gets choked off here first.
 
 J4 = JST-PH 2-pin SMD (B2B-PH-K-S), LCSC C131337 ✅. *(JST-PH: the small white 2-pin plug/socket system used on most hobby lithium packs — the battery's lead ends in the plug, this is the board-side socket, surface-mount version.)*
+
+> **⚠️ EasyEDA note — this also closes the old J4 question.** The recorded number C131337 could not be re-confirmed on an LCSC page in the 2026-10-21 check, and JST's own catalog makes **B2B-PH-K-S the through-hole** top-entry part — while this design's BOM intends the **SMD** version. So in the picker: either resolve C131337 and study the listing's photo/drawing, or search `PH 2.0 2P SMD` (the SMD top-entry family name is S2B-PH-SM4). Whichever device you land on, write its C-number into Part C. If you deliberately end up choosing the through-hole part, that is a design change to record — not a silent substitution.
 
 | J4 pin | Connection |
 |---|---|
@@ -778,92 +856,90 @@ Honest note for the build guide: this is **signal-compatible, not pin-compatible
 
 # Part C — Complete BOM
 
-*What Part C is for: the shopping list. One row per part (or group of identical parts): its refdes, quantity, value/part name, physical package, and LCSC stock number. Rows marked ✅ have a confirmed LCSC number carried over from DESIGN.md §8; "confirm" means the exact orderable part gets picked at BOM freeze. Resistors and capacitors are 0603 size unless a row says otherwise; all ceramic caps are X7R/X5R type. When you order, this table plus FOOTPRINTS.md (for footprints) are the two documents to work from. The cells below are unchanged from the original.*
+*What Part C is for: the shopping list — and, in EasyEDA, also the placing list, because the LCSC part you pick here is the device you place in the schematic. One row per part (or group of identical parts): its refdes, quantity, value/part name, physical package, and its **EasyEDA / LCSC** pick. A C-number marked ✅ was verified against LCSC's catalog; "search:" gives the exact words to type into EasyEDA's Library search when several equivalents are fine (all the ordinary resistors and capacitors — prefer results marked JLCPCB Basic); "draw it" means no trustworthy library device exists and the footprint gets drawn by hand from FOOTPRINTS.md, as the section note describes. Resistors and capacitors are 0603 size unless a row says otherwise; all ceramic caps are X7R/X5R type.*
 
-LCSC numbers marked ✅ are carried over from DESIGN.md §8 (verified there). Everything else is **confirm at BOM freeze**. Resistors/caps are 0603 unless a section says otherwise; all ceramic caps X7R/X5R.
-
-| Refdes | Qty | Value / part | Package | LCSC |
+| Refdes | Qty | Value / part | Package | EasyEDA / LCSC pick |
 |---|---|---|---|---|
-| U1 | 1 | TI bq24074RGTR charger | VQFN-16 | confirm (family C473396 is the bq24078 sibling) |
-| U2 | 1 | MAX17048G+T10 fuel gauge | TDFN-8 | confirm |
-| U3 | 1 | TI TPS61088RHLT boost | VQFN-20 | confirm |
-| U4 | 1 | SY8089AAAC buck | SOT-23-5 | **C78988 ✅** |
-| U5 | 1 | ESP32-S3-WROOM-1-N16R8 module | SMD module | **C2913202 ✅** |
-| U6 | 1 | EBYTE E07-900M10S CC1101 module (433 build: E07-400M10S) | Stamp-hole SMD | confirm |
-| U7 | 1 | EBYTE E01-ML01SP4 nRF24 PA module | Stamp-hole SMD | confirm |
-| U9 | 1 | 24C32 EEPROM | SOIC-8 | confirm |
-| U10 | 1 | ST USBLC6-2SC6 USB ESD | SOT-23-6 | confirm |
-| U11 | 1 | Vishay TSOP38438 IR receiver | Minicast **THT** | confirm |
-| Q1 | 1 | MMBT2222A | SOT-23 | confirm (Basic-class) |
-| D1 | 1 | 940 nm IR LED (VSMB10940 class) | 1206 | confirm |
-| D2 | 1 | LED green 0805 | 0805 | **C19171391 ✅** |
-| D3 | 1 | LED red 0805 | 0805 | **C84256 ✅** |
-| D4 | 1 | LED blue 0805 | 0805 | confirm |
-| L1 | 1 | 2.2 µH power inductor, Isat ≥ 12 A (Cyntec PIMB065T-2R2M class) | ~6.5 × 6.5 mm | confirm |
-| L401 | 1 | 2.2 µH, Isat > 2.3 A, DCR < 50 mΩ | 2520/2525 class | confirm |
-| J1 | 1 | 2 × 20 2.54 mm stacking header — female socket on the bottom mates the Pi; long pins out the top carry the touch display | THT | confirm |
-| J2, J3 | 2 | HRO TYPE-C-31-M-12 USB-C | SMD mid-mount | **C165948 ✅** |
-| J4 | 1 | JST-PH B2B-PH-K-S battery connector | SMD | **C131337 ✅** |
-| J6 | 1 | 2 × 8 2.54 mm header (expansion) | THT/SMD | confirm |
-| J7 | 1 | U.FL/IPEX RF connector | SMD | confirm |
-| J8 | 1 | 1 × 6 2.54 mm pin header (NFC module, §8) | THT | — |
-| SD1 | 1 | microSD slot — Hirose DM3D-SF (push-pull, card-detect switch) | SMD | **C719027** (JLC extended part, ~$1.16) |
-| SW1 | 1 | Slide switch (power, EN-level current) | SMD | confirm |
-| SJ1 | 1 | Solder jumper (EEPROM WP select) | 0603 pads | — |
-| F1 | 1 | PPTC hold ≈3 A / trip ≈6 A (see §13 warning) | 1812 | confirm |
-| F2 | 1 | PPTC hold 500 mA | 1812 | confirm |
-| R101 | 1 | 890 Ω 1 % (ISET) | 0603 | — |
-| R102 | 1 | 1.1 kΩ (ILIM) | 0603 | — |
-| R103 | 1 | 10 kΩ (TS defeat) | 0603 | — |
-| R104 | 1 | 1.0 kΩ (blue LED) | 0603 | — |
-| R105, R106, R511, R512 | 4 | 5.1 kΩ (USB-C Rd ×4) | 0603 | — |
-| R201 | 1 | 1.0 kΩ (red LED) | 0603 | — |
-| R202, R203, R513, R514 | 4 | 4.7 kΩ (I²C pull-ups) | 0603 | — |
-| R301 | 1 | 182 kΩ 1 % (boost FB top) | 0603 | — |
-| R302 | 1 | 56 kΩ 1 % (boost FB bottom) | 0603 | — |
-| R303 | 1 | 100 kΩ (boost ILIM) | 0603 | — |
-| R304 | 1 | 270 kΩ (boost FSW — to SW node!) | 0603 | — |
-| R305 | 1 | 10 kΩ (boost COMP, Boosty value) | 0603 | — |
-| R401 | 1 | 453 kΩ 1 % (buck FB top) | 0603 | — |
-| R402 | 1 | 100 kΩ (buck FB bottom) | 0603 | — |
-| R403 | 1 | 1 MΩ (buck EN pull-down) | 0603 | — |
-| R501, R503, R506 | 3 | 10 kΩ (EN PU / IO0 PU / ESP_IRQ PU) | 0603 | — |
-| R502, R504 | 2 | 1 kΩ (EN / IO0 series from Pi) | 0603 | — |
-| R505 | 1 | 499 Ω (U0TXD series) | 0603 | — |
-| R507, R508 | 2 | 0 Ω (USB series, 0603; footprint accepts 22 Ω) | 0603 | — |
-| R509, R510 | 2 | 100 kΩ (VBUS detect divider) | 0603 | — |
-| R601 | 1 | 0 Ω (CC1101 antenna selector) | 0603 | — |
-| R901, R902, R903 | 3 | 10 kΩ (SD pull-ups) | 0603 | — |
-| R1001 | 1 | 100 Ω (TSOP supply filter) | 0603 | — |
-| R1002 | 1 | 18 Ω (IR LED current set) | **1206** | — |
-| R1003 | 1 | 1 kΩ (IR TX base) | 0603 | — |
-| R1120 | 1 | 1.0 kΩ (green LED) | 0603 | — |
-| C101 | 1 | 1 µF (charger IN) | 0603 | — |
-| C102, C103 | 2 | 4.7 µF (charger BAT / OUT) | 0805 | — |
-| C201 | 1 | 0.1 µF (gauge VDD) | 0603 | — |
-| C301–C303, C306–C308 | 6 | 22 µF X5R ≥10 V (boost IN ×3 / OUT ×3) | 0805/1206 | — |
-| C304 | 1 | 0.1 µF (boost VIN bypass) | 0603 | — |
-| C305 | 1 | 0.1 µF (boost BOOT) | 0603 | — |
-| C309 | 1 | 2.2 µF (boost VCC) | 0603 | — |
-| C310 | 1 | 47 nF (boost SS) | 0603 | — |
-| C311 | 1 | 4.7 nF C0G (boost COMP, Boosty value) | 0603 | — |
-| C401 | 1 | 22 µF X5R 10 V (buck IN) | 0805/1206 | — |
-| C402, C403 | 2 | 22 µF X5R (buck OUT) | 0805/1206 | — |
-| C404 | 1 | 22 pF (buck feedforward) | 0603 | — |
-| C501 | 1 | 22 µF (ESP32 supply) | 0805 | — |
-| C502 | 1 | 0.1 µF (ESP32 supply) | 0603 | — |
-| C503 | 1 | 1 µF (ESP32 EN RC) | 0603 | — |
-| C504 | 1 | 0.1 µF (VBUS detect) | 0603 | — |
-| C601 | 1 | 0.1 µF (CC1101 supply) | 0603 | — |
-| C602 | 1 | 10 µF (CC1101 supply) | 0805 | — |
-| C701 | 1 | 10 µF (nRF24 reservoir) | 0805 | — |
-| C702 | 1 | 0.1 µF (nRF24 supply) | 0603 | — |
-| C901 | 1 | 0.1 µF (SD supply) | 0603 | — |
-| C902 | 1 | 10 µF (SD supply) | 0805 | — |
-| C1001 | 1 | 1 µF (TSOP filter) | 0603 | — |
-| C1101 | 1 | 0.1 µF (EEPROM VCC) | 0603 | — |
-| TP | ~6 | Test pads: IO3, IO47, IO48, VSYS, 3V3, PGOOD | — | — |
-| Spring antenna | 0/1 | CC1101 spring antenna (DNP unless the SMA-whip path is deleted) | — | builder option |
+| U1 | 1 | TI bq24074RGTR charger | VQFN-16 | search `BQ24074RGTR` — recorded C54313 (picker-confirm); ⚠️ NOT the BQ24075/C15464 — see §1 note |
+| U2 | 1 | MAX17048G+T10 fuel gauge | TDFN-8 | C2682616 (recorded — picker-confirm) |
+| U3 | 1 | TI TPS61088RHLT boost | VQFN-20 | **Draw it** — no LCSC listing exists (see §3 note); chip sourced from DigiKey/Mouser at build time |
+| U4 | 1 | SY8089AAAC buck | SOT-23-5 | C78988 (recorded — picker-confirm) |
+| U5 | 1 | ESP32-S3-WROOM-1-N16R8 module | SMD module | search the full name `ESP32-S3-WROOM-1-N16R8`; confirm "16 MB flash / 8 MB PSRAM" in the listing — ⚠️ do NOT use recorded C2913202 (that's the MINI-1 module); see §5 note |
+| U6 | 1 | EBYTE E07-900M10S CC1101 module (433 build: E07-400M10S) | Stamp-hole SMD | **Draw it** — not LCSC stock (see §6 note) |
+| U7 | 1 | EBYTE E01-ML01SP4 nRF24 PA module | Stamp-hole SMD | **Draw it** — not LCSC stock (see §7 note) |
+| U9 | 1 | 24C32 EEPROM | SOIC-8 | search `24C32` + SOIC-8 (AT24C32 / BL24C32 / M24C32 — any standard one) |
+| U10 | 1 | ST USBLC6-2SC6 USB ESD | SOT-23-6 | search `USBLC6-2SC6` — candidate C7519 (picker-confirm) |
+| U11 | 1 | Vishay TSOP38438 IR receiver | Minicast **THT** | recorded C145271 (picker-confirm) |
+| Q1 | 1 | MMBT2222A | SOT-23 | search `MMBT2222A` — pick a standard pinout listing (1=B, 2=E, 3=C) |
+| D1 | 1 | 940 nm IR LED (VSMB10940 class) | 1206 | search `1206 940nm` IR LED |
+| D2 | 1 | LED green 0805 | 0805 | C19171391 (recorded) |
+| D3 | 1 | LED red 0805 | 0805 | C84256 (recorded) |
+| D4 | 1 | LED blue 0805 | 0805 | search `0805 blue LED` (Basic class) |
+| L1 | 1 | 2.2 µH power inductor, Isat ≥ 12 A (Cyntec PIMB065T-2R2M class) | ~6.5 × 6.5 mm | search `PIMB065T-2R2MS` — TI's recommended part (7.4 × 6.8 mm body; footprint follows the frozen pick) |
+| L401 | 1 | 2.2 µH, Isat > 2.3 A, DCR < 50 mΩ | 2520/2525 class | search `2520 2.2uH` — check Isat and DCR in the listing's attributes |
+| J1 | 1 | 2 × 20 2.54 mm stacking header — female socket on the bottom mates the Pi; long pins out the top carry the touch display | THT | any 2×20 2.54 mm header device draws correctly; the physical stacking part is still TBD (see §11.1 note) |
+| J2, J3 | 2 | HRO TYPE-C-31-M-12 USB-C | SMD mid-mount | C165948 (strongly corroborated — picker-confirm) |
+| J4 | 1 | JST-PH B2B-PH-K-S battery connector | SMD | picker-check recorded C131337 — see §13 note (THT-vs-SMD trap) |
+| J6 | 1 | 2 × 8 2.54 mm header (expansion) | THT/SMD | search `2x8 2.54mm header` |
+| J7 | 1 | U.FL/IPEX RF connector | SMD | search `U.FL-R-SMT-1` |
+| J8 | 1 | 1 × 6 2.54 mm pin header (NFC module, §8) | THT | search `1x6 2.54mm pin header` |
+| SD1 | 1 | microSD slot — Hirose DM3D-SF (push-pull, card-detect switch) | SMD | **C719027 ✅** (verified on JLCPCB 2026-10-21; Extended part, ~$1.16) |
+| SW1 | 1 | Slide switch (power, EN-level current) | SMD | search `slide switch` SMD SPDT — candidate MST22D18G2 / C2906280 (picker-confirm) |
+| SJ1 | 1 | Solder jumper (EEPROM WP select) | 0603 pads | no library part — pads drawn at PCB stage (geometry in FOOTPRINTS.md) |
+| F1 | 1 | PPTC hold ≈3 A / trip ≈6 A (see §13 warning) | 1812 | search `1812 PPTC 3A` (Bourns MF-MSMF300 family); value decision still open (Part E #18) |
+| F2 | 1 | PPTC hold 500 mA | 1812 | candidate C210348 (Bourns MF-MSMF050-2 — picker-confirm) |
+| R101 | 1 | 890 Ω 1 % (ISET) | 0603 | Basic: search `0603 890R 1%` |
+| R102 | 1 | 1.1 kΩ (ILIM) | 0603 | Basic: search `0603 1.1k` |
+| R103 | 1 | 10 kΩ (TS defeat) | 0603 | Basic: search `0603 10k` |
+| R104 | 1 | 1.0 kΩ (blue LED) | 0603 | Basic: search `0603 1k` |
+| R105, R106, R511, R512 | 4 | 5.1 kΩ (USB-C Rd ×4) | 0603 | Basic: search `0603 5.1k` |
+| R201 | 1 | 1.0 kΩ (red LED) | 0603 | Basic: search `0603 1k` |
+| R202, R203, R513, R514 | 4 | 4.7 kΩ (I²C pull-ups) | 0603 | Basic: search `0603 4.7k` |
+| R301 | 1 | 182 kΩ 1 % (boost FB top) | 0603 | Basic: search `0603 182k 1%` |
+| R302 | 1 | 56 kΩ 1 % (boost FB bottom) | 0603 | Basic: search `0603 56k 1%` |
+| R303 | 1 | 100 kΩ (boost ILIM) | 0603 | Basic: search `0603 100k` |
+| R304 | 1 | 270 kΩ (boost FSW — to SW node!) | 0603 | Basic: search `0603 270k` |
+| R305 | 1 | 10 kΩ (boost COMP, Boosty value) | 0603 | Basic: search `0603 10k` |
+| R401 | 1 | 453 kΩ 1 % (buck FB top) | 0603 | Basic: search `0603 453k 1%` |
+| R402 | 1 | 100 kΩ (buck FB bottom) | 0603 | Basic: search `0603 100k` |
+| R403 | 1 | 1 MΩ (buck EN pull-down) | 0603 | Basic: search `0603 1M` |
+| R501, R503, R506 | 3 | 10 kΩ (EN PU / IO0 PU / ESP_IRQ PU) | 0603 | Basic: search `0603 10k` |
+| R502, R504 | 2 | 1 kΩ (EN / IO0 series from Pi) | 0603 | Basic: search `0603 1k` |
+| R505 | 1 | 499 Ω (U0TXD series) | 0603 | Basic: search `0603 499R` |
+| R507, R508 | 2 | 0 Ω (USB series, 0603; footprint accepts 22 Ω) | 0603 | Basic: search `0603 0R` |
+| R509, R510 | 2 | 100 kΩ (VBUS detect divider) | 0603 | Basic: search `0603 100k` |
+| R601 | 1 | 0 Ω (CC1101 antenna selector) | 0603 | Basic: search `0603 0R` |
+| R901, R902, R903 | 3 | 10 kΩ (SD pull-ups) | 0603 | Basic: search `0603 10k` |
+| R1001 | 1 | 100 Ω (TSOP supply filter) | 0603 | Basic: search `0603 100R` |
+| R1002 | 1 | 18 Ω (IR LED current set) | **1206** | Basic: search `1206 18R` |
+| R1003 | 1 | 1 kΩ (IR TX base) | 0603 | Basic: search `0603 1k` |
+| R1120 | 1 | 1.0 kΩ (green LED) | 0603 | Basic: search `0603 1k` |
+| C101 | 1 | 1 µF (charger IN) | 0603 | Basic: search `0603 1uF` |
+| C102, C103 | 2 | 4.7 µF (charger BAT / OUT) | 0805 | Basic: search `0805 4.7uF` |
+| C201 | 1 | 0.1 µF (gauge VDD) | 0603 | Basic: search `0603 100nF` |
+| C301–C303, C306–C308 | 6 | 22 µF X5R ≥10 V (boost IN ×3 / OUT ×3) | 0805/1206 | search `22uF X5R 25V` in 0805/1206 — voltage rating ≥10 V matters |
+| C304 | 1 | 0.1 µF (boost VIN bypass) | 0603 | Basic: search `0603 100nF` |
+| C305 | 1 | 0.1 µF (boost BOOT) | 0603 | Basic: search `0603 100nF` |
+| C309 | 1 | 2.2 µF (boost VCC) | 0603 | Basic: search `0603 2.2uF` |
+| C310 | 1 | 47 nF (boost SS) | 0603 | Basic: search `0603 47nF` |
+| C311 | 1 | 4.7 nF C0G (boost COMP, Boosty value) | 0603 | search `0603 4.7nF C0G` — dielectric matters here; do not substitute X7R |
+| C401 | 1 | 22 µF X5R 10 V (buck IN) | 0805/1206 | search `22uF X5R` in 0805/1206 |
+| C402, C403 | 2 | 22 µF X5R (buck OUT) | 0805/1206 | search `22uF X5R` in 0805/1206 |
+| C404 | 1 | 22 pF (buck feedforward) | 0603 | Basic: search `0603 22pF` |
+| C501 | 1 | 22 µF (ESP32 supply) | 0805 | search `0805 22uF` |
+| C502 | 1 | 0.1 µF (ESP32 supply) | 0603 | Basic: search `0603 100nF` |
+| C503 | 1 | 1 µF (ESP32 EN RC) | 0603 | Basic: search `0603 1uF` |
+| C504 | 1 | 0.1 µF (VBUS detect) | 0603 | Basic: search `0603 100nF` |
+| C601 | 1 | 0.1 µF (CC1101 supply) | 0603 | Basic: search `0603 100nF` |
+| C602 | 1 | 10 µF (CC1101 supply) | 0805 | Basic: search `0805 10uF` |
+| C701 | 1 | 10 µF (nRF24 reservoir) | 0805 | Basic: search `0805 10uF` |
+| C702 | 1 | 0.1 µF (nRF24 supply) | 0603 | Basic: search `0603 100nF` |
+| C901 | 1 | 0.1 µF (SD supply) | 0603 | Basic: search `0603 100nF` |
+| C902 | 1 | 10 µF (SD supply) | 0805 | Basic: search `0805 10uF` |
+| C1001 | 1 | 1 µF (TSOP filter) | 0603 | Basic: search `0603 1uF` |
+| C1101 | 1 | 0.1 µF (EEPROM VCC) | 0603 | Basic: search `0603 100nF` |
+| TP | ~6 | Test pads: IO3, IO47, IO48, VSYS, 3V3, PGOOD | — | not parts — test pads drawn at PCB stage |
+| Spring antenna | 0/1 | CC1101 spring antenna (DNP unless the SMA-whip path is deleted) | — | builder option — no LCSC pick (see §6) |
 
 Builder-sourced (not on the PCB BOM): Raspberry Pi, 3.5″ color touch display, MHS35 class (ILI9486 + XPT2046, 50 FPS — plugs onto J1's pass-through pins), 5000 mAh 1S high-drain (≥3C) pouch cell with JST-PH lead, PN532 I2C NFC module (Elechouse-type, for J8), SMA whip (868/915), IPEX whip (2.4 GHz), enclosure.
 
