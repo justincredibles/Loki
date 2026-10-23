@@ -711,9 +711,9 @@ J6 = 2 × 8, 2.54 mm, top edge. Full signal table in Part B, §3.4. Components:
 
 **What this section does.** Where the battery plugs in, and the board's main safety fuse. J4 is the battery socket; F1, a resettable fuse, sits between the socket and everything else, so a short anywhere downstream (or a faulty cell) gets choked off here first.
 
-J4 = JST-PH 2-pin SMD (B2B-PH-K-S), LCSC C131337 ✅. *(JST-PH: the small white 2-pin plug/socket system used on most hobby lithium packs — the battery's lead ends in the plug, this is the board-side socket, surface-mount version.)*
+J4 = JST-PH 2-pin **through-hole** (B2B-PH-K-S(LF)(SN)), LCSC C131337. **Decided 2026-10-22 (decision D13): Justin deliberately chose the through-hole part over the SMD S2B-PH-SM4** — a battery plug gets plugged/unplugged and yanked, and THT anchors are stronger; the cost is that J4 is placed by hand (or THT assembly) rather than by the SMD line, joining J1 and the TSOP receiver as the board's hand-fit parts. *(JST-PH: the small white 2-pin plug/socket system used on most hobby lithium packs — the battery's lead ends in the plug, this is the board-side socket.)*
 
-> **⚠️ EasyEDA note — this also closes the old J4 question.** The recorded number C131337 could not be re-confirmed on an LCSC page in the 2026-10-21 check, and JST's own catalog makes **B2B-PH-K-S the through-hole** top-entry part — while this design's BOM intends the **SMD** version. So in the picker: either resolve C131337 and study the listing's photo/drawing, or search `PH 2.0 2P SMD` (the SMD top-entry family name is S2B-PH-SM4). Whichever device you land on, write its C-number into Part C. If you deliberately end up choosing the through-hole part, that is a design change to record — not a silent substitution.
+> **EasyEDA note — the old J4 question is CLOSED (2026-10-22, decision D13).** The placed device is the B2B-PH-K-S(LF)(SN) — JST's through-hole top-entry part, LCSC C131337 — chosen deliberately by Justin over the SMD S2B-PH-SM4 for plug-cycle strength. In EasyEDA: pick that device (`B2B-PH-K-S`); do not "fix" it to the SMD part.
 
 | J4 pin | Connection |
 |---|---|
@@ -885,7 +885,7 @@ Honest note for the build guide: this is **signal-compatible, not pin-compatible
 | L401 | 1 | 2.2 µH, Isat > 2.3 A, DCR < 50 mΩ | 2520/2525 class | search `2520 2.2uH` — check Isat and DCR in the listing's attributes |
 | J1 | 1 | 2 × 20 2.54 mm stacking header — female socket on the bottom mates the Pi; long pins out the top carry the touch display | THT | any 2×20 2.54 mm header device draws correctly; the physical stacking part is still TBD (see §11.1 note) |
 | J2 | 1 | HRO TYPE-C-31-M-12 USB-C | SMD mid-mount | C165948 (strongly corroborated — picker-confirm). One port only since the 2026-10-22 merge (D11) — the second connector (ex-J3) is deleted |
-| J4 | 1 | JST-PH B2B-PH-K-S battery connector | SMD | picker-check recorded C131337 — see §13 note (THT-vs-SMD trap) |
+| J4 | 1 | JST-PH B2B-PH-K-S(LF)(SN) battery connector | THT | C131337 — **through-hole chosen deliberately 2026-10-22 (D13)** over the SMD S2B-PH-SM4; hand-fit at assembly |
 | J6 | 1 | 2 × 8 2.54 mm header (expansion) | THT/SMD | search `2x8 2.54mm header` |
 | J7 | 1 | U.FL/IPEX RF receptacle (BAT WIRELESS BWU.FL-IPEX1) | SMD | **C5137195 ✅** verified on LCSC 2026-10-22 (50 Ω U.FL-compatible receptacle, $0.02, in stock) |
 | J8 | 1 | 1 × 6 2.54 mm pin header (NFC module, §8) | THT | search `1x6 2.54mm pin header` |
