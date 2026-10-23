@@ -487,7 +487,7 @@ The connector itself (J2) is drawn in §1.1 — since the 2026-10-22 single-port
 | VBUS (net `USB1_VBUS`) | → R509/R510 divider → IO21 (§5). On this page VBUS is a host-presence sense only |
 | CC1 / CC2 | R105/R106, already drawn in §1.1 — the one Rd pair serves both the charger and the ESP32's device role. (The merge deleted the second Rd pair, ex-R511/R512) |
 
-U10 = USBLC6-2SC6 (SOT-23-6): flow-through routing — connector-side I/O pins face J2, protected-side pins face U5, pin 5 (VBUS) → `USB1_VBUS`, pin 2 → GND. ⚠️ VERIFY: pin numbering per ST's datasheet for the exact ordering code at BOM freeze (the flow-through arrangement above is the part's standard configuration). Place U10 immediately behind J2, before any stub or via on the D+/D− pair.
+U10 = ST USBLC6-2SC6 (SOT-23-6), **LCSC C7519 ✅** (verified on its LCSC product page 2026-10-22: genuine ST part, SOT-23-6L package, $0.09, in stock). Flow-through pin map: pin 1 = I/O1 in (J2 side), pin 6 = I/O1 out (U5 side); pin 3 = I/O2 in (J2 side), pin 4 = I/O2 out (U5 side); pin 5 (VBUS) → `USB1_VBUS`, pin 2 → GND. Wire D− through the pin 1→6 channel and D+ through pin 3→4 (the two channels are identical, so the pairing is a convention — just don't cross them). Place U10 immediately behind J2, before any stub or via on the D+/D− pair.
 
 *Plain terms:* "Flow-through" means the signal enters one side of U10 and exits the opposite side — connector side in, ESP32 side out — so at layout time the USB pair runs in a straight line: connector → U10 → series resistors → module, with no branches (stubs) and no layer-hopping vias before the protection chip. The ⚠️ VERIFY means: USBLC6 parts come in several ordering variants, and before ordering (BOM freeze) the exact variant's pin numbering gets checked against ST's datasheet so pin 5 really is VBUS and pin 2 really is GND on the part we buy. Draw it per the description above now; the check is a pre-order checklist item, not a drawing blocker.
 
@@ -869,7 +869,7 @@ Honest note for the build guide: this is **signal-compatible, not pin-compatible
 | U6 | 1 | EBYTE E07-900M10S CC1101 module (433 build: E07-400M10S) | Stamp-hole SMD | **Draw it** — not LCSC stock (see §6 note) |
 | U7 | 1 | EBYTE E01-ML01SP4 nRF24 PA module | Stamp-hole SMD | **Draw it** — not LCSC stock (see §7 note) |
 | U9 | 1 | 24C32 EEPROM | SOIC-8 | search `24C32` + SOIC-8 (AT24C32 / BL24C32 / M24C32 — any standard one) |
-| U10 | 1 | ST USBLC6-2SC6 USB ESD | SOT-23-6 | search `USBLC6-2SC6` — candidate C7519 (picker-confirm) |
+| U10 | 1 | ST USBLC6-2SC6 USB ESD | SOT-23-6 | **C7519 ✅** verified on LCSC 2026-10-22 (ST part, SOT-23-6L, $0.09, in stock) |
 | U11 | 1 | Vishay TSOP38438 IR receiver | Minicast **THT** | recorded C145271 (picker-confirm) |
 | Q1 | 1 | MMBT2222A | SOT-23 | search `MMBT2222A` — pick a standard pinout listing (1=B, 2=E, 3=C) |
 | D1 | 1 | 940 nm IR LED (VSMB10940 class) | 1206 | search `1206 940nm` IR LED |
