@@ -462,7 +462,8 @@ Sources: Espressif **ESP32-S3-WROOM-1U Datasheet** (the U variant's own document
 | IO10, IO9, IO17 | U6 CC1101 CS / GDO0 / GDO2 (§6) | |
 | IO14, IO7 | SD1 CS / card-detect (§9) | |
 | IO40, IO41 | PN532 module IRQ / RSTPDN via J8 (§8) | |
-| IO3, IO47, IO48 | Test pads only | IO3 is a strapping pin (JTAG source) — do not load it (DESIGN.md §3.2). IO45/IO46 stay unconnected (strapping); IO26–32 and IO33–37 do not exist as usable pads (flash/PSRAM) |
+| IO3, IO47, IO48 | Test pads only | IO3 is a strapping pin (JTAG source) — do not load it (DESIGN.md §3.2). IO26–32 and IO33–37 do not exist as usable pads (flash/PSRAM) |
+| IO45 (pin 26), IO46 (pin 16) | **No-connect flags — deliberately unused** | Both are reset-strapping pins: IO45 selects the flash/PSRAM supply voltage, IO46 pairs with IO0 to select boot mode (and IO46 is input-only — it can't drive anything). The module sets their required states internally; anything wired to them risks corrupting the values sampled at reset. Bruce doesn't use them. X-flag both, same as IO35–37 |
 
 *Plain terms for the patterns in this table (they repeat all over the board, so they're worth learning once):*
 - **EN (pin 3)** is the ESP32's reset/enable pin: hold it low = chip held off/reset; let it rise = chip boots. R501 (10 kΩ pull-up to `3V3`) makes "let it rise" the default. C503 (1 µF to GND) slows that rise slightly so power is stable first (the resistor + capacitor pair is called an "RC" — the delay is the point). The Pi can grab the line through R502 (1 kΩ, *in series* — the Pi's wire goes Pi pin → resistor → EN net) to force a reset or reflash the ESP32. The 1 kΩ exists so that if the Pi is powered while the ESP32 side is not (or vice versa), only a trickle (< 3.3 mA) can sneak through the chips' internal protection ("clamp backfeed") instead of a damaging current.
