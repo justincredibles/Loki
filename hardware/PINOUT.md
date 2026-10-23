@@ -701,7 +701,7 @@ Nothing to draw here anymore. The four tact buttons and their whole circuit — 
 
 J6 = 2 × 8, 2.54 mm, top edge. Full signal table in Part B, §3.4. Components:
 
-- Pin 1 (5V_SYS feed): via **F2 = PPTC, 500 mA hold** (1812) from `5V_SYS` (per §3.4's "fused 500 mA"). *(Anything plugged into the expansion port gets its 5 V through this resettable fuse: if an add-on shorts out, F2 chokes at ~500 mA instead of taking the whole board down. 1812 = its physical size, the larger chip package.)*
+- Pin 1 (5V_SYS feed): via **F2 = PPTC, 500 mA hold** (1206 — DOWO 500mA/24V, LCSC **C2984676 ✅** verified 2026-10-22: 500 mA hold, 1 A trip, 24 V max, 150 mΩ; Justin's pick) from `5V_SYS` (per §3.4's "fused 500 mA"). *(Anything plugged into the expansion port gets its 5 V through this resettable fuse: if an add-on shorts out, F2 chokes at ~500 mA instead of taking the whole board down. 1812 = its physical size, the larger chip package.)*
 - Pin 3 (board 3V3, ≤ 300 mA budget): direct from `3V3` — the budget is a build-guide rule, not a component. *("Budget" here is just a promise in the documentation: add-ons may draw at most 300 mA from this pin. Nothing on the board enforces it — it's a rule for whoever designs the add-on.)*
 - All signal pins (I²C1, SPI0, GPIOs, ESP_IRQ): **direct, no series resistors, no ESD parts** — these are the Pi's/ESP32's own GPIOs brought out; add-on designers own their side's protection. Stated explicitly so the absence is a decision: the header is a hobby interconnect inside a case slot, not an external port. *(These wires get no protective resistors — deliberately. The header lives inside the case, and protection is the add-on designer's job. Recorded here so a reviewer doesn't mistake the omission for a mistake.)*
 
@@ -893,7 +893,7 @@ Honest note for the build guide: this is **signal-compatible, not pin-compatible
 | SW1 | 1 | Slide switch (power, EN-level current) | SMD | search `slide switch` SMD SPDT — candidate MST22D18G2 / C2906280 (picker-confirm) |
 | SJ1 | 1 | Solder jumper (EEPROM WP select) | 0603 pads | no library part — pads drawn at PCB stage (geometry in FOOTPRINTS.md) |
 | F1 | 1 | PPTC hold ≈3 A / trip ≈6 A (see §13 warning) | 1812 | search `1812 PPTC 3A` (Bourns MF-MSMF300 family); value decision still open (Part E #18) |
-| F2 | 1 | PPTC hold 500 mA | 1812 | candidate C210348 (Bourns MF-MSMF050-2 — picker-confirm) |
+| F2 | 1 | PPTC hold 500 mA | 1206 | **C2984676 ✅** — DOWO 500mA/24V, verified on LCSC 2026-10-22 ($0.046, in stock): 500 mA hold / 1 A trip / 24 V max / 150 mΩ |
 | R101 | 1 | 890 Ω 1 % (ISET) | 0603 | Basic: search `0603 890R 1%` |
 | R102 | 1 | 1.1 kΩ (ILIM) | 0603 | Basic: search `0603 1.1k` |
 | R103 | 1 | 10 kΩ (TS defeat) | 0603 | Basic: search `0603 10k` |
