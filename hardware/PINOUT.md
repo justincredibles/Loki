@@ -758,11 +758,11 @@ BCM numbering. "Free" = routed to the expansion header (§3.4).
 | 16 | GPIO23 | `EXP1` | FREE → expansion J6 (§12). Net name assigned on the §11 drawing (2026-10-22) — J6 must reuse it exactly |
 | 17 | 3V3 | — **No Connect** | Not used — never back-power the Pi's 3V3 rail (pin 1 feeds only the EEPROM) |
 | 18 | GPIO24 | — **No Connect** | Display **DC** (pass-through) — the stacked MHS35's data/command select |
-| 19 | GPIO10 / MOSI0 | — **No Connect** | Display SPI MOSI (pass-through from the Pi to the display; Loki does not tap SPI0) |
+| 19 | GPIO10 / MOSI0 | `PI_MOSI` | Pi SPI0 MOSI — a shared node: feeds the stacked display (pass-through) AND is tapped by Loki to expansion J6 pin 7 (§12). Not the ESP32's `MOSI` net — different bus, different name |
 | 20 | GND | GND | |
-| 21 | GPIO9 / MISO0 | — **No Connect** | Display SPI MISO (pass-through — carries the touch panel's data back to the Pi) |
+| 21 | GPIO9 / MISO0 | `PI_MISO` | Pi SPI0 MISO — shared node: carries the touch panel's data back to the Pi (pass-through) AND is tapped by Loki to expansion J6 pin 9 (§12). Not the ESP32's `MISO` net |
 | 22 | GPIO25 | — **No Connect** | Display **RST** (pass-through), per the MHS3528 pin table |
-| 23 | GPIO11 / SCLK0 | — **No Connect** | Display SPI SCLK (pass-through) |
+| 23 | GPIO11 / SCLK0 | `PI_SCLK` | Pi SPI0 clock — shared node: feeds the display (pass-through) AND is tapped by Loki to expansion J6 pin 8 (§12) |
 | 24 | GPIO8 / CE0 | — **No Connect** | Display **LCD CS** (pass-through) |
 | 25 | GND | GND | |
 | 26 | GPIO7 / CE1 | — **No Connect** | Display **touch CS** (pass-through). Was the display-module microSD CS until 2026-10-19 — that socket left with J5 |
@@ -843,14 +843,16 @@ The buttons are gone: the stacked 3.5″ touch display is the input device now (
 
 | Pin | Signal | Pin | Signal |
 |---|---|---|---|
-| 1 | 5V_SYS (fused 500 mA PPTC) | 2 | GND |
-| 3 | Board 3V3 (≤ 300 mA) | 4 | GND |
-| 5 | I2C1 SDA (Pi GPIO2) | 6 | I2C1 SCL (Pi GPIO3) |
-| 7 | SPI0 MOSI (Pi GPIO10) | 8 | SPI0 SCLK (Pi GPIO11) |
-| 9 | SPI0 MISO (Pi GPIO9) | 10 | EXP_CS (Pi GPIO20) |
-| 11 | Pi GPIO12 | 12 | Pi GPIO16 |
-| 13 | Pi GPIO19 | 14 | Pi GPIO21 |
-| 15 | Pi GPIO23 | 16 | ESP_IRQ (Pi GPIO22) — add-on wake/interrupt |
+| 1 | `5V_SYS` via **F2** (fused 500 mA PPTC) | 2 | GND |
+| 3 | `3V3` — board 3V3 (≤ 300 mA) | 4 | GND |
+| 5 | `SDA` — I2C1 SDA (Pi GPIO2) | 6 | `SCL` — I2C1 SCL (Pi GPIO3) |
+| 7 | `PI_MOSI` — SPI0 MOSI (Pi GPIO10) | 8 | `PI_SCLK` — SPI0 SCLK (Pi GPIO11) |
+| 9 | `PI_MISO` — SPI0 MISO (Pi GPIO9) | 10 | `EXP5` (Pi GPIO20) — the expansion SPI chip-select by default |
+| 11 | `EXP2` (Pi GPIO12) | 12 | `EXP4` (Pi GPIO16) |
+| 13 | `EXP3` (Pi GPIO19) | 14 | `EXP6` (Pi GPIO21) |
+| 15 | `EXP1` (Pi GPIO23) | 16 | `ESP_IRQ` (Pi GPIO22) — add-on wake/interrupt |
+
+The SPI0 nets are named `PI_MOSI` / `PI_MISO` / `PI_SCLK` — never plain `MOSI` / `MISO`, which are the **ESP32's** SPI2 bus (§§5–9). Same word, different bus: reusing the ESP32 names here would merge the Pi's expansion pins onto the radio bus by name.
 
 Honest note for the build guide: this is **signal-compatible, not pin-compatible** with a Flipper Zero's 18-pin GPIO header — Flipper add-ons that speak I2C/SPI/UART will work through a passive adapter or jumper wires, but nobody should promise a Cardputer or Flipper module will plug straight in and enumerate. (A true Flipper-pinout adapter board is a natural future add-on — the signals are all here.)
 
