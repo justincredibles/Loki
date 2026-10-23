@@ -122,7 +122,7 @@ Most of Loki is ordinary LCSC parts with ready devices. Five are not — for the
 
 **Device (EasyEDA).** One Library entry that bundles a schematic symbol, a PCB footprint, and a real orderable part (with its LCSC C-number) into a single pick. Placing a device answers the symbol, footprint, and sourcing questions in one move — which is why Part C now names the exact device (or search) for every part.
 
-**Differential pair.** Two wires that carry the same signal in opposite polarities (USB's D+ and D− are the classic pair). They must be routed together, the same length, with an unbroken ground beneath them, so interference cancels out. Applies here to the USB-C #2 data lines.
+**Differential pair.** Two wires that carry the same signal in opposite polarities (USB's D+ and D− are the classic pair). They must be routed together, the same length, with an unbroken ground beneath them, so interference cancels out. Applies here to the USB-C port's data lines.
 
 **Divider (voltage divider).** Two resistors in series between a voltage and ground; the middle point sits at a predictable fraction of the voltage. Used two ways here: to *set* an output voltage (the chip watches the middle point and adjusts until it hits its reference — that's the FB/feedback divider on both converters), and to *sense* a voltage safely (the VBUS-detect divider halves 5 V so the ESP32 pin sees ≈2.5 V).
 
@@ -239,7 +239,7 @@ In plain terms, the power story of the whole board is: battery power enters as `
 
 ## Reference-designator groups
 
-1xx charger/USB-C #1 · 2xx fuel gauge · 3xx 5 V boost · 4xx 3.3 V buck · 5xx ESP32/USB-C #2 · 6xx CC1101 · 7xx nRF24 · 8xx PN532 · 9xx microSD · 10xx IR · 11xx Pi interface/EEPROM/LED/expansion · battery parts ungrouped (J4, F1).
+1xx charger/USB-C · 2xx fuel gauge · 3xx 5 V boost · 4xx 3.3 V buck · 5xx ESP32/USB · 6xx CC1101 · 7xx nRF24 · 8xx PN532 · 9xx microSD · 10xx IR · 11xx Pi interface/EEPROM/LED/expansion · battery parts ungrouped (J4, F1).
 
 ---
 
@@ -249,28 +249,30 @@ In plain terms, the power story of the whole board is: battery power enters as `
 
 ## 1. Power input & charging — TI bq24074 (U1)
 
-**What this section does.** U1 is the battery charger and the board's front door for power. USB-C port #1 (J2) plugs into it. U1 charges the lithium battery at up to 1.0 A, and — this is why this chip was chosen — it merges the sources: Loki can run from USB while the battery charges, and if the load wants more than USB can give, the battery silently makes up the difference (that's the "power-path" feature). Its OUT pin produces the `VSYS` net, the always-on voltage everything else in the power chain feeds from. It also lights the blue LED while charging, with no software involved.
+**What this section does.** U1 is the battery charger and the board's front door for power. The board's single USB-C port (J2) plugs into it — that same connector also carries the ESP32's USB data lines (§5.1), but U1 only ever sees its VBUS pin; the data pair passes the charger by entirely. U1 charges the lithium battery at up to 1.0 A, and — this is why this chip was chosen — it merges the sources: Loki can run from USB while the battery charges, and if the load wants more than USB can give, the battery silently makes up the difference (that's the "power-path" feature). Its OUT pin produces the `VSYS` net, the always-on voltage everything else in the power chain feeds from. It also lights the blue LED while charging, with no software involved.
 
-**What you draw.** The U1 symbol; the J2 USB-C connector symbol with two 5.1 kΩ resistors on its CC pins; one capacitor on each of the IN, BAT and OUT pins; one resistor on each of the ISET, ILIM and TS pins; two pins (TMR, ITERM) deliberately left unconnected; and the blue LED with its resistor. Sixteen pins, but most of them are one part each.
+**What you draw.** The U1 symbol; the J2 USB-C connector symbol with two 5.1 kΩ resistors on its CC pins and net stubs on its D+/D− pins (the ESP32's data pair — the rest of that chain is drawn in §5.1); one capacitor on each of the IN, BAT and OUT pins; one resistor on each of the ISET, ILIM and TS pins; two pins (TMR, ITERM) deliberately left unconnected; and the blue LED with its resistor. Sixteen pins, but most of them are one part each.
 
 Source for all values: TI **SLUS810N** (bq2407x family datasheet), sections cited per item.
 U1 = bq24074RGTR, VQFN-16 + thermal pad. (VQFN-16: a flat, square 16-pad chip package with a metal thermal pad in the middle of its underside — the pad is pin "EP" in the table below and must connect to GND.)
 
 > **⚠️ EasyEDA note — the charger's evil twin.** Library search will offer you the **BQ24075RGTR (C15464)** first — a different member of the charger family with different defaults, and **not** this design's part. Loki uses the **bq24074**; this entire section is written from its datasheet (SLUS810N). Search the full string `BQ24074RGTR`. The project-recorded LCSC number is C54313 — it could not be re-confirmed on an LCSC page in the 2026-10-21 check, so if the number doesn't resolve in the picker, pick by full part name + VQFN-16 package and write the number you landed on into Part C.
 
-### 1.1 USB-C #1 — charge-only port (J2)
+### 1.1 USB-C — the single shared port (J2): charging + ESP32 data
 
 J2 = HRO TYPE-C-31-M-12, LCSC C165948 ✅.
 
+*Loki has ONE USB-C port (decision D11, 2026-10-22 — this supersedes the original two-port arrangement, in which a second connector J3 carried the ESP32's data; J3 is deleted). The port's power pins serve the charger (this section); its data pins serve the ESP32 (§5.1). The two jobs use different pins of the same connector and both want the same CC termination, so they coexist without any switching.*
+
 | J2 terminal | Connection |
 |---|---|
-| VBUS (all) | Net `USB1_VBUS` → U1 pin 13 (IN). **5 V only by design** — no USB-PD circuitry anywhere on this port |
+| VBUS (all) | Net `USB1_VBUS` → U1 pin 13 (IN); the same net is also tapped by the ESP32's VBUS-detect divider (§5.1). **5 V only by design** — no USB-PD circuitry anywhere on this port |
 | CC1 | R105, 5.1 kΩ → GND (Rd, marks the port as a sink) |
 | CC2 | R106, 5.1 kΩ → GND |
-| D+ / D− | No connect — this port carries no data, ever (decision D10's mirror) |
+| D+ / D− | → U10 ESD array → ESP32 USB (§5.1). **Draw net stubs here** (both A-side and B-side contacts of each pair join the one net: A6+B6 = D+, A7+B7 = D−); the rest of the chain is drawn on the §5 page. SBU pins stay no-connect |
 | Shield | GND (chassis fingers to enclosure if metal hardware is used) |
 
-*Plain terms:* VBUS is the USB power wire; all its contacts are one net, `USB1_VBUS`, running to the charger's IN pin. This port asks for plain 5 V only — the two 5.1 kΩ resistors (R105/R106) on the CC pins are how a USB-C device says "I'm a sink, give me 5 V" (see *Rd* in the glossary). The D+/D− data pins are intentionally left unconnected — give them no-connect flags in KiCad. The metal shield of the connector goes to GND.
+*Plain terms:* VBUS is the USB power wire; all its contacts are one net, `USB1_VBUS`, running to the charger's IN pin. This port asks for plain 5 V only — the two 5.1 kΩ resistors (R105/R106) on the CC pins are how a USB-C device says "I'm a sink, give me 5 V" (see *Rd* in the glossary), and that same termination is what the ESP32's USB-device role needs, which is why one pair of resistors serves both jobs. The D+/D− pins are the ESP32's data pair (BadUSB + flashing) — on this page they just get named net stubs; §5.1 picks them up. The metal shield of the connector goes to GND.
 
 ### 1.2 U1 pin-by-pin
 
@@ -301,7 +303,7 @@ J2 = HRO TYPE-C-31-M-12, LCSC C165948 ✅.
 - **PGOOD** would tell a processor "input power is good" — nothing reads it in v1, so it gets a no-connect flag. Don't tie it to any supply.
 - **EP (thermal pad):** the metal pad under the chip. It goes to GND and gets thermal vias at layout, but note the warning: pin 8 (VSS) still needs its own ground connection — the pad alone isn't the chip's ground path.
 
-**Placement:** C101/C102/C103 within ~3 mm of their pins. U1 sits near the USB-C #1 board edge so the IN run from J2 is short. *(Layout note — matters at PCB time, not in the schematic.)*
+**Placement:** C101/C102/C103 within ~3 mm of their pins. U1 sits near the USB-C board edge so the IN run from J2 is short. *(Layout note — matters at PCB time, not in the schematic.)*
 
 ### 1.3 Blue "charging" LED (D4)
 
@@ -431,7 +433,7 @@ U4 = SY8089AAAC, SOT-23-5. **Confirmed: this variant is adjustable** (V_REF = 0.
 
 ---
 
-## 5. ESP32-S3 coprocessor — ESP32-S3-WROOM-1-N16R8 (U5) + USB-C #2
+## 5. ESP32-S3 coprocessor — ESP32-S3-WROOM-1-N16R8 (U5) + USB
 
 **What this section does.** U5 is the second brain of Loki: the ESP32-S3 module that runs the radios (Bluetooth, sub-GHz, 2.4 GHz, NFC, IR) while the Pi runs the main show. This section wires its lifelines: power, the reset/boot-strap pins the Pi uses to control it, the UART (serial link) to the Pi, the attention-interrupt line back to the Pi, the native USB pins, and the fan-out of its GPIOs to the radios. Most rows in the table below are "this GPIO goes to that subsystem" — the actual parts for those subsystems live in their own sections (§6–§10); the only *components* in this section are the pull-ups, series resistors and capacitors around the module itself.
 
@@ -450,9 +452,9 @@ Sources: Espressif **ESP32-S3-WROOM-1 Datasheet v1.2** §3.2/§6 (cited "Module 
 | IO43 / U0TXD (pin 37) | → Pi header pin 10 (GPIO15), via **R505 = 499 Ω** series at the module | HDG recommends a 499 Ω series resistor on U0TXD (harmonic suppression). Protocol UART, 115200 8N1 (DESIGN.md §3.1) |
 | IO44 / U0RXD (pin 36) | ← Pi header pin 8 (GPIO14) | Direct |
 | IO42 | → Pi header pin 15 (GPIO22), net `ESP_IRQ`; **R506 = 10 kΩ** pull-up → 3V3 on the HAT | Attention line, open-drain style (ESP32 drives low / releases) per DESIGN.md §3.2. The HAT-side pull-up (EC) keeps the net defined before Pi firmware configures GPIO22 |
-| IO19 / USB_D− (pin 13) | → **R507 = 0 Ω** → U10 (§5.1) → J3 D− | Native USB. HDG reserves 22 Ω/33 Ω series + DNP shunt caps near the chip; the module's own typical circuit uses 0 Ω (Module DS §6 Fig. 7). Fit 0 Ω footprints; swap to 22 Ω only if signal integrity demands. 90 Ω ±10 % differential pair, length-matched, unbroken ground beneath (HDG) |
-| IO20 / USB_D+ (pin 14) | → **R508 = 0 Ω** → U10 → J3 D+ | As above |
-| IO21 | VBUS detect ← divider **R509 = 100 kΩ / R510 = 100 kΩ** from J3 VBUS; **C504 = 0.1 µF** at IO21 | Divider per DESIGN.md §3.2 (USB present → ≈2.5 V at IO21). C504 is an (EC) noise/debounce addition |
+| IO19 / USB_D− (pin 13) | → **R507 = 0 Ω** → U10 (§5.1) → J2 D− | Native USB. HDG reserves 22 Ω/33 Ω series + DNP shunt caps near the chip; the module's own typical circuit uses 0 Ω (Module DS §6 Fig. 7). Fit 0 Ω footprints; swap to 22 Ω only if signal integrity demands. 90 Ω ±10 % differential pair, length-matched, unbroken ground beneath (HDG) |
+| IO20 / USB_D+ (pin 14) | → **R508 = 0 Ω** → U10 → J2 D+ | As above |
+| IO21 | VBUS detect ← divider **R509 = 100 kΩ / R510 = 100 kΩ** from J2 VBUS (net `USB1_VBUS`); **C504 = 0.1 µF** at IO21 | Divider per DESIGN.md §3.2 (USB present → ≈2.5 V at IO21). C504 is an (EC) noise/debounce addition |
 | IO11 (MOSI), IO12 (SCK), IO13 (MISO) | Shared SPI2 bus → U6, U7, SD1 (§6, §7, §9) | Per-device CS and SPI settings; see DESIGN.md §3.2 bus-sharing note |
 | IO8 (SDA), IO18 (SCL) | ESP32 I²C bus → PN532 module via J8 (§8); pull-ups **R513/R514 = 4.7 kΩ** → 3V3 | Separate bus from the Pi's I²C1 (§2.2). 4.7 kΩ (EC, standard I²C value for a short bus) |
 | IO15, IO16, IO38, IO39 | Spare — unassigned | Were the button nets (§11.4) until 2026-10-19; the touch display replaced the buttons |
@@ -468,25 +470,24 @@ Sources: Espressif **ESP32-S3-WROOM-1 Datasheet v1.2** §3.2/§6 (cited "Module 
 - **Series resistors on signal lines** (R502, R504, R505) sit in the middle of a wire — signal flows through them. They cost the signal almost nothing (the receiving input draws ~no current) but they limit fault currents and, on the UART TX line (R505 = 499 Ω), smooth the signal's edges so it radiates less radio-frequency noise ("harmonic suppression").
 - **IO42 / `ESP_IRQ`** is the ESP32 tapping the Pi on the shoulder ("a radio event happened", "BadUSB finished"). It's open-drain style: the ESP32 either pulls the line to ground or lets go, and R506's pull-up is what brings the line back up — without R506 the line could never read high. This is the same open-drain + pull-up pattern as §2's ALRT.
 - **IO19/IO20 (USB D−/D+)** are the ESP32's built-in USB. The 0 Ω resistors (R507/R508) are placeholders that conduct like a plain wire — they're fitted so that if testing shows the USB signal needs the 22 Ω version instead, it's a part swap, not a board redesign. The "90 Ω differential pair, length-matched, unbroken ground beneath" is a layout instruction (Part D, rule 5): the two wires run together as a pair.
-- **IO21 VBUS detect:** J3's VBUS is 5 V — too much for a 3.3 V GPIO. The two equal 100 kΩ resistors (R509/R510) form a divider that halves it to ≈2.5 V: VBUS → R509 → IO21 → R510 → GND. C504 (0.1 µF) on the same pin just filters noise so the reading doesn't flicker.
+- **IO21 VBUS detect:** the port's VBUS (`USB1_VBUS`) is 5 V — too much for a 3.3 V GPIO. The two equal 100 kΩ resistors (R509/R510) form a divider that halves it to ≈2.5 V: VBUS → R509 → IO21 → R510 → GND. C504 (0.1 µF) on the same pin just filters noise so the reading doesn't flicker.
 - **"Do not load" IO3:** IO3 is a strapping pin. It goes to a test pad only (TP section of the BOM) — a bare copper pad you can touch a probe to — and nothing else may hang on it, or the ESP32 may boot in the wrong mode. IO45/IO46 are also straps and stay fully unconnected; IO26–32 and IO33–37 don't exist as usable pads at all because they're wired inside the module to its flash memory and RAM.
 
 **Antenna placement (Module DS §3.1 keep-out zone; HDG module layout rules):** module antenna end overhangs the board edge or sits at the edge with the base board cut away beside/below it; **no copper on any layer** under the antenna zone; dense ground vias *near* (not under) the antenna; ≥ 15 mm clearance to housing walls in the end product. Also keep the whole module away from the Pi's own WiFi antenna corner on the board below (DESIGN.md §6.2). *(Layout instructions. The module's antenna is the exposed section at one end of the WROOM — that end hangs over the board edge, and the zone beneath it is a keep-out: no copper pours, no traces, no parts, on any layer.)*
 
-### 5.1 USB-C #2 — ESP32 data port (J3) + ESD (U10)
+### 5.1 USB data on the shared port (J2) + ESD (U10)
 
-J3 = HRO TYPE-C-31-M-12, LCSC C165948 ✅ (same part as J2).
+The connector itself (J2) is drawn in §1.1 — since the 2026-10-22 single-port merge (decision D11) there is no second connector; this section draws the data chain that hangs off J2's D+/D− stubs.
 
-**What this section does.** This is the ESP32's own USB-C port — the one a PC plugs into for BadUSB (the ESP32 pretending to be a keyboard) and for flashing the ESP32. U10 is a tiny bodyguard chip (an ESD protection part) sitting between the connector and the ESP32: if a static spark hits the port, U10 absorbs it instead of the ESP32. Note this port's VBUS powers *nothing* on the board — it's only sensed (§5, IO21) so the ESP32 knows a host is plugged in.
+**What this section does.** This is the ESP32's USB path — what a PC talks to for BadUSB (the ESP32 pretending to be a keyboard) and for flashing the ESP32. U10 is a tiny bodyguard chip (an ESD protection part) sitting between the connector and the ESP32: if a static spark hits the port, U10 absorbs it instead of the ESP32. J2's VBUS feeds the charger (§1) and is *also* sensed here (§5, IO21) so the ESP32 knows something is plugged in — note the divider is a sense only; the board never powers itself *from* the ESP32's side of that wire, and 5V_SYS is never back-fed from a PC.
 
-| J3 terminal | Connection |
+| J2 terminal / net | Connection |
 |---|---|
-| D− / D+ | → U10 I/O pins → R507/R508 → U5 IO19/IO20 (§5). BadUSB HID + flashing only (decision D10) |
-| VBUS | → R509/R510 divider only. **VBUS on this port powers nothing** — it is a host-presence sense. (The board is powered from its battery/boost domain; do not back-feed 5V_SYS from a PC) |
-| CC1 / CC2 | **R511/R512 = 5.1 kΩ** → GND each (Rd — the ESP32 is the device/sink side) |
-| Shield | GND |
+| D− / D+ (stubs from §1.1) | → U10 I/O pins → R507/R508 → U5 IO19/IO20 (§5). BadUSB HID + flashing only (decision D10) |
+| VBUS (net `USB1_VBUS`) | → R509/R510 divider → IO21 (§5). On this page VBUS is a host-presence sense only |
+| CC1 / CC2 | R105/R106, already drawn in §1.1 — the one Rd pair serves both the charger and the ESP32's device role. (The merge deleted the second Rd pair, ex-R511/R512) |
 
-U10 = USBLC6-2SC6 (SOT-23-6): flow-through routing — connector-side I/O pins face J3, protected-side pins face U5, pin 5 (VBUS) → J3 VBUS, pin 2 → GND. ⚠️ VERIFY: pin numbering per ST's datasheet for the exact ordering code at BOM freeze (the flow-through arrangement above is the part's standard configuration). Place U10 immediately behind J3, before any stub or via on the D+/D− pair.
+U10 = USBLC6-2SC6 (SOT-23-6): flow-through routing — connector-side I/O pins face J2, protected-side pins face U5, pin 5 (VBUS) → `USB1_VBUS`, pin 2 → GND. ⚠️ VERIFY: pin numbering per ST's datasheet for the exact ordering code at BOM freeze (the flow-through arrangement above is the part's standard configuration). Place U10 immediately behind J2, before any stub or via on the D+/D− pair.
 
 *Plain terms:* "Flow-through" means the signal enters one side of U10 and exits the opposite side — connector side in, ESP32 side out — so at layout time the USB pair runs in a straight line: connector → U10 → series resistors → module, with no branches (stubs) and no layer-hopping vias before the protection chip. The ⚠️ VERIFY means: USBLC6 parts come in several ordering variants, and before ordering (BOM freeze) the exact variant's pin numbering gets checked against ST's datasheet so pin 5 really is VBUS and pin 2 really is GND on the part we buy. Draw it per the description above now; the check is a pre-order checklist item, not a drawing blocker.
 
@@ -812,8 +813,8 @@ Aligned with the pin conventions of existing DIY Bruce boards wherever Loki's sc
 | IO16 | Spare | Was Button DOWN until 2026-10-19 |
 | IO17 | CC1101 **GDO2** | Async serial / carrier-sense out |
 | IO18 | I2C SCL → PN532 | |
-| IO19 | USB D− | → USB-C #2 via USBLC6 |
-| IO20 | USB D+ | → USB-C #2 via USBLC6 |
+| IO19 | USB D− | → the shared USB-C port (J2) via USBLC6 |
+| IO20 | USB D+ | → the shared USB-C port (J2) via USBLC6 |
 | IO21 | USB VBUS detect | 100 k/100 k divider from port-2 VBUS |
 | IO38 | Spare | Was Button LEFT until 2026-10-19 |
 | IO39 | Spare | Was Button RIGHT until 2026-10-19 |
@@ -878,7 +879,7 @@ Honest note for the build guide: this is **signal-compatible, not pin-compatible
 | L1 | 1 | 2.2 µH power inductor, Isat ≥ 12 A (Cyntec PIMB065T-2R2M class) | ~6.5 × 6.5 mm | search `PIMB065T-2R2MS` — TI's recommended part (7.4 × 6.8 mm body; footprint follows the frozen pick) |
 | L401 | 1 | 2.2 µH, Isat > 2.3 A, DCR < 50 mΩ | 2520/2525 class | search `2520 2.2uH` — check Isat and DCR in the listing's attributes |
 | J1 | 1 | 2 × 20 2.54 mm stacking header — female socket on the bottom mates the Pi; long pins out the top carry the touch display | THT | any 2×20 2.54 mm header device draws correctly; the physical stacking part is still TBD (see §11.1 note) |
-| J2, J3 | 2 | HRO TYPE-C-31-M-12 USB-C | SMD mid-mount | C165948 (strongly corroborated — picker-confirm) |
+| J2 | 1 | HRO TYPE-C-31-M-12 USB-C | SMD mid-mount | C165948 (strongly corroborated — picker-confirm). One port only since the 2026-10-22 merge (D11) — the second connector (ex-J3) is deleted |
 | J4 | 1 | JST-PH B2B-PH-K-S battery connector | SMD | picker-check recorded C131337 — see §13 note (THT-vs-SMD trap) |
 | J6 | 1 | 2 × 8 2.54 mm header (expansion) | THT/SMD | search `2x8 2.54mm header` |
 | J7 | 1 | U.FL/IPEX RF connector | SMD | search `U.FL-R-SMT-1` |
@@ -892,7 +893,7 @@ Honest note for the build guide: this is **signal-compatible, not pin-compatible
 | R102 | 1 | 1.1 kΩ (ILIM) | 0603 | Basic: search `0603 1.1k` |
 | R103 | 1 | 10 kΩ (TS defeat) | 0603 | Basic: search `0603 10k` |
 | R104 | 1 | 1.0 kΩ (blue LED) | 0603 | Basic: search `0603 1k` |
-| R105, R106, R511, R512 | 4 | 5.1 kΩ (USB-C Rd ×4) | 0603 | Basic: search `0603 5.1k` |
+| R105, R106 | 2 | 5.1 kΩ (USB-C Rd ×2) | 0603 | Basic: search `0603 5.1k`. (Ex-R511/R512 deleted in the 2026-10-22 single-port merge) |
 | R201 | 1 | 1.0 kΩ (red LED) | 0603 | Basic: search `0603 1k` |
 | R202, R203, R513, R514 | 4 | 4.7 kΩ (I²C pull-ups) | 0603 | Basic: search `0603 4.7k` |
 | R301 | 1 | 182 kΩ 1 % (boost FB top) | 0603 | Basic: search `0603 182k 1%` |
@@ -961,7 +962,7 @@ The short list of layout-critical items. (DESIGN.md §6 has the full checklist; 
    - *In plain terms:* the NFC connector just needs a sensible seat at the board's edge and a short, quiet path back to the ESP32. All the RF cleverness moved off-board with the module.
 4. **Antenna keep-outs.** ESP32 module antenna overhangs/edges the board with **zero copper on all layers** beneath it and ≥15 mm housing clearance; CC1101 (U6) and nRF24 (U7) at opposite corners from the ESP32 antenna and from each other where the outline allows (U7 and the ESP32 both live at 2.4 GHz); nothing on this board overhangs the **Pi's** WiFi antenna corner below.
    - *In plain terms:* antennas need empty space around them — copper underneath an antenna absorbs and detunes it. The ESP32's antenna hangs off the board edge; the two radio modules go in far corners away from it and from each other (two of the three radios share the 2.4 GHz band and would interfere); and no part of Loki may sit over the Pi's own WiFi antenna corner on the board below.
-5. **USB pairs.** J3 D+/D−: 90 Ω ±10 % differential, length-matched, solid ground beneath, U10 immediately behind the connector, R507/R508 immediately behind U10. J2 is power-only — keep its VBUS run short and wide to U1 IN.
+5. **USB pairs.** J2 D+/D−: 90 Ω ±10 % differential, length-matched, solid ground beneath, U10 immediately behind the connector, R507/R508 immediately behind U10. J2's VBUS run stays short and wide to U1 IN (it is the charger's input as well as the data port).
    - *In plain terms:* the two USB data wires for port #2 travel as a matched pair — same length, side by side, over unbroken ground — with the protection chip U10 right behind the connector and the little series resistors right behind U10. Port #1 has no data; just keep its power wire short and fat.
 6. **Ground strategy.** 4-layer stackup, L2 solid GND, no splits under RF or the boost. AGND (U3 pin 20) ties into the plane at the pad; every module's ground pads stitched down (U6 has nine ground pads for a reason — PA/RF return currents).
    - *In plain terms:* the board is four copper layers; layer 2 is one unbroken sheet of ground. Don't cut slots in it under the radios or the boost — high-frequency and high currents return through that sheet directly under their paths. Every ground pad on the radio modules gets its own via(s) down into the sheet.

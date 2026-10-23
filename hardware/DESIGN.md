@@ -134,7 +134,7 @@ Bruce's nRF24 features (spectrum, jammer; MouseJack-class attacks) are range-lim
 
 | Function | Part | Notes |
 |---|---|---|
-| USB-C ×2 | **HRO TYPE-C-31-M-12** (16-pin mid-mount) — LCSC **C165948** ✅ (multiple independent BOMs) | Port 1 = charge-only: VBUS → bq24074 IN, CC1/CC2 each 5.1 kΩ Rd to GND, D+/D− unconnected. Port 2 = ESP32-S3 native USB: D+/D− → IO20/IO19 with **USBLC6-2SC6** ESD array, CC 5.1 kΩ Rd, VBUS → divider → IO21 (VBUS detect for HID host-presence). Keeping the two ports physically separate kills the classic "charging or BadUSB, pick one" mux problem. |
+| USB-C ×1 | **HRO TYPE-C-31-M-12** (16-pin mid-mount) — LCSC **C165948** ✅ (multiple independent BOMs) | **One shared port (J2)** — merged 2026-10-22, Decision D11 (supersedes the original two-port arrangement). VBUS → bq24074 IN (charging), CC1/CC2 each 5.1 kΩ Rd to GND (one pair serves both roles), D+/D− → ESP32-S3 native USB (IO20/IO19) via **USBLC6-2SC6** ESD array, VBUS also → divider → IO21 (VBUS detect for HID host-presence). Charging and data coexist on separate pins of the one connector; accepted trade-offs are recorded in D11. |
 | HAT ID EEPROM | **24C32** (SOIC-8, I2C 0x50) ⚠️ generic part, stocked everywhere at LCSC; C# at BOM freeze | Per the official HAT spec: lives on the ID pins (GPIO0/1), powered from header pin 1 (Pi 3V3), WP tied to GND through a solder jumper so the ID blob can be flashed at the factory and locked later. The EEPROM blob is also where we declare PSU capability for the Pi 5 (§5.3). |
 | Buttons ×4 | **Removed 2026-10-19** (was: 6 × 6 mm SMD tact, LCSC C11135) | The stacked touch display is the input device now — there are no buttons. The shared-net design (§3.3) and decision D7 are superseded; the four Pi pins (GPIO5/6/13/26) and four ESP32 pins (IO15/16/38/39) the buttons used are spare. Row kept for the record. |
 | LEDs | 0805: green C19171391 ✅, red C84256 ✅, blue (0805 generic) ⚠️ | Green ← 5V_SYS (lit = device on). Red ← MAX17048 ALRT sink, anode to VSYS (lit = low battery, **works with device off**). Blue ← bq24074 CHG sink, anode to VSYS (lit = charging, works with device off). All anodes on VSYS/5V rails — the LEDs are hardware-driven, zero firmware involvement, exactly per spec. |
@@ -164,7 +164,7 @@ Hirose DM3D-SF microSD slot (JLC C719027; push-pull, with card-detect switch —
 
 ### 2.11 Assembly reality check
 
-Everything listed above is SMT and JLCPCB-placeable, **but not all on one side at HAT clearances**: the underside of a HAT faces the Pi's tall parts (USB/Ethernet on Pi 4/5), leaving room only for low-profile parts (EEPROM, gauge, passives) with standard 11 mm standoffs. Plan: **top side** = ESP32 module, both RF modules, SD slot, USB-C ×2 (edge), charger/boost/buck power train (J1's socket sits on the bottom; its long pins pass through to the display on top); **bottom side** = 24C32, MAX17048, USBLC6, passives only. That means double-sided assembly at JLCPCB (a modest per-order surcharge) or JLC assembles the top and the few bottom parts are large-pad 0603/SOIC a builder can hand-solder in minutes. Flagged as Decision D8 — recommended: pay for double-sided; a "solder these 6 parts" step breaks the kit promise.
+Everything listed above is SMT and JLCPCB-placeable, **but not all on one side at HAT clearances**: the underside of a HAT faces the Pi's tall parts (USB/Ethernet on Pi 4/5), leaving room only for low-profile parts (EEPROM, gauge, passives) with standard 11 mm standoffs. Plan: **top side** = ESP32 module, both RF modules, SD slot, USB-C (edge), charger/boost/buck power train (J1's socket sits on the bottom; its long pins pass through to the display on top); **bottom side** = 24C32, MAX17048, USBLC6, passives only. That means double-sided assembly at JLCPCB (a modest per-order surcharge) or JLC assembles the top and the few bottom parts are large-pad 0603/SOIC a builder can hand-solder in minutes. Flagged as Decision D8 — recommended: pay for double-sided; a "solder these 6 parts" step breaks the kit promise.
 
 ---
 
@@ -248,7 +248,7 @@ Aligned with the pin conventions of existing DIY Bruce boards wherever Loki's sc
 | IO18 | I2C SCL → PN532 | |
 | IO19 | USB D− | → USB-C #2 via USBLC6 |
 | IO20 | USB D+ | → USB-C #2 via USBLC6 |
-| IO21 | USB VBUS detect | 100 k/100 k divider from port-2 VBUS |
+| IO21 | USB VBUS detect | 100 k/100 k divider from the shared port's VBUS (net USB1_VBUS) |
 | IO38 | Spare | Was Button LEFT until 2026-10-19 |
 | IO39 | Spare | Was Button RIGHT until 2026-10-19 |
 | IO40 | PN532 **IRQ** | |
@@ -377,7 +377,8 @@ Justin accepted every recommendation below as written on 2026-10-16; the Recomme
 | D7 | Buttons wired to ESP32 as well as Pi | (a) shared nets (b) Pi-only | **(a)** — required for the ESP32-side BadUSB confirm gate with the Pi off; costs four 1 kΩ resistors. **Superseded 2026-10-19:** the buttons were removed entirely — the stacked 3.5″ touch display is the input device (§2.7). Neither (a) nor (b) ships; the ESP32-side confirm gate moves to the touchscreen / Pi UI. |
 | D8 | Assembly sides | (a) JLC double-sided assembly (b) top-only + builder hand-solders ~6 bottom parts | **(a)** — the kit promise is "attach Pi, print case, flash, go." (b) quietly breaks it. |
 | D9 | Charge rate | (a) bq24074 @ ~1.0–1.5 A (b) I2C charger (BQ25895 class) @ 3 A | **(a)** for v1 — zero firmware, honest charge times. (b) is a rev-2 upgrade if builders complain. |
-| D10 | Second ESP32 USB port usage | (a) BadUSB + flashing only (b) also expose USB-serial console for debugging | **(a)** — the Pi UART is the debug/console path; one personality per port keeps the fork simple. (Revisit if standalone Bruce use grows.) |
+| D10 | ESP32 USB port usage | (a) BadUSB + flashing only (b) also expose USB-serial console for debugging | **(a)** — the Pi UART is the debug/console path; one personality on the port keeps the fork simple. (Revisit if standalone Bruce use grows.) The port itself moved onto the shared connector in D11; the (a) usage rule still applies to its data lines. |
+| D11 | One USB-C port or two | (a) two dedicated ports — charge-only + ESP32 data (b) one shared port for both | **(b) — decided by Justin 2026-10-22.** VBUS + CC serve charging, D+/D− serve the ESP32, all on the one connector (J2); the second connector (ex-J3) and its Rd pair are deleted. Saves a connector, two resistors, and an enclosure cutout. Trade-offs accepted: a BadUSB host becomes the charger (charging from a weak PC port runs slower under the charger's VIN-DPM); the ESP32 enumerates on any PC the device is plugged into for power; the data path is no longer electrically separate from the charging input. |
 
 ---
 
