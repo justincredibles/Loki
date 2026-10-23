@@ -755,7 +755,7 @@ BCM numbering. "Free" = routed to the expansion header (§3.4).
 | 13 | GPIO27 | `PI_GPIO27` | → ESP32 **IO0** boot strap (§5: R504 = 1 kΩ series; ESP32 side R503 = 10 kΩ pull-up) |
 | 14 | GND | GND | |
 | 15 | GPIO22 | `ESP_IRQ` | ← ESP32 IO42 **attention IRQ** (§5: R506 = 10 kΩ pull-up) — ESP32 raises it on BadUSB-done / RF events |
-| 16 | GPIO23 | — (to expansion) | FREE → expansion J6 (§12). No net name yet — §12 assigns it; do not invent one here |
+| 16 | GPIO23 | `EXP1` | FREE → expansion J6 (§12). Net name assigned on the §11 drawing (2026-10-22) — J6 must reuse it exactly |
 | 17 | 3V3 | — **No Connect** | Not used — never back-power the Pi's 3V3 rail (pin 1 feeds only the EEPROM) |
 | 18 | GPIO24 | — **No Connect** | Display **DC** (pass-through) — the stacked MHS35's data/command select |
 | 19 | GPIO10 / MOSI0 | — **No Connect** | Display SPI MOSI (pass-through from the Pi to the display; Loki does not tap SPI0) |
@@ -771,17 +771,17 @@ BCM numbering. "Free" = routed to the expansion header (§3.4).
 | 29 | GPIO5 | — **No Connect** | Spare pass-through node. Was Button UP until 2026-10-19 — buttons removed, touch is the input now |
 | 30 | GND | GND | |
 | 31 | GPIO6 | — **No Connect** | Spare pass-through node. Was Button DOWN until 2026-10-19 — see pin 29 |
-| 32 | GPIO12 | — (to expansion) | FREE → expansion J6 (§12), PWM1 capable. No net name yet — §12 assigns it |
+| 32 | GPIO12 | `EXP2` | FREE → expansion J6 (§12), PWM1 capable. Net name assigned on the §11 drawing (2026-10-22) — J6 must reuse it exactly |
 | 33 | GPIO13 | — **No Connect** | Spare pass-through node. Was Button LEFT until 2026-10-19 — see pin 29 |
 | 34 | GND | GND | |
-| 35 | GPIO19 | — (to expansion) | FREE → expansion J6 (§12). No net name yet — §12 assigns it |
-| 36 | GPIO16 | — (to expansion) | FREE → expansion J6 (§12). No net name yet — §12 assigns it |
+| 35 | GPIO19 | `EXP3` | FREE → expansion J6 (§12). Net name assigned on the §11 drawing (2026-10-22) — J6 must reuse it exactly |
+| 36 | GPIO16 | `EXP4` | FREE → expansion J6 (§12). Net name assigned on the §11 drawing (2026-10-22) — J6 must reuse it exactly |
 | 37 | GPIO26 | `ESP_EN` | → ESP32 **EN** reset (§5: R502 = 1 kΩ series; ESP32 side R501 = 10 kΩ pull-up + C503 = 1 µF). **Moved here from pin 11 on 2026-10-20** — the touch display's TP_IRQ owns pin 11 now. Was Button RIGHT until 2026-10-19 |
-| 38 | GPIO20 | — (to expansion) | FREE → expansion J6 (§12; default = expansion SPI CS). No net name yet — §12 assigns it |
+| 38 | GPIO20 | `EXP5` | FREE → expansion J6 (§12; default = expansion SPI CS). Net name assigned on the §11 drawing (2026-10-22) — J6 must reuse it exactly |
 | 39 | GND | GND | |
-| 40 | GPIO21 | — (to expansion) | FREE → expansion J6 (§12). No net name yet — §12 assigns it |
+| 40 | GPIO21 | `EXP6` | FREE → expansion J6 (§12). Net name assigned on the §11 drawing (2026-10-22) — J6 must reuse it exactly |
 
-*How to read the Net name column:* these are the **exact labels to type in EasyEDA, character for character** — they are the names already drawn and signed off on the §§1–10 pages (e.g. the ESP32's EN stub on §5 is `ESP_EN`, so J1 pin 37 lands on `ESP_EN`, not on a `PI_GPIO26` you might invent). "No Connect" pins get EasyEDA's X flag on the J1 symbol — Loki's circuitry touches nothing there, but the pins still physically pass through the stacking header to the display above. The expansion pins get wired J1 → J6 on the §12 page, which is where their net names will be assigned.
+*How to read the Net name column:* these are the **exact labels to type in EasyEDA, character for character** — they are the names already drawn and signed off on the §§1–10 pages (e.g. the ESP32's EN stub on §5 is `ESP_EN`, so J1 pin 37 lands on `ESP_EN`, not on a `PI_GPIO26` you might invent). "No Connect" pins get EasyEDA's X flag on the J1 symbol — Loki's circuitry touches nothing there, but the pins still physically pass through the stacking header to the display above. The expansion pins were named on the §11 page itself (2026-10-22): `EXP1`–`EXP6` on pins 16, 32, 35, 36, 38, 40 — §12's J6 stubs must reuse those names in that pin order.
 
 **UART note (all three Pis):** use the PL011 (UART0) on GPIO14/15 — on the Zero 2 W that means the `dtoverlay=disable-bt` (or `miniuart-bt`) overlay so the PL011 isn't stolen by Bluetooth; on Pi 5, GPIO14/15 is UART0 by default and the dedicated debug header stays free. 115200 baud is the locked protocol rate; esptool flashing over the same wires can run faster after sync, but the protocol doesn't need it.
 
