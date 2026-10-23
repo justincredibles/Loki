@@ -653,7 +653,7 @@ ESP32 IO2 → **R1003 = 1 kΩ** → Q1 base. Q1 = MMBT2222A (SOT-23: pin 1 = B, 
 
 ### 11.1 40-pin header (J1)
 
-The full pin-by-pin net list **is** Part B, §3.1 below — every header pin's HAT-side connection is named there, and each subsystem section above names the component at the other end of the net (e.g. header pin 11 → R502 → U5 EN). Two routing notes from DESIGN.md §3.1 worth repeating at the schematic stage: both 5 V pins (2 + 4) are fed from `5V_SYS` with a wide, via-stitched pour (a single pin is not a 4 A path), and header pin 17 (Pi 3V3) is **not connected** — the board never back-powers the Pi's 3V3 rail. Pin 1 feeds only the EEPROM (§11.3).
+The full pin-by-pin net list **is** Part B, §3.1 below — every header pin's HAT-side connection is named there, and each subsystem section above names the component at the other end of the net (e.g. header pin 37 → R502 → U5 EN). Two routing notes from DESIGN.md §3.1 worth repeating at the schematic stage: both 5 V pins (2 + 4) are fed from `5V_SYS` with a wide, via-stitched pour (a single pin is not a 4 A path), and header pin 17 (Pi 3V3) is **not connected** — the board never back-powers the Pi's 3V3 rail. Pin 1 feeds only the EEPROM (§11.3).
 
 *Plain terms:* J1 is the 2 × 20 connector that plugs Loki onto the Pi's GPIO header. In the schematic you draw it as a 40-pin connector symbol and land each pin on the net Part B §3.1 assigns — §3.1 is the checklist for this section. The two notes: pins 2 and 4 both carry `5V_SYS` into the Pi because one pin can't safely carry the Pi 5's current (at layout they'll be joined by a wide copper pour stitched with vias — a layout detail, but in the schematic both pins simply land on `5V_SYS`); and pin 17, which is the Pi's *own* 3.3 V output, is deliberately left unconnected (no-connect flag) — powering the Pi's 3V3 rail from our board ("back-powering") could fight the Pi's own regulator. Pin 1 is also Pi 3.3 V, but by HAT rules it feeds only the ID EEPROM.
 
@@ -673,8 +673,8 @@ U9 = 24C32, SOIC-8 (LCSC ⚠️ generic, confirm at BOM freeze). Per the officia
 |---|---|---|
 | 8 | VCC | Net `3V3_ID` = Pi header pin 1 **only**; **C1101 = 0.1 µF** VCC→GND (EC, standard practice) |
 | 4 | VSS | GND |
-| 5 | SDA | Pi header pin 27 (ID_SD) |
-| 6 | SCL | Pi header pin 28 (ID_SC) |
+| 5 | SDA | Net `ID_SD` → Pi header pin 27 |
+| 6 | SCL | Net `ID_SC` → Pi header pin 28 |
 | 1, 2, 3 | A0, A1, A2 | All → GND → I²C address **0x50** |
 | 7 | WP | → **SJ1 solder jumper**: default position WP→GND (writable — factory flashes the ID blob, incl. the Pi 5 PSU-capability declaration, DESIGN.md §2.7/§5.3); alternate position WP→VCC (write-protected/locked after flashing) |
 
@@ -738,48 +738,50 @@ J4 = JST-PH 2-pin SMD (B2B-PH-K-S), LCSC C131337 ✅. *(JST-PH: the small white 
 
 BCM numbering. "Free" = routed to the expansion header (§3.4).
 
-| Pin | BCM | Function on Loki HAT | Notes |
+| Pin | BCM | Net name on Loki (exact EasyEDA label) | Function / disposition |
 |---|---|---|---|
-| 1 | 3V3 (from Pi) | **24C32 EEPROM VCC only** | Isolated net per HAT spec; does NOT power the board |
-| 2 | 5V | **5V_SYS in** (from TPS61088) | Both 5V pins used — Pi 5 current |
-| 3 | GPIO2 / SDA1 | I2C1 SDA → MAX17048, expansion | 4.7 kΩ pull-up to board 3V3 on HAT |
-| 4 | 5V | **5V_SYS in** | Wide pour, via-stitched to pin 2 |
-| 5 | GPIO3 / SCL1 | I2C1 SCL → MAX17048, expansion | Pairs with pin 3 |
+| 1 | 3V3 (from Pi) | `3V3_ID` | **24C32 EEPROM VCC only** (U9 pin 8 + C1101 + SJ1's lock throw). Isolated net per HAT spec; does NOT power the board |
+| 2 | 5V | `5V_SYS` | Power IN to the Pi from the TPS61088 boost (via F1, §13). Both 5 V pins used — Pi 5 current |
+| 3 | GPIO2 / SDA1 | `SDA` | I2C1 SDA → MAX17048 (§2, pull-ups R202/R203 there); also carried to expansion J6 (§12) |
+| 4 | 5V | `5V_SYS` | As pin 2 — wide pour, via-stitched to pin 2 at layout |
+| 5 | GPIO3 / SCL1 | `SCL` | I2C1 SCL → MAX17048 (§2); also carried to expansion J6 (§12) |
 | 6 | GND | GND | |
-| 7 | GPIO4 | MAX17048 **ALRT** interrupt in | Also drives red LED in hardware |
-| 8 | GPIO14 / TXD0 | UART TX → ESP32 IO44 (RX0) | PL011 UART0 (see note below) |
+| 7 | GPIO4 | `PI_GPIO4` | MAX17048 **ALRT** interrupt (§2 — the same net drives the red low-battery LED D3 in hardware) |
+| 8 | GPIO14 / TXD0 | `PI_GPIO14` | Pi UART TX → ESP32 RXD0 (§5). PL011 UART0 (see note below) |
 | 9 | GND | GND | |
-| 10 | GPIO15 / RXD0 | UART RX ← ESP32 IO43 (TX0) | 115200 8N1 protocol + flashing |
-| 11 | GPIO17 | Display **TP_IRQ** (pass-through) — no Loki connection | The touch display's interrupt line to the Pi (pulses low while touched). **Was ESP32 EN until 2026-10-20** — EN moved to pin 37, because this line would otherwise reset the ESP32 on every touch |
-| 12 | GPIO18 / PWM0 | Spare — pass-through node | Was the backlight FET gate until 2026-10-19; the MHS35 display leaves this pin NC (not connected) |
-| 13 | GPIO27 | → ESP32 **IO0** (boot strap) | 1 kΩ series; ESP32 side 10 kΩ PU |
+| 10 | GPIO15 / RXD0 | `PI_GPIO15` | Pi UART RX ← ESP32 TXD0 via **R505 = 499 Ω** (§5). 115200 8N1 protocol + flashing |
+| 11 | GPIO17 | — **No Connect** | Display **TP_IRQ** (pass-through) — the touch display's interrupt to the Pi; Loki draws nothing on it. **Was ESP32 EN until 2026-10-20** — EN moved to pin 37, because this line would otherwise reset the ESP32 on every touch |
+| 12 | GPIO18 / PWM0 | — **No Connect** | Spare pass-through node. Was the backlight FET gate until 2026-10-19; the MHS35 display leaves this pin NC |
+| 13 | GPIO27 | `PI_GPIO27` | → ESP32 **IO0** boot strap (§5: R504 = 1 kΩ series; ESP32 side R503 = 10 kΩ pull-up) |
 | 14 | GND | GND | |
-| 15 | GPIO22 | ← ESP32 IO42 **attention IRQ** | ESP32 raises on BadUSB-done / RF event |
-| 16 | GPIO23 | FREE → expansion | |
-| 17 | 3V3 | NC | Not used (avoid back-powering Pi rail) |
-| 18 | GPIO24 | Display **DC** (pass-through) | The stacked MHS35's data/command select (LCD_RS on the MHS3528 pin table) |
-| 19 | GPIO10 / MOSI0 | SPI0 MOSI → touch display via pass-through header (+ expansion) | |
+| 15 | GPIO22 | `ESP_IRQ` | ← ESP32 IO42 **attention IRQ** (§5: R506 = 10 kΩ pull-up) — ESP32 raises it on BadUSB-done / RF events |
+| 16 | GPIO23 | — (to expansion) | FREE → expansion J6 (§12). No net name yet — §12 assigns it; do not invent one here |
+| 17 | 3V3 | — **No Connect** | Not used — never back-power the Pi's 3V3 rail (pin 1 feeds only the EEPROM) |
+| 18 | GPIO24 | — **No Connect** | Display **DC** (pass-through) — the stacked MHS35's data/command select |
+| 19 | GPIO10 / MOSI0 | — **No Connect** | Display SPI MOSI (pass-through from the Pi to the display; Loki does not tap SPI0) |
 | 20 | GND | GND | |
-| 21 | GPIO9 / MISO0 | SPI0 MISO ← touch display via pass-through header (+ expansion) | Carries the touch panel's data back to the Pi (TP_SO); the LCD itself is write-only |
-| 22 | GPIO25 | Display **RST** (pass-through) | The stacked MHS35's reset line, per the MHS3528 pin table |
-| 23 | GPIO11 / SCLK0 | SPI0 SCLK → touch display via pass-through header (+ expansion) | |
-| 24 | GPIO8 / CE0 | Display **LCD CS** (pass-through) | The same chip-select job the old J5 display had |
+| 21 | GPIO9 / MISO0 | — **No Connect** | Display SPI MISO (pass-through — carries the touch panel's data back to the Pi) |
+| 22 | GPIO25 | — **No Connect** | Display **RST** (pass-through), per the MHS3528 pin table |
+| 23 | GPIO11 / SCLK0 | — **No Connect** | Display SPI SCLK (pass-through) |
+| 24 | GPIO8 / CE0 | — **No Connect** | Display **LCD CS** (pass-through) |
 | 25 | GND | GND | |
-| 26 | GPIO7 / CE1 | Display **touch CS** (pass-through) | Was the display-module microSD CS until 2026-10-19 — that socket left with J5. Now the MHS35's touch-panel chip-select (TP_CS) |
-| 27 | GPIO0 / ID_SD | 24C32 SDA | HAT ID bus — nothing else, ever |
-| 28 | GPIO1 / ID_SC | 24C32 SCL | HAT ID bus |
-| 29 | GPIO5 | Spare — pass-through node | Was Button UP (shared net) until 2026-10-19 — buttons removed, touch is the input now. Not used by Loki |
+| 26 | GPIO7 / CE1 | — **No Connect** | Display **touch CS** (pass-through). Was the display-module microSD CS until 2026-10-19 — that socket left with J5 |
+| 27 | GPIO0 / ID_SD | `ID_SD` | 24C32 SDA (§11.3) — HAT ID bus: this net touches J1 and U9 pin 5 only, nothing else, ever. No pull-up on the HAT (the Pi provides it) |
+| 28 | GPIO1 / ID_SC | `ID_SC` | 24C32 SCL (§11.3) — as pin 27 |
+| 29 | GPIO5 | — **No Connect** | Spare pass-through node. Was Button UP until 2026-10-19 — buttons removed, touch is the input now |
 | 30 | GND | GND | |
-| 31 | GPIO6 | Spare — pass-through node | Was Button DOWN until 2026-10-19 — see pin 29 |
-| 32 | GPIO12 | FREE → expansion (PWM1 capable) | |
-| 33 | GPIO13 | Spare — pass-through node | Was Button LEFT until 2026-10-19 — see pin 29 |
+| 31 | GPIO6 | — **No Connect** | Spare pass-through node. Was Button DOWN until 2026-10-19 — see pin 29 |
+| 32 | GPIO12 | — (to expansion) | FREE → expansion J6 (§12), PWM1 capable. No net name yet — §12 assigns it |
+| 33 | GPIO13 | — **No Connect** | Spare pass-through node. Was Button LEFT until 2026-10-19 — see pin 29 |
 | 34 | GND | GND | |
-| 35 | GPIO19 | FREE → expansion | |
-| 36 | GPIO16 | FREE → expansion | |
-| 37 | GPIO26 | → ESP32 **EN** (reset) | **Moved here from pin 11 on 2026-10-20** — the touch display's TP_IRQ owns pin 11 now. Was Button RIGHT until 2026-10-19. 1 kΩ series; ESP32 side has 10 kΩ PU + 1 µF |
-| 38 | GPIO20 | FREE → expansion (default = expansion SPI CS) | |
+| 35 | GPIO19 | — (to expansion) | FREE → expansion J6 (§12). No net name yet — §12 assigns it |
+| 36 | GPIO16 | — (to expansion) | FREE → expansion J6 (§12). No net name yet — §12 assigns it |
+| 37 | GPIO26 | `ESP_EN` | → ESP32 **EN** reset (§5: R502 = 1 kΩ series; ESP32 side R501 = 10 kΩ pull-up + C503 = 1 µF). **Moved here from pin 11 on 2026-10-20** — the touch display's TP_IRQ owns pin 11 now. Was Button RIGHT until 2026-10-19 |
+| 38 | GPIO20 | — (to expansion) | FREE → expansion J6 (§12; default = expansion SPI CS). No net name yet — §12 assigns it |
 | 39 | GND | GND | |
-| 40 | GPIO21 | FREE → expansion | |
+| 40 | GPIO21 | — (to expansion) | FREE → expansion J6 (§12). No net name yet — §12 assigns it |
+
+*How to read the Net name column:* these are the **exact labels to type in EasyEDA, character for character** — they are the names already drawn and signed off on the §§1–10 pages (e.g. the ESP32's EN stub on §5 is `ESP_EN`, so J1 pin 37 lands on `ESP_EN`, not on a `PI_GPIO26` you might invent). "No Connect" pins get EasyEDA's X flag on the J1 symbol — Loki's circuitry touches nothing there, but the pins still physically pass through the stacking header to the display above. The expansion pins get wired J1 → J6 on the §12 page, which is where their net names will be assigned.
 
 **UART note (all three Pis):** use the PL011 (UART0) on GPIO14/15 — on the Zero 2 W that means the `dtoverlay=disable-bt` (or `miniuart-bt`) overlay so the PL011 isn't stolen by Bluetooth; on Pi 5, GPIO14/15 is UART0 by default and the dedicated debug header stays free. 115200 baud is the locked protocol rate; esptool flashing over the same wires can run faster after sync, but the protocol doesn't need it.
 
