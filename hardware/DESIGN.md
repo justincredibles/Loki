@@ -59,7 +59,7 @@
           GPIO5/6/13/26 ---------- spare (buttons removed 2026-10-19 — touch is the input now)
           GPIO12/16/19/20/21/23 -> expansion header (free IO)
 
-  +------------------------------- ESP32-S3-WROOM-1-N16R8 -------------------------------+
+  +------------------------------ ESP32-S3-WROOM-1U-N16R8 -------------------------------+
   |  UART0 IO43/44 <-> Pi          USB IO19/20 -> USB-C #2 (DATA: BadUSB HID + flashing)|
   |  SPI2 (IO11 MOSI / IO12 SCK / IO13 MISO) shared bus:                               |
   |     |- CC1101 module  CS IO10, GDO0 IO9, GDO2 IO17  -> U.FL -> SMA whip / spring   |
@@ -85,7 +85,7 @@
 
 | Part | Choice | Why |
 |---|---|---|
-| ESP32 coprocessor | **ESP32-S3-WROOM-1-N16R8** (Espressif module, 16 MB flash / 8 MB octal PSRAM, onboard PCB antenna) — LCSC **C2913202** ✅ (JLCPCB part listing) | Bruce's best-supported target class; DIY Bruce builds standardize on exactly this variant. PSRAM is required for Bruce's heavier features (JS interpreter, large capture buffers). Module (not bare chip) = no RF matching to design, pre-certified radio, castellated PCBA-friendly footprint. **Layout:** IO35/36/37 are consumed by the octal PSRAM and IO26–32 by flash — the pin map in §3.2 avoids all of them. Antenna end of the module overhangs the board edge with a full copper keep-out on all layers (Espressif hardware design guidelines). |
+| ESP32 coprocessor | **ESP32-S3-WROOM-1U-N16R8** (Espressif module, 16 MB flash / 8 MB octal PSRAM, **U.FL connector for an external antenna**) — LCSC **C3013946** ✅ (verified on LCSC 2026-10-22, $5.22; the C2913202 number in earlier drafts belongs to the ESP32-S3-MINI-1, not any WROOM) | Bruce's best-supported target class; PSRAM is required for Bruce's heavier features (JS interpreter, large capture buffers). Module (not bare chip) = no RF matching to design, pre-certified radio, castellated PCBA-friendly footprint. **Layout:** IO35/36/37 are consumed by the octal PSRAM and IO26–32 by flash — the pin map in §3.2 avoids all of them. Switched from the PCB-antenna WROOM-1 at Justin's decision (D12, 2026-10-22): the antenna is a case-mounted 2.4 GHz whip on a U.FL pigtail (same pattern as the CC1101 whip), the module is ~6 mm shorter (19.2 × 18 mm), and the module-antenna keep-out constraint disappears. |
 
 ### 2.2 Sub-GHz radio (CC1101)
 
@@ -156,7 +156,7 @@ Hirose DM3D-SF microSD slot (JLC C719027; push-pull, with card-detect switch —
 
 | Radio | Antenna | Placement rule |
 |---|---|---|
-| ESP32-S3 (BLE/WiFi) | Module PCB antenna | Board corner, keep-out all layers, away from Pi header |
+| ESP32-S3 (BLE/WiFi) | U.FL → case-mounted 2.4 GHz whip | Whip on the enclosure; in the stack, keep it away from the Pi's own antenna corner |
 | CC1101 | U.FL → SMA whip (or spring) | Opposite corner from ESP32; SMA on case edge |
 | nRF24 (SP4) | IPEX whip inside case / (S) PCB antenna | Away from ESP32 antenna (both live at 2.4 GHz) |
 | PN532 module (external) | J8 header (1×6) on the HAT | Builder-sourced module plugs into J8; antenna is on the module |
@@ -221,7 +221,7 @@ BCM numbering. "Free" = routed to the expansion header (§3.4).
 
 **Left free on the Pi:** GPIO12, 16, 19, 20, 21, 23 (all to expansion). Spare on Loki since the 2026-10-19 touch-display change: GPIO5, 6, 13 (were buttons) and GPIO18 (was the backlight FET gate; the display leaves it NC) — pass-through nodes Loki doesn't use. Two pins changed jobs instead of going spare: GPIO7 is now the display's touch chip-select, and GPIO17 is the display's touch interrupt — which is why ESP32 EN moved to GPIO26 (pin 37) on 2026-10-20.
 
-### 3.2 ESP32-S3-WROOM-1-N16R8 GPIO map
+### 3.2 ESP32-S3-WROOM-1U-N16R8 GPIO map
 
 Aligned with the pin conventions of existing DIY Bruce boards wherever Loki's scope allows (less fork work): shared SPI on IO11/12/13, PN532 on I2C, IR on IO1/IO2. (IO15/16/38/39 were the button inputs until 2026-10-19 — spare now; the touch display replaced the buttons.)
 
@@ -352,7 +352,7 @@ The slide switch gates converter EN pins only. VSYS (and therefore the gauge + c
 ## 6. Layout Constraints Checklist (for PCB phase)
 
 1. 4-layer stackup (JLC 4-layer is the price sweet spot): L1 signals/RF, L2 solid GND, L3 power, L4 signals.
-2. ESP32 antenna keep-out: no copper any layer under/past the module antenna; HAT must also not overhang the **Pi's** WiFi antenna zone (Pi antenna sits at the far end from the header on Zero 2 W; corner notch on Pi 4/5) — verify against each Pi's mechanical drawing at layout.
+2. ESP32 antenna: the 1U module has no PCB antenna, so there is no module keep-out (D12); its whip mounts on the case — keep the whip and coax clear of the Pi's WiFi antenna zone in the stack. The HAT must still not overhang the **Pi's** WiFi antenna zone (Pi antenna sits at the far end from the header on Zero 2 W; corner notch on Pi 4/5) — verify against each Pi's mechanical drawing at layout.
 3. TPS61088: copy TI's reference layout geometry for the SW-node loop; inductor + input caps within 5 mm; thermal vias under the pad.
 4. CC1101 / nRF24 modules at opposite board corners from the ESP32 antenna; U.FL connectors at the case edge; keep module RF pads clear of the stacking header's ground pins.
 5. J8 NFC header at a board edge; keep its I2C run short and clear of the boost SW node. (The on-board PN532 matching network was deleted 2026-10-18 — NFC is an external module; §7 D1 is superseded.)
@@ -379,12 +379,13 @@ Justin accepted every recommendation below as written on 2026-10-16; the Recomme
 | D9 | Charge rate | (a) bq24074 @ ~1.0–1.5 A (b) I2C charger (BQ25895 class) @ 3 A | **(a)** for v1 — zero firmware, honest charge times. (b) is a rev-2 upgrade if builders complain. |
 | D10 | ESP32 USB port usage | (a) BadUSB + flashing only (b) also expose USB-serial console for debugging | **(a)** — the Pi UART is the debug/console path; one personality on the port keeps the fork simple. (Revisit if standalone Bruce use grows.) The port itself moved onto the shared connector in D11; the (a) usage rule still applies to its data lines. |
 | D11 | One USB-C port or two | (a) two dedicated ports — charge-only + ESP32 data (b) one shared port for both | **(b) — decided by Justin 2026-10-22.** VBUS + CC serve charging, D+/D− serve the ESP32, all on the one connector (J2); the second connector (ex-J3) and its Rd pair are deleted. Saves a connector, two resistors, and an enclosure cutout. Trade-offs accepted: a BadUSB host becomes the charger (charging from a weak PC port runs slower under the charger's VIN-DPM); the ESP32 enumerates on any PC the device is plugged into for power; the data path is no longer electrically separate from the charging input. |
+| D12 | ESP32 antenna | (a) ESP32-S3-WROOM-1 with PCB antenna (b) ESP32-S3-WROOM-1U with U.FL + external antenna | **(b) — decided by Justin 2026-10-22.** Same module otherwise (N16R8: 16 MB flash / 8 MB PSRAM; LCSC C3013946 ✅), pin-compatible — no schematic change beyond the placed device. The antenna becomes a case-mounted 2.4 GHz whip on a U.FL pigtail, mirroring the CC1101 arrangement (D6): better range, one less board keep-out zone, and the module shrinks ~6 mm in length. |
 
 ---
 
 ## 8. Verification Status & Sources
 
-Verified live during research (Oct 2026): ESP32-S3-WROOM-1-N16R8 = LCSC C2913202 (JLCPCB listing, multiple projects); SY8089AAAC = C78988 Basic; HRO TYPE-C-31-M-12 = C165948; IP5306 = C181692 (considered, rejected on boost current); TF slots C91145/C112217; tact switches C11135/C318884; 0805 LEDs C84256/C19171391; JST B2B-PH-K-S = C131337. TPS61088 5 V/5 A-from-1S design point: Absurd Industries "Boosty" open design (TI datasheet topology). E07-900M10S / E07-400M10S / E01-ML01S / E01-ML01SP4: EBYTE official datasheets (LCSC hosts the E01/E07 family datasheets). Bruce PN532-over-I2C + shared-SPI + IO1/IO2 IR conventions: pr3y/Bruce supported-module list and multiple DIY Bruce board definitions (e.g. modabucksmain-pixel/bruce-diy-flipper pinout). bq24074 power-path/DPPM/4.4 V-class system rail behaviour: TI bq2407x datasheet (hosted at LCSC). MAX17048 ModelGauge + ALRT: Analog Devices datasheet.
+Verified live during research (Oct 2026): ESP32-S3-WROOM-1U-N16R8 = LCSC C3013946 (verified on LCSC 2026-10-22; the C2913202 figure in the original pass belongs to the ESP32-S3-MINI-1); SY8089AAAC = C78988 Basic; HRO TYPE-C-31-M-12 = C165948; IP5306 = C181692 (considered, rejected on boost current); TF slots C91145/C112217; tact switches C11135/C318884; 0805 LEDs C84256/C19171391; JST B2B-PH-K-S = C131337. TPS61088 5 V/5 A-from-1S design point: Absurd Industries "Boosty" open design (TI datasheet topology). E07-900M10S / E07-400M10S / E01-ML01S / E01-ML01SP4: EBYTE official datasheets (LCSC hosts the E01/E07 family datasheets). Bruce PN532-over-I2C + shared-SPI + IO1/IO2 IR conventions: pr3y/Bruce supported-module list and multiple DIY Bruce board definitions (e.g. modabucksmain-pixel/bruce-diy-flipper pinout). bq24074 power-path/DPPM/4.4 V-class system rail behaviour: TI bq2407x datasheet (hosted at LCSC). MAX17048 ModelGauge + ALRT: Analog Devices datasheet.
 
 **To confirm at BOM freeze (flagged ⚠️ in §2):** exact LCSC numbers for TPS61088RHLT, bq24074RGTR, MAX17048G+T10, E07-900M10S, E01-ML01SP4, TSOP38438, 940 nm SMD IR LED, 24C32 SOIC, 0805 blue LED. If MAX17048 is unstocked at order time, evaluate CW2015 (LCSC-native) — the Pi-side driver is ours either way.
 

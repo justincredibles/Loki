@@ -433,15 +433,15 @@ U4 = SY8089AAAC, SOT-23-5. **Confirmed: this variant is adjustable** (V_REF = 0.
 
 ---
 
-## 5. ESP32-S3 coprocessor — ESP32-S3-WROOM-1-N16R8 (U5) + USB
+## 5. ESP32-S3 coprocessor — ESP32-S3-WROOM-1U-N16R8 (U5) + USB
 
 **What this section does.** U5 is the second brain of Loki: the ESP32-S3 module that runs the radios (Bluetooth, sub-GHz, 2.4 GHz, NFC, IR) while the Pi runs the main show. This section wires its lifelines: power, the reset/boot-strap pins the Pi uses to control it, the UART (serial link) to the Pi, the attention-interrupt line back to the Pi, the native USB pins, and the fan-out of its GPIOs to the radios. Most rows in the table below are "this GPIO goes to that subsystem" — the actual parts for those subsystems live in their own sections (§6–§10); the only *components* in this section are the pull-ups, series resistors and capacitors around the module itself.
 
 **What you draw.** The U5 module symbol (Espressif's own KiCad library has it — see FOOTPRINTS.md); two power caps on its 3V3 pin; on EN: a pull-up, a 1 µF cap, and a 1 kΩ series resistor to a Pi header pin; the same pull-up + series pair on IO0; a 499 Ω series resistor on the UART TX line, a plain wire for RX; a pull-up on the IO42 attention line; 0 Ω series resistors on the two USB data lines (they run to U10 in §5.1); a two-resistor divider + cap for USB VBUS detection on IO21; and two 4.7 kΩ pull-ups for the ESP32's own I²C bus. Everything else is a wire from a module pad to another section's net.
 
-Sources: Espressif **ESP32-S3-WROOM-1 Datasheet v1.2** §3.2/§6 (cited "Module DS") and **ESP32-S3 Hardware Design Guidelines** (cited "HDG"). Module LCSC: see the EasyEDA note directly below — the C-number recorded in older project documents (C2913202) belongs to a different module. Connections are named by GPIO (module pads are labelled by GPIO); module pin numbers are given where verified.
+Sources: Espressif **ESP32-S3-WROOM-1U Datasheet** (the U variant's own document; its pin functions are identical to the WROOM-1's, cited "Module DS") and **ESP32-S3 Hardware Design Guidelines** (cited "HDG"). Connections are named by GPIO (module pads are labelled by GPIO); module pin numbers are given where verified.
 
-> **⚠️ EasyEDA note — three near-identical listings will try to trip you.** The **bare ESP32-S3 chip** (C2913192 — a QFN chip, not the module), the **ESP32-S3-MINI-1** module (a different, smaller module — the number C2913202 recorded in older project documents belongs to *this* one; do not use it), and the part you actually want: the **ESP32-S3-WROOM-1-N16R8**. Search the full name and confirm "WROOM-1", "16 MB flash" and "8 MB PSRAM" in the listing title before placing it.
+> **⚠️ EasyEDA note — the module is the U.FL variant now, and its LCSC number is verified.** U5 = **ESP32-S3-WROOM-1U-N16R8, LCSC C3013946 ✅** (verified on its LCSC product page 2026-10-22: $5.22, 19,173 in stock, module body 19.2 × 18 mm). The "U" is the whole point: no PCB antenna — a U.FL connector feeds an external antenna instead (decision D12, 2026-10-22). Traps in the picker: the plain **WROOM-1-N16R8** (PCB antenna — the pre-D12 part, no longer used), the other 1U memory variants (N16**R2** = only 2 MB PSRAM — not enough for Bruce; N8R8 = only 8 MB flash), the **MINI-1 / MINI-1U** modules (the C2913202 number in older project documents belongs to the MINI-1), and the **bare ESP32-S3 chip** (C2913192). Pick by C3013946, or by the full name with "WROOM-1U", "16 MB flash", "8 MB PSRAM" all confirmed.
 
 | Module pad | Connection | Notes / source |
 |---|---|---|
@@ -473,7 +473,7 @@ Sources: Espressif **ESP32-S3-WROOM-1 Datasheet v1.2** §3.2/§6 (cited "Module 
 - **IO21 VBUS detect:** the port's VBUS (`USB1_VBUS`) is 5 V — too much for a 3.3 V GPIO. The two equal 100 kΩ resistors (R509/R510) form a divider that halves it to ≈2.5 V: VBUS → R509 → IO21 → R510 → GND. C504 (0.1 µF) on the same pin just filters noise so the reading doesn't flicker.
 - **"Do not load" IO3:** IO3 is a strapping pin. It goes to a test pad only (TP section of the BOM) — a bare copper pad you can touch a probe to — and nothing else may hang on it, or the ESP32 may boot in the wrong mode. IO45/IO46 are also straps and stay fully unconnected; IO26–32 and IO33–37 don't exist as usable pads at all because they're wired inside the module to its flash memory and RAM.
 
-**Antenna placement (Module DS §3.1 keep-out zone; HDG module layout rules):** module antenna end overhangs the board edge or sits at the edge with the base board cut away beside/below it; **no copper on any layer** under the antenna zone; dense ground vias *near* (not under) the antenna; ≥ 15 mm clearance to housing walls in the end product. Also keep the whole module away from the Pi's own WiFi antenna corner on the board below (DESIGN.md §6.2). *(Layout instructions. The module's antenna is the exposed section at one end of the WROOM — that end hangs over the board edge, and the zone beneath it is a keep-out: no copper pours, no traces, no parts, on any layer.)*
+**Antenna (the 1U has no on-module antenna):** the module's U.FL connector feeds a **case-mounted 2.4 GHz whip via a short U.FL→SMA pigtail** — the same arrangement as the CC1101's whip (D6), and the reason the 1U was chosen (D12). Consequences that make layout *easier* than the old PCB-antenna module: there is **no antenna keep-out zone** — the module (19.2 × 18 mm, ~6 mm shorter than the WROOM-1) can sit fully on the board, no edge overhang, copper allowed anywhere around it. Layout notes that remain: keep the coax run short and don't kink it; mount the whip on the enclosure clear of the Pi's own WiFi antenna corner in the stack (DESIGN.md §6.2); the whip and pigtail are enclosure parts, not PCB BOM lines.
 
 ### 5.1 USB data on the shared port (J2) + ESD (U10)
 
@@ -786,7 +786,7 @@ BCM numbering. "Free" = routed to the expansion header (§3.4).
 
 **Left free on the Pi:** GPIO12, 16, 19, 20, 21, 23 (all to expansion). Spare on Loki since the 2026-10-19 touch-display change: GPIO5, 6, 13 (were buttons) and GPIO18 (was the backlight FET gate; the display leaves it NC) — pass-through nodes Loki doesn't use. Two pins changed jobs instead of going spare: GPIO7 is now the display's touch chip-select, and GPIO17 is the display's touch interrupt — which is why ESP32 EN moved to GPIO26 (pin 37) on 2026-10-20.
 
-### 3.2 ESP32-S3-WROOM-1-N16R8 GPIO map
+### 3.2 ESP32-S3-WROOM-1U-N16R8 GPIO map
 
 Aligned with the pin conventions of existing DIY Bruce boards wherever Loki's scope allows (less fork work): shared SPI on IO11/12/13, PN532 on I2C, IR on IO1/IO2. (IO15/16/38/39 were the button inputs until 2026-10-19 — spare now; the touch display replaced the buttons.)
 
@@ -865,7 +865,7 @@ Honest note for the build guide: this is **signal-compatible, not pin-compatible
 | U2 | 1 | MAX17048G+T10 fuel gauge | TDFN-8 | C2682616 (recorded — picker-confirm) |
 | U3 | 1 | TI TPS61088RHLT boost | VQFN-20 | **C87357 ✅** — TPS61088RHLR, verified on LCSC 2026-10-21 ($0.86, in stock); confirm the device footprint is TI's RHL land pattern when placing (see §3 note) |
 | U4 | 1 | SY8089AAAC buck | SOT-23-5 | C78988 (recorded — picker-confirm) |
-| U5 | 1 | ESP32-S3-WROOM-1-N16R8 module | SMD module | search the full name `ESP32-S3-WROOM-1-N16R8`; confirm "16 MB flash / 8 MB PSRAM" in the listing — ⚠️ do NOT use recorded C2913202 (that's the MINI-1 module); see §5 note |
+| U5 | 1 | ESP32-S3-WROOM-1U-N16R8 module (U.FL external antenna) | SMD module | **C3013946 ✅** verified on LCSC 2026-10-22 ($5.22, in stock); the "U" variant — do NOT substitute the plain WROOM-1 (PCB antenna) or any other memory variant; see §5 note |
 | U6 | 1 | EBYTE E07-900M10S CC1101 module (433 build: E07-400M10S) | Stamp-hole SMD | **Draw it** — not LCSC stock (see §6 note) |
 | U7 | 1 | EBYTE E01-ML01SP4 nRF24 PA module | Stamp-hole SMD | **Draw it** — not LCSC stock (see §7 note) |
 | U9 | 1 | 24C32 EEPROM | SOIC-8 | search `24C32` + SOIC-8 (AT24C32 / BL24C32 / M24C32 — any standard one) |
@@ -979,7 +979,7 @@ The short list of layout-critical items. (DESIGN.md §6 has the full checklist; 
 
 *What Part E is for: the audit trail. First, the list of official documents every value in Part A came from. Second — the important part — the numbered double-check list: everything that could NOT be fully confirmed from an official source, why, and what to do about it. Nothing on this list blocks drawing the schematic. Most items resolve at BOM freeze (when the exact parts are picked) or on the first prototype. Each item below keeps its original wording and gains a plain-English "what this means / what you do" note.*
 
-**Primary sources used for Part A values:** TI SLUS810N (bq24074); TI SLVSCM8D (TPS61088) + Absurd Industries "Boosty" repo BOM/design notes; Analog Devices MAX17048/49 datasheet doc. 19-6171 Rev 7; Silergy AN_SY8089/A Rev. 0.9A; Espressif ESP32-S3-WROOM-1 Datasheet v1.2 + ESP32-S3 Hardware Design Guidelines; EBYTE E07-900M10S User Manual v1.0; EBYTE E01-ML01SP4 Datasheet V1.0 + E01 User Manual; NXP AN1445 Rev. 1.2, PN532/C1 Data Sheet Rev. 3.6, UM0701-02, AN10609; Vishay Doc. 82491 (TSOP384xx) Rev. 1.0/1.6/2.1; Raspberry Pi HAT specification (EEPROM/ID bus).
+**Primary sources used for Part A values:** TI SLUS810N (bq24074); TI SLVSCM8D (TPS61088) + Absurd Industries "Boosty" repo BOM/design notes; Analog Devices MAX17048/49 datasheet doc. 19-6171 Rev 7; Silergy AN_SY8089/A Rev. 0.9A; Espressif ESP32-S3-WROOM-1U Datasheet + ESP32-S3 Hardware Design Guidelines; EBYTE E07-900M10S User Manual v1.0; EBYTE E01-ML01SP4 Datasheet V1.0 + E01 User Manual; NXP AN1445 Rev. 1.2, PN532/C1 Data Sheet Rev. 3.6, UM0701-02, AN10609; Vishay Doc. 82491 (TSOP384xx) Rev. 1.0/1.6/2.1; Raspberry Pi HAT specification (EEPROM/ID bus).
 
 **Values that could NOT be verified from a primary source (double-check list for Justin):**
 
