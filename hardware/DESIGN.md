@@ -376,6 +376,8 @@ The slide switch gates converter EN pins only. VSYS (and therefore the gauge + c
 
 Default clearance 0.2 mm; give the SW node extra room.
 
+*Tight-fit relief (2026-10-24): the widths above assume a cautious 10 °C rise. Where 2.0–2.5 mm will not fit, these are all legitimate: pour the same net on several layers and stitch with vias (capacities add — L3 is the designated power layer for exactly this); accept 1.5 mm for trunk runs (at a still-modest 20 °C rise, 1.5 mm on 1 oz carries ≈ 5.8 A — covers the §4.3 worst case); split a feed across parallel pins/traces (e.g. two ~1.2 mm runs to J1 pins 2 and 4); shorten the fat path by placement (drop shrinks with length even when heating doesn't); use 2–4 vias in parallel wherever power changes layers (one via ≈ 1–1.5 A). Heavier 2 oz copper exists at JLCPCB but etches coarser around the fine-pitch QFN pads — last resort, not first.*
+
 ---
 
 ## 7. Decisions (all resolved 2026-10-16)
