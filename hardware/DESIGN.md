@@ -360,6 +360,22 @@ The slide switch gates converter EN pins only. VSYS (and therefore the gauge + c
 7. Bottom-side parts limited to ≤ 1.2 mm height within the HAT-over-Pi keep-out zones; nothing under the Pi's SoC/RAM area taller than the standoff budget.
 8. microSD slot on the case edge (card must be insertable without opening the case — builders will swap payload cards constantly).
 
+**Trace widths (added 2026-10-23, for the EasyEDA PCB phase — 1 oz outer copper, IPC-2221 at ~10 °C rise; inner layers carry ~half, so big currents live on L1/L4 or in pours):**
+
+| Class | Nets | Width |
+|---|---|---|
+| Battery trunk / boost power loop | `VBAT_RAW`, `VBAT`, charger BAT/OUT connections, `VSYS` feed to U3, L1 loop | **Pour**, or 2.0–2.5 mm where a trace is unavoidable (worst-case cell draw ≈ 5.2 A, §4.3) |
+| Boost SW node | U3 SW pins → L1 → BOOT cap | 1.5–2.0 mm, shortest possible loop (TI reference geometry, §6.3) |
+| 5 V distribution | `5V_SYS` to J1 pins 2+4 and to F2/J6 | Pour (via-stitched at J1) or 1.5–2.0 mm |
+| USB input | `USB1_VBUS` J2 → U1 IN (≤ ~1.5 A) | 0.8–1.0 mm |
+| 3.3 V rail | `3V3` main runs 0.8–1.0 mm; branches to individual loads 0.5 mm; F2's fused output to J6 pin 1 (≤ 500 mA) 0.5 mm |
+| Signals | SPI / I²C / UART / GPIO / IRQ / LED runs | 0.2 mm default |
+| USB data pair | J2 D+/D− → U10 → ESP32 | 0.25 mm, routed as a pair, roughly equal length (full-speed USB is forgiving) |
+| RF feed | U6 ANT → R601 → J7 | ≈ 0.4 mm (≈ 50 Ω microstrip on the JLC 4-layer stackup), as short as physically possible, GND pour alongside on L1, solid L2 GND beneath, no vias |
+| Ground | — | L2 solid plane; connect with vias, never route GND as signal-layer traces |
+
+Default clearance 0.2 mm; give the SW node extra room.
+
 ---
 
 ## 7. Decisions (all resolved 2026-10-16)
