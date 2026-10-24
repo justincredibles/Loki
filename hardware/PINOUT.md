@@ -188,7 +188,7 @@ Most of Loki is ordinary LCSC parts with ready devices. Five are not — for the
 
 **Sink / source (current).** A pin **sinks** current when current flows *into* it toward ground (like a drain); it **sources** current when current flows *out of* it. "Abs-max sink 15 mA" means: never let more than 15 mA flow into that pin.
 
-**Solder jumper (SJ).** Two or three bare pads you bridge with a blob of solder to choose a setting — a zero-cost switch. SJ1 here selects whether the EEPROM is writable or locked.
+**Solder jumper (SJ).** Two or three bare pads you bridge with a blob of solder to choose a setting — a zero-cost switch. (Loki's one solder jumper, SJ1, was deleted 2026-10-24 — decision D14; the term stays in the glossary because the datasheets still use it.)
 
 **SPI.** A fast chip-to-chip bus: clock (SCK), data out (MOSI), data in (MISO), and one chip-select (CS) wire per device — the master (ESP32) selects one device at a time by pulling its CS low. The CC1101, nRF24 and microSD card all share one SPI bus here.
 
@@ -676,9 +676,9 @@ U9 = 24C32, SOIC-8 (LCSC ⚠️ generic, confirm at BOM freeze). Per the officia
 | 5 | SDA | Net `ID_SD` → Pi header pin 27 |
 | 6 | SCL | Net `ID_SC` → Pi header pin 28 |
 | 1, 2, 3 | A0, A1, A2 | All → GND → I²C address **0x50** |
-| 7 | WP | → **SJ1 solder jumper**: default position WP→GND (writable — factory flashes the ID blob, incl. the Pi 5 PSU-capability declaration, DESIGN.md §2.7/§5.3); alternate position WP→VCC (write-protected/locked after flashing) |
+| 7 | WP | → **GND, hardwired** — WP low = the EEPROM is always writable (factory flashes the ID blob, incl. the Pi 5 PSU-capability declaration, DESIGN.md §2.7/§5.3). The SJ1 solder jumper that originally selected writable-vs-locked was **deleted 2026-10-24 (decision D14)**: the lock position was a nice-to-have, nothing on Loki ever writes the EEPROM at runtime, and an always-writable EEPROM is also its own recovery path (a corrupted blob can simply be reflashed). Most hobby HATs hardwire WP low the same way |
 
-*Plain terms:* A0/A1/A2 are the chip's address-select pins — wiring all three to ground sets its I²C address to 0x50, the address the Pi expects a HAT EEPROM at. WP is the write-protect pin, and SJ1 is a solder jumper (three bare pads; a blob of solder connects the middle pad to one side or the other): bridged to GND = the EEPROM can be written (how it leaves the factory, so the ID data can be flashed in); bridged to VCC = locked forever against accidental writes. In KiCad, SJ1 is a solder-jumper symbol and the footprint is in FOOTPRINTS.md — draw WP → SJ1, and the jumper's two throws to GND and to the `3V3_ID` net (that's this chip's VCC). The "ID blob" is just the data block the Pi reads — including a declaration of how much power the HAT can supply a Pi 5, which is part of why this chip exists on Loki at all.
+*Plain terms:* A0/A1/A2 are the chip's address-select pins — wiring all three to ground sets its I²C address to 0x50, the address the Pi expects a HAT EEPROM at. WP is the write-protect pin: held low (GND), the chip accepts writes; held high, it's read-only. Loki simply ties WP to GND — it joins the same ground cluster as pins 1–4 on the schematic page — so the EEPROM can always be flashed and re-flashed. (Until 2026-10-24 there was a solder jumper, SJ1, to optionally lock it after flashing; it cost more layout pain than the lock was worth and was deleted — decision D14.) The "ID blob" is just the data block the Pi reads — including a declaration of how much power the HAT can supply a Pi 5, which is part of why this chip exists on Loki at all.
 
 **No pull-ups on the ID bus on the HAT** — the HAT specification puts the ID_SD/ID_SC pull-ups on the Pi side; adding our own would violate the spec's bus model. Nothing else may ever connect to ID_SD/ID_SC. **Placement:** bottom side (low profile, §2.11 plan). *(This is the one place in the design where the absence of pull-ups is itself a rule: the Pi provides them, and doubling up would break the HAT spec's electrical model. In the schematic: SDA and SCL go straight from J1 pins 27/28 to U9 pins 5/6, nothing else on those nets, ever.)*
 
@@ -740,7 +740,7 @@ BCM numbering. "Free" = routed to the expansion header (§3.4).
 
 | Pin | BCM | Net name on Loki (exact EasyEDA label) | Function / disposition |
 |---|---|---|---|
-| 1 | 3V3 (from Pi) | `3V3_ID` | **24C32 EEPROM VCC only** (U9 pin 8 + C1101 + SJ1's lock throw). Isolated net per HAT spec; does NOT power the board |
+| 1 | 3V3 (from Pi) | `3V3_ID` | **24C32 EEPROM VCC only** (U9 pin 8 + C1101 only). Isolated net per HAT spec; does NOT power the board |
 | 2 | 5V | `5V_SYS` | Power IN to the Pi from the TPS61088 boost (via F1, §13). Both 5 V pins used — Pi 5 current |
 | 3 | GPIO2 / SDA1 | `SDA` | I2C1 SDA → MAX17048 (§2, pull-ups R202/R203 there); also carried to expansion J6 (§12) |
 | 4 | 5V | `5V_SYS` | As pin 2 — wide pour, via-stitched to pin 2 at layout |
@@ -891,7 +891,7 @@ Honest note for the build guide: this is **signal-compatible, not pin-compatible
 | J8 | 1 | 1 × 6 2.54 mm pin header (NFC module, §8) | THT | search `1x6 2.54mm pin header` |
 | SD1 | 1 | microSD slot — Hirose DM3D-SF (push-pull, card-detect switch) | SMD | **C719027 ✅** (verified on JLCPCB 2026-10-21; Extended part, ~$1.16) |
 | SW1 | 1 | Slide switch G-Switch MK-12C02-G020 (power, EN-level current) | SMD right-angle | **C963206 ✅** verified on LCSC 2026-10-24 ($0.069, in stock) — SPDT, 1 A / 6 V; pins: 2 common → `PWR_EN`, 1 → `VSYS`, 3 → NC (see §3) |
-| SJ1 | 1 | Solder jumper (EEPROM WP select) | 0603 pads | no library part — pads drawn at PCB stage (geometry in FOOTPRINTS.md) |
+| SJ1 | — | **REMOVED 2026-10-24 (D14)** — was the EEPROM WP solder jumper; WP is hardwired to GND instead | — | — |
 | F1 | 1 | PPTC BSMD1812-300-16V, hold 3.0 A / trip ~6 A | 1812 | as drawn 2026-10-22 (Justin's placed device, 16 V) — 3 A-vs-5 A hold decision deferred to proto #1 |
 | F2 | 1 | PPTC hold 500 mA | 1206 | **C2984676 ✅** — DOWO 500mA/24V, verified on LCSC 2026-10-22 ($0.046, in stock): 500 mA hold / 1 A trip / 24 V max / 150 mΩ |
 | R101 | 1 | 890 Ω 1 % (ISET) | 0603 | Basic: search `0603 890R 1%` |
