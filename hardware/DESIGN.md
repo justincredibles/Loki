@@ -360,7 +360,7 @@ The slide switch gates converter EN pins only. VSYS (and therefore the gauge + c
 7. Bottom-side parts limited to ≤ 1.2 mm height within the HAT-over-Pi keep-out zones; nothing under the Pi's SoC/RAM area taller than the standoff budget.
 8. microSD slot on the case edge (card must be insertable without opening the case — builders will swap payload cards constantly).
 
-**Trace widths (added 2026-10-23, for the EasyEDA PCB phase — 1 oz outer copper, IPC-2221 at ~10 °C rise; inner layers carry ~half, so big currents live on L1/L4 or in pours):**
+**Trace widths (added 2026-10-23, for the EasyEDA PCB phase — 1 oz outer copper, IPC-2221 at ~10 °C rise; inner layers carry ~half, so big currents live on L1/L4 or in pours). These widths are for the *runs* — at fine-pitch power ICs (U1, U3, U4), neck down to pad width (~0.25–0.3 mm) for the last ~0.5 mm into each pad; a neck that short adds under a milliohm and is how every QFN power design lands. Set pour connections on power pads to solid (not thermal-relief spokes), and let the pour do the carrying from a millimetre out:**
 
 | Class | Nets | Width |
 |---|---|---|
