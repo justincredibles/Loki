@@ -28,11 +28,21 @@ CC1101 = CapProfile(
     name="cc1101",
     description="TI CC1101 sub-GHz (315/433/868/915 MHz) + ST25R3916 NFC",
     notes=[
-        # Verified from the CardputerZero org's SubG-Chat app:
-        "Cap power enable is CM0 GPIO26 (POWER_EN) — cap is dead until set.",
+        # Power is a TWO-STEP software gate (M5Stack official docs,
+        # proven on hardware 2026-11-17):
+        "1) EXT 5V rail ON: echo 1 > /sys/class/leds/ext_5v_out/brightness"
+        " (root; the rail is OFF by default and the cap is dead without it).",
+        "2) Cap power enable = CM0 GPIO26 (POWER_EN), held high.",
+        "Leave BOTH enables on while the cap is fitted — the cap shares"
+        " SPI0 with the LCD and cutting its power can freeze the display.",
+        # Confirmed on our hardware 2026-11-17 after enabling power:
+        "CC1101 answers on spidev0.1: PARTNUM 0x00, VERSION 0x14,"
+        " MARCSTATE 0x01 (idle) — a genuine, live chip.",
+        # From the official M5Stack docs (were TODO-VERIFY, now closed):
+        "GDO0 = GPIO14, RF_SW0 = GPIO15 (remux from UART to GPIO to use).",
+        "RF_SW1 is NOT a host pin: it is the CC1101's GDO2, set over SPI"
+        " via IOCFG2. Bands (SW0/SW1): 0/0=315, 0/1=433, 1/1=868/915 MHz.",
         "NFC chip select is a GPIO22 device-tree overlay (not kernel CS1).",
-        # TODO-VERIFY: GDO0 interrupt pin (evidence points at GPIO14/15)
-        # and one RF-switch control line are not yet confirmed on hardware.
     ],
 )
 
