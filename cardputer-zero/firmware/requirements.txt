@@ -1,0 +1,9 @@
+# lokicz runtime dependencies (install on the Cardputer Zero)
+# Framebuffer UI drawing
+Pillow>=10.0
+# Keyboard input (TCA8418 shows up as a standard evdev keyboard)
+evdev>=1.7
+# SPI access for the caps (CC1101 on /dev/spidev0.1)
+spidev>=3.6
+# GPIO (cap power enable, LoRa DIO1/BUSY lines)
+gpiozero>=2.0
