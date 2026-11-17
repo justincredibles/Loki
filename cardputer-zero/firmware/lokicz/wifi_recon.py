@@ -23,14 +23,29 @@ def list_access_points(interface: str = BUILTIN_INTERFACE) -> list[str]:
     """Managed-mode scan: SSIDs visible to `interface`. Works on the
     built-in radio. Returns raw scan lines for now.
 
+    An active scan needs CAP_NET_ADMIN, which a plain user lacks
+    (confirmed on hardware 2026-11-17: "Operation not permitted"), so
+    fall back to passwordless sudo where available, then to the
+    kernel's cached scan results (`scan dump`, unprivileged).
+
     TODO: parse into structured AP records (ssid, bssid, channel,
     signal, security) and feed the UI + web UI, Pwnagotchi-style.
     """
-    out = subprocess.run(
+    attempts = [
         ["iw", "dev", interface, "scan"],
-        capture_output=True, text=True, timeout=30,
-    )
-    return out.stdout.splitlines()
+        ["sudo", "-n", "iw", "dev", interface, "scan"],
+        ["iw", "dev", interface, "scan", "dump"],
+    ]
+    for cmd in attempts:
+        try:
+            out = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=30,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        if out.returncode == 0 and "BSS " in out.stdout:
+            return out.stdout.splitlines()
+    return []
 
 
 def capture_available(capture_interface: str | None) -> bool:

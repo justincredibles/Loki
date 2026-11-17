@@ -24,9 +24,23 @@ def show_text(lines: list[str]) -> None:
     for line in lines:
         draw.text((8, y), line, fill="white")
         y += 18
-    # The framebuffer expects raw RGB565 pixels on this panel.
+    # The framebuffer expects raw RGB565 pixels on this panel. Pack them
+    # by hand: Pillow's "BGR;16" raw encoder is missing from some builds
+    # (confirmed on the Zero's stock image, 2026-11-17).
     with open(FB_DEVICE, "wb") as fb:
-        fb.write(img.convert("RGB").tobytes("raw", "BGR;16"))
+        fb.write(_to_rgb565(img))
+
+
+def _to_rgb565(img) -> bytes:
+    """Pack an RGB Pillow image into little-endian RGB565 bytes."""
+    data = img.convert("RGB").tobytes()
+    out = bytearray(SCREEN_W * SCREEN_H * 2)
+    for i in range(SCREEN_W * SCREEN_H):
+        r, g, b = data[3 * i], data[3 * i + 1], data[3 * i + 2]
+        v = ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)
+        out[2 * i] = v & 0xFF
+        out[2 * i + 1] = v >> 8
+    return bytes(out)
 
 
 def read_key() -> str | None:
