@@ -157,19 +157,17 @@ def _award(action: str, result) -> None:
         return
     if not (news.get("level_up") or news.get("achievements")):
         return
-    rows = []
-    if news.get("level_up"):
-        from . import avatar
+    from . import avatar
 
-        rows.append(("big", f"LEVEL {news['level_up']}!", "gold"))
-        rows.append(("kv", "NEW TITLE",
-                     avatar.TITLES[min(news["level_up"], 10) - 1]
-                     .upper(), "gold"))
+    lines = []
+    if news.get("level_up"):
+        lines.append(f"LEVEL {news['level_up']}!")
+        lines.append(avatar.TITLES[min(news["level_up"], 10) - 1]
+                     .upper())
     for name in news.get("achievements", []):
-        rows.append(("kv", "ACHIEVEMENT", name.upper(), "cyan"))
-    rows.append(("kv", "XP GAINED", f"+{news['xp_gained']}", "text"))
-    ui.show_screen("LOKI", rows, right="")
-    ui.read_key()
+        lines.append(f"★ {name.upper()}")
+    lines.append(f"XP +{news['xp_gained']}")
+    ui.celebrate(lines[:6])
 
 
 def _loki_rows() -> list:
@@ -220,7 +218,7 @@ def run() -> int:
                 HOME_ITEMS[home_idx][0], st["level"], st["title"],
                 st["frac"],
                 f"XP {st['xp']} · NEXT {st['needed'] - st['into']}",
-                saying, st["equipped"])
+                saying, st["equipped"], saying_fn=avatar.saying)
             if key in ("4", "8"):
                 home_idx = (home_idx
                             + (1 if key == "8" else -1)) \

@@ -101,9 +101,17 @@ The avatar screen IS the home screen, 320×170:
   (device-local, never the repo): xp, level, counters per action,
   achievements unlocked, equipped gear. `award(event, n)` called by
   app + web actions at the same points stats are reported.
-- Renderer: PIL layers on the LCD (helm mark is the base; face,
-  armor, cape, gem drawn as themed vector shapes); the portal gets
-  the same character as a rendered PNG + a wardrobe panel
-  (equip unlocked gear) + achievements grid + XP progress bar.
+- Renderer: cartoon sprite art (`lokicz/sprites/` — a smug idle
+  sprite and an arms-up celebration sprite, generated 2026-11-17
+  in the Bjorn/SquachWatch mascot style Justin picked) composited
+  by `ui.draw_loki`; the armor tier tints an aura disc behind him
+  and the wardrobe names the rest until per-tier sprite art
+  exists. The home screen animates him (gentle bob, sayings
+  rotate on a timer); level-ups and achievements cut to the
+  celebration sprite on the LCD and flash it in the portal. The
+  original flat-shape renderer remains as the fallback when the
+  sprite files are absent. The portal gets the same character as
+  a rendered PNG + a wardrobe panel (equip unlocked gear) +
+  achievements grid + XP progress bar.
 - LCD: a LOKI character screen (portrait, level + title, XP bar,
   newest achievement).

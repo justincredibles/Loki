@@ -405,8 +405,13 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/avatar.png":
             from . import avatar, ui
 
+            qs = urllib.parse.parse_qs(
+                urllib.parse.urlparse(self.path).query)
+            mood = qs.get("mood", ["idle"])[0]
             self._send(200, ui.render_avatar_png(
-                avatar.load()["gear"]), "image/png")
+                avatar.load()["gear"],
+                mood=mood if mood == "excited" else "idle"),
+                "image/png")
         else:
             self._json(404, {"error": "not found"})
 

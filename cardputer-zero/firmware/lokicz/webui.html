@@ -311,8 +311,11 @@ async function run(action, secsId) {
           (j.avatar.level_up ? ` — LEVEL ${j.avatar.level_up}!` : "") +
           (j.avatar.achievements && j.avatar.achievements.length
             ? ` — ACHIEVEMENT: ${j.avatar.achievements.join(", ")}` : "");
-        document.getElementById("av-img").src =
-          "/api/avatar.png?t=" + Date.now();
+        const avImg = document.getElementById("av-img");
+        avImg.src = "/api/avatar.png?mood=excited&t=" + Date.now();
+        setTimeout(() => {
+          avImg.src = "/api/avatar.png?t=" + Date.now();
+        }, 3500);
       }
       refreshStatus(); loadAudits(); loadCaptures(); loadTrackers(); loadAvatar(); loadFiles();
     }

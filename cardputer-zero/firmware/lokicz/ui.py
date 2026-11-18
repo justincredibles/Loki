@@ -15,6 +15,7 @@ fallback.
 
 import threading
 import time
+from pathlib import Path
 
 FB_DEVICE = "/dev/fb_lcd"
 SCREEN_W, SCREEN_H = 320, 170
@@ -391,16 +392,63 @@ _SKIN = (240, 194, 151)
 _HAIR = (16, 22, 18)
 
 
-def draw_loki(img, draw, box, gear: dict) -> None:
+# --- Cartoon sprites (generated art; the shape renderer below is
+# the fallback when the sprite files are missing) -------------------
+_SPRITES: dict = {}
+_SPRITE_DIR = Path(__file__).with_name("sprites")
+# Armor tiers read as a glow disc behind the sprite: the wardrobe
+# still shows on the character even though the art is one drawing.
+_AURA = {"street": None, "leather": (146, 102, 52),
+         "chain": (168, 178, 188), "plate": (46, 204, 130),
+         "royal": (244, 200, 84)}
+
+
+def _sprite(name: str):
+    """Load (and cache) a character sprite PNG, or None."""
+    if name not in _SPRITES:
+        try:
+            from PIL import Image
+
+            _SPRITES[name] = Image.open(
+                _SPRITE_DIR / f"{name}.png").convert("RGBA")
+        except Exception:
+            _SPRITES[name] = None
+    return _SPRITES[name]
+
+
+def draw_loki(img, draw, box, gear: dict, mood: str = "idle",
+              bob: int = 0) -> None:
     """The little Loki, wearing `gear`, drawn into box=(x, y, w, h).
 
-    Layered flat shapes: cape behind, armor torso, skin head with
-    slicked black hair, a mischief smirk, and the shaded helm
-    patch on top — horn variants extend or crown it, the chest
-    gem and scepter sit on the armor.
+    Prefers the cartoon sprites (sprites/base.png, or excited.png
+    when `mood` says so) over a tier-tinted aura disc; `bob` shifts
+    him a pixel or two for the idle animation. Falls back to the
+    layered flat-shape renderer when no sprite file is present.
     """
     x0, y0, w, h = box
     cx = x0 + w // 2
+    spr = _sprite("excited" if mood == "excited" else "base")
+    if spr is not None:
+        aura = _AURA.get(gear.get("armor", "street"))
+        if aura:
+            r = min(w, h) // 2 - 1
+            dim = tuple(int(c * 0.30) for c in aura)
+            draw.ellipse([cx - r, y0 + h - 2 * r - 2 + bob,
+                          cx + r, y0 + h - 2 + bob], fill=dim,
+                         outline=aura)
+        scale = min(w / spr.width, h / spr.height)
+        sw = max(1, int(spr.width * scale))
+        sh = max(1, int(spr.height * scale))
+        key = (mood, sw, sh)
+        frame = _SPRITES.get(key)
+        if frame is None:
+            from PIL import Image
+
+            frame = spr if (sw, sh) == spr.size else spr.resize(
+                (sw, sh), Image.LANCZOS)
+            _SPRITES[key] = frame
+        img.paste(frame, (cx - sw // 2, y0 + h - sh + bob), frame)
+        return
     main, trim = _ARMOR.get(gear.get("armor", "street"),
                             _ARMOR["street"])
     dark = tuple(max(0, c - 18) for c in main)
@@ -525,16 +573,16 @@ def _wrap(text: str, width: int) -> list[str]:
     return lines
 
 
-def home_screen(item_label: str, level: int, title: str,
-                frac: float, xp_text: str, saying_text: str,
-                equipped: dict) -> str:
-    """Justin's home layout: avatar left, LV box + XP bar top
-    right, rotating sayings, and the PREV / item / NEXT carousel
-    over keys 4 / 6 / 8. Returns the key pressed."""
+def _home_img(item_label: str, level: int, title: str,
+              frac: float, xp_text: str, saying_text: str,
+              equipped: dict, bob: int = 0):
+    """One frame of Justin's home layout: avatar left, LV box +
+    XP bar top right, a saying, and the PREV / item / NEXT
+    carousel over keys 4 / 6 / 8."""
     img, draw = _base()
     _frame(draw, "LOKI", right=title.upper())
     draw.rectangle([6, 36, 112, 138], outline=FRAME, fill=PANEL)
-    draw_loki(img, draw, (8, 38, 102, 98), equipped)
+    draw_loki(img, draw, (8, 38, 102, 98), equipped, bob=bob)
     draw.rectangle([120, 36, 162, 74], outline=GOLD_DARK, fill=PANEL)
     f_lv = _font("mono", 8)
     lv = "LEVEL"
@@ -567,12 +615,54 @@ def home_screen(item_label: str, level: int, title: str,
     f_key = _font("mono", 8)
     for label, kx in (("KEY 4", 10), ("KEY 6", 148), ("KEY 8", 286)):
         draw.text((kx, 158), label, font=f_key, fill=GOLD_DARK)
+    return img
+
+
+def home_screen(item_label: str, level: int, title: str,
+                frac: float, xp_text: str, saying_text: str,
+                equipped: dict, saying_fn=None) -> str:
+    """The home screen, alive: Loki bobs gently while he waits,
+    and his saying rotates every few seconds (via `saying_fn`
+    when given). Returns the key pressed."""
+    bobs = (0, 1, 2, 1)
+    frame = 0
+    saying = saying_text
+    while True:
+        _push(_home_img(item_label, level, title, frac, xp_text,
+                        saying, equipped, bob=bobs[frame % 4]))
+        key = read_key_timeout(0.85)
+        if key is not None:
+            return key
+        frame += 1
+        if saying_fn is not None and frame % 5 == 0:
+            try:
+                saying = saying_fn()
+            except Exception:
+                pass
+
+
+def celebrate(lines: list[str]) -> None:
+    """Level-up / achievement cut-in: the excited sprite, big,
+    next to the news. Waits for any key."""
+    img, draw = _base()
+    _frame(draw, "LOKI", right="")
+    draw.rectangle([6, 36, 128, 164], outline=GOLD_DARK, fill=PANEL)
+    draw_loki(img, draw, (8, 38, 118, 124), {}, mood="excited")
+    f_big = _font("mono-bold", 15)
+    f_txt = _font("mono", 11)
+    y = 52
+    for i, line in enumerate(lines[:6]):
+        draw.text((140, y), line, font=f_big if i == 0 else f_txt,
+                  fill=GOLD_HI if i == 0 else TEXT)
+        y += 22 if i == 0 else 17
+    draw.text((140, 152), "ANY KEY", font=_font("mono", 8),
+              fill=GOLD_DARK)
     _push(img)
-    return read_key()
+    read_key()
 
 
 def render_avatar_png(equipped: dict, w: int = 240,
-                      h: int = 300) -> bytes:
+                      h: int = 300, mood: str = "idle") -> bytes:
     """The portrait as a PNG (portal wardrobe preview)."""
     import io
 
@@ -581,7 +671,8 @@ def render_avatar_png(equipped: dict, w: int = 240,
     img = Image.new("RGB", (w, h), BG)
     draw = ImageDraw.Draw(img)
     draw.rectangle([4, 4, w - 5, h - 5], outline=FRAME)
-    draw_loki(img, draw, (14, 12, w - 28, h - 24), equipped)
+    draw_loki(img, draw, (14, 12, w - 28, h - 24), equipped,
+              mood=mood)
     buf = io.BytesIO()
     img.save(buf, "PNG")
     return buf.getvalue()
@@ -692,6 +783,21 @@ def _open_keyboard():
     return _keyboard
 
 
+def _key_name(code) -> str:
+    """Map an evdev key code to read_key()'s simple name."""
+    import evdev
+
+    name = evdev.ecodes.KEY[code]
+    if isinstance(name, list):
+        name = name[0]
+    simple = name.removeprefix("KEY_")
+    if len(simple) == 1:
+        return simple.lower()
+    return {"ENTER": "enter", "ESC": "esc", "SPACE": "space",
+            "UP": "up", "DOWN": "down", "LEFT": "left",
+            "RIGHT": "right"}.get(simple, name)
+
+
 def read_key() -> str | None:
     """Block until a key is pressed; return its simple name.
 
@@ -706,13 +812,29 @@ def read_key() -> str | None:
     for event in dev.read_loop():
         if event.type != evdev.ecodes.EV_KEY or event.value != 1:
             continue  # only key-down events count
-        name = evdev.ecodes.KEY[event.code]
-        if isinstance(name, list):
-            name = name[0]
-        simple = name.removeprefix("KEY_")
-        if len(simple) == 1:
-            return simple.lower()
-        return {"ENTER": "enter", "ESC": "esc", "SPACE": "space",
-                "UP": "up", "DOWN": "down", "LEFT": "left",
-                "RIGHT": "right"}.get(simple, name)
+        return _key_name(event.code)
     return None
+
+
+def read_key_timeout(timeout: float) -> str | None:
+    """Like read_key(), but returns None after `timeout` seconds —
+    the home screen's animation loop lives on this."""
+    import select
+
+    import evdev
+
+    dev = _open_keyboard()
+    deadline = time.time() + timeout
+    while True:
+        left = deadline - time.time()
+        if left <= 0:
+            return None
+        ready, _, _ = select.select([dev.fd], [], [], left)
+        if not ready:
+            return None
+        event = dev.read_one()
+        if event is None:
+            continue
+        if event.type != evdev.ecodes.EV_KEY or event.value != 1:
+            continue
+        return _key_name(event.code)
