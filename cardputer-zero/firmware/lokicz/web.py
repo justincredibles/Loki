@@ -167,6 +167,15 @@ def _act_audit(cfg, _seconds):
     return fn
 
 
+def _act_gps(cfg, _seconds):
+    def fn(job):
+        from . import gpslog
+
+        job["message"] = "recording GPS track (2 min)..."
+        return gpslog.track(120)
+    return fn
+
+
 def _act_watchdog(cfg, _seconds):
     def fn(job):
         from . import watchdog
@@ -218,7 +227,8 @@ ACTIONS = {"capture": _act_capture, "wardrive": _act_wardrive,
            "proximity": _act_proximity,
            "trackers": _act_trackers,
            "probes": _act_probes,
-           "watchdog": _act_watchdog}
+           "watchdog": _act_watchdog,
+           "gps": _act_gps}
 
 DEFAULT_SECONDS = {"capture": "capture_seconds",
                    "wardrive": "wardrive_seconds",
@@ -268,6 +278,10 @@ class Handler(BaseHTTPRequestHandler):
             from . import watchdog
 
             self._json(200, watchdog.latest_state())
+        elif path == "/api/tracks":
+            from . import gpslog
+
+            self._json(200, gpslog.list_tracks())
         elif path == "/icon.png" and ICON_FILE.exists():
             self._send(200, ICON_FILE.read_bytes(), "image/png")
         elif path == "/api/status":

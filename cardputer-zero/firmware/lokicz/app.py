@@ -29,7 +29,8 @@ def _chips(cfg: dict, page: int) -> list:
     if page == 2:
         return [("1", "WPA-SEC"), ("2", "LAST AUDIT"),
                 ("3", "STOP"), ("4", "FLIGHTS"), ("5", "RADAR"),
-                ("6", "TRACKER"), ("7", "PROBES"), ("9", "◂ BACK")]
+                ("6", "TRACKER"), ("7", "PROBES"), ("8", "GPS LOG"),
+                ("9", "◂ BACK")]
     cap_tone = "text" if cfg.get("capture_enabled", True) else "off"
     return [("1", "STATUS"), ("2", "CAPTURE", cap_tone),
             ("3", "SUB-GHZ"), ("4", "WARDRIVE"), ("5", "SNIFF"),
@@ -274,6 +275,25 @@ def run() -> int:
                          (r["top_ssids"][0]["ssid"][:16]
                           if r["top_ssids"] else "—"), "gold")]
                 title = "PROBES"
+            elif key == "8":
+                from . import gpslog
+
+                with ui.Spinner("GPS TRACK",
+                                "recording 2 min of sky...",
+                                expected=120):
+                    r = gpslog.track(120)
+                if r["fix"]:
+                    rows = [("big", f"{r['points']} POINTS", "gold"),
+                            ("kv", "DISTANCE",
+                             f"{r['distance_m']} M", "text"),
+                            ("kv", "SATELLITES",
+                             str(r["max_sats"]), "text"),
+                            ("kv", "FILE", r["file"][:24], "dim")]
+                else:
+                    rows = [("big", "NO FIX", "warn"),
+                            ("text", "no position in 2 min", "text"),
+                            ("text", "GPS needs open sky", "dim")]
+                title = "GPS TRACK"
             elif key == "9":
                 page = 1
                 rows = _status_rows(cfg)

@@ -149,6 +149,11 @@
       <button onclick="run('proximity')">SCAN 25s</button>
     </div>
     <div class="act">
+      <h3>◈ GPS TRACK</h3>
+      <p>Record a 2-minute GPX track from the LoRa cap's GPS. Needs open sky for a fix.</p>
+      <button onclick="run('gps')">RECORD 2 MIN</button>
+    </div>
+    <div class="act">
       <h3>◈ AUDIT WATCHDOG</h3>
       <p>Full audit, diffed against the last one: new devices, new ports, new CVEs. Also runs nightly at ~03:30 on a timer.</p>
       <button onclick="run('watchdog')">RUN WATCHDOG</button>
@@ -190,6 +195,9 @@
 
   <h2>WATCHDOG — LAST DIFF</h2>
   <div id="watchdog"><span class="dim">loading…</span></div>
+
+  <h2>GPS TRACKS</h2>
+  <div id="tracks"><span class="dim">loading…</span></div>
 
   <h2>AUDIT REPORTS</h2>
   <div id="audits"><span class="dim">loading…</span></div>
@@ -428,7 +436,15 @@ async function loadWatchdog() {
     `<span class="ok">${c.fixed_cves} fixed</span></div>` + hosts + cves;
 }
 
-refreshStatus(); loadAudits(); loadCaptures(); loadFlights(); loadTrackers(); loadWatchdog();
+async function loadTracks() {
+  const list = await api("/api/tracks");
+  if (!list.length) { $("tracks").innerHTML = `<span class="dim">no tracks recorded yet</span>`; return; }
+  $("tracks").innerHTML = `<table><tr><th>WHEN</th><th>POINTS</th><th>DISTANCE</th><th>FIX</th><th>FILE</th></tr>` +
+    list.map(t => `<tr><td>${esc(t.when)}</td><td>${t.points}</td><td>${t.distance_m} m</td>` +
+      `<td class="${t.fix ? "ok" : "warn"}">${t.fix ? "yes" : "NO FIX"}</td><td class="dim">${esc(t.file)}</td></tr>`).join("") + `</table>`;
+}
+
+refreshStatus(); loadAudits(); loadCaptures(); loadFlights(); loadTrackers(); loadWatchdog(); loadTracks();
 setInterval(refreshStatus, 10000);
 setInterval(loadFlights, 60000);
 </script>
