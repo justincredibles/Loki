@@ -36,6 +36,12 @@ DEFAULTS = {
     # that to 50 per 30 s.
     "audit_subnet": "",
     "nvd_api_key": "",
+    # Flight radar home point. Deliberately null here: real
+    # coordinates belong ONLY in the device's local config file,
+    # never in this (public) repo.
+    "home_lat": None,
+    "home_lon": None,
+    "flight_radius_nm": 30,
 }
 
 
