@@ -316,8 +316,10 @@ def run() -> int:
                         frows.append(("kv", a["callsign"][:9],
                                       f"{a['dist_nm']}NM {alt}",
                                       "text"))
-                    ui.radar_screen("FLIGHT RADAR", blips, frows,
-                                    right="ADS-B")
+                    ui.radar_screen(
+                        "FLIGHT RADAR", blips, frows,
+                        right="ADS-B "
+                        + r["center"]["source"].upper())
                     rows = frows
                 else:
                     rows = [("text", "FLIGHT RADAR OFFLINE", "bad"),

@@ -94,6 +94,18 @@
            padding: 18px; }
   pre { white-space: pre-wrap; word-break: break-word; font-size: 12px;
         color: var(--dim); }
+  #flightmap { height: 340px; border: 1px solid var(--frame);
+               background: #06130a; margin-bottom: 10px; }
+  .plane-icon { background: transparent; border: none; }
+  .plane-icon svg { display: block; filter: drop-shadow(0 0 3px #000); }
+  .me-dot { width: 14px; height: 14px; border-radius: 50%;
+            background: var(--gold); border: 2px solid #fff2cf;
+            box-shadow: 0 0 10px var(--gold); }
+  .leaflet-container { font: inherit; }
+  .leaflet-popup-content-wrapper { background: #0a2413;
+    color: var(--text); border: 1px solid var(--gold); border-radius: 4px; }
+  .leaflet-popup-tip { background: #0a2413; }
+  .leaflet-popup-content { font-size: 12px; line-height: 1.5; }
 </style>
 </head>
 <body>
@@ -200,6 +212,7 @@
   </div>
 
   <h2>AIR TRAFFIC — FLIGHT RADAR</h2>
+  <div id="flightmap"></div>
   <div id="flights"><span class="dim">loading…</span></div>
 
   <h2>PROXIMITY RADAR</h2>
@@ -404,18 +417,84 @@ async function loadCaptures() {
   $("captures").innerHTML = files + `<h3 class="gold">CRACKED BY WPA-SEC</h3>` + cracked;
 }
 
+let _leafletP = null, _fmap = null, _fmapLayers = null, _fmapMe = null;
+
+function loadLeaflet() {
+  if (!_leafletP) {
+    _leafletP = new Promise((resolve, reject) => {
+      const css = document.createElement("link");
+      css.rel = "stylesheet";
+      css.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+      document.head.appendChild(css);
+      const js = document.createElement("script");
+      js.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+      js.onload = () => resolve(window.L);
+      js.onerror = reject;
+      document.head.appendChild(js);
+    });
+  }
+  return _leafletP;
+}
+
+const PLANE_SVG = t => `<svg width="26" height="26" viewBox="0 0 24 24" ` +
+  `style="transform: rotate(${t || 0}deg)">` +
+  `<path d="M12 2 L15 10 L21 15 L21 17.5 L15 15.5 L15 20 L17 22 L17 23 ` +
+  `L12 22.4 L7 23 L7 22 L9 20 L9 15.5 L3 17.5 L3 15 L9 10 Z" ` +
+  `fill="#ffd257" stroke="#0a2413" stroke-width="0.8"/></svg>`;
+
+async function renderFlightMap(r) {
+  let L;
+  try { L = await loadLeaflet(); } catch { return; }
+  const c = r.center;
+  if (!_fmap) {
+    _fmap = L.map("flightmap", { attributionControl: true });
+    L.tileLayer(
+      "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+      { maxZoom: 18,
+        attribution: "© OpenStreetMap contributors © CARTO" })
+      .addTo(_fmap);
+    _fmapLayers = L.layerGroup().addTo(_fmap);
+    _fmap.setView([c.lat, c.lon], 9);
+  }
+  _fmapLayers.clearLayers();
+  L.circle([c.lat, c.lon], { radius: r.radius_nm * 1852,
+    color: "#e8b33c", weight: 1, dashArray: "5 6", fill: false })
+    .addTo(_fmapLayers);
+  if (_fmapMe) _fmapMe.remove();
+  _fmapMe = L.marker([c.lat, c.lon],
+    { icon: L.divIcon({ className: "", html: `<div class="me-dot"></div>`,
+                       iconSize: [14, 14], iconAnchor: [7, 7] }) })
+    .addTo(_fmap)
+    .bindPopup(c.source === "gps"
+      ? `You — GPS fix (${c.sats ?? "?"} sats)`
+      : "You — configured home point");
+  for (const a of r.aircraft) {
+    const m = L.marker([a.lat, a.lon], { icon: L.divIcon({
+        className: "plane-icon", html: PLANE_SVG(a.track),
+        iconSize: [26, 26], iconAnchor: [13, 13] }) })
+      .addTo(_fmapLayers);
+    m.bindPopup(`<b>${esc(a.callsign)}</b> ${esc(a.type)}<br>` +
+      `${a.on_ground ? "on ground" : a.alt_ft + " ft"} · ` +
+      `${a.speed_kt ?? "—"} kt · track ${a.track ?? "—"}°<br>` +
+      `${a.dist_nm} nm @ ${a.bearing}° from you`);
+  }
+}
+
 async function loadFlights() {
   const r = await api("/api/flights");
   if (!r.ok) {
     $("flights").innerHTML = `<span class="dim">unavailable — ${esc(r.reason)}</span>`;
     return;
   }
+  renderFlightMap(r);
+  const src = r.center.source === "gps"
+    ? `GPS fix (${r.center.sats ?? "?"} sats)` : "home";
   if (!r.aircraft.length) {
-    $("flights").innerHTML = `<span class="dim">clear skies — nothing within ${r.radius_nm} nm</span>`;
+    $("flights").innerHTML = `<span class="dim">clear skies — nothing within ${r.radius_nm} nm of ${src}</span>`;
     return;
   }
   $("flights").innerHTML =
-    `<div class="dim" style="margin-bottom:6px">${r.total} aircraft within ${r.radius_nm} nm of home</div>` +
+    `<div class="dim" style="margin-bottom:6px">${r.total} aircraft within ${r.radius_nm} nm of ${src}</div>` +
     `<table><tr><th>CALLSIGN</th><th>TYPE</th><th>ALT</th><th>SPD</th><th>DIST</th><th>BRG</th></tr>` +
     r.aircraft.map(a => `<tr><td class="gold">${esc(a.callsign)}</td>` +
       `<td>${esc(a.type)}</td>` +

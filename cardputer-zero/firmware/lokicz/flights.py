@@ -3,14 +3,16 @@
 Two ways exist to track aircraft: receive their ADS-B broadcasts
 yourself (1090 MHz — needs an RTL-SDR; neither cap tunes up there),
 or ask the network that already does. This module does the second:
-it polls the free adsb.lol feed for traffic around a home point
+it polls the free adsb.lol feed for traffic around where you are
 and reduces it to what a radar screen wants — callsign, altitude,
-speed, distance and bearing from home, nearest first.
+speed, distance and bearing from you, nearest first.
 
-Home coordinates live ONLY in the device's local config
-(home_lat / home_lon) — never in this repo. With a GPS fix the
-LoRa cap could supply them instead; until then, unset home means
-the feature politely refuses.
+Where "you" are is resolved GPS-first: when the LoRa cap is the
+fitted profile, its GPS supplies the position (a shared NMEA
+reader, so the port isn't reopened per call). Without a fix, the
+configured home point is the fallback. Home coordinates live ONLY
+in the device's local config (home_lat / home_lon) — never in
+this repo — and GPS fixes are runtime values, never stored.
 """
 
 import json
@@ -20,8 +22,59 @@ import urllib.request
 
 API = "https://api.adsb.lol/v2/lat/{lat:.4f}/lon/{lon:.4f}/dist/{dist}"
 CACHE_S = 20
+GPS_WAIT_S = 6.0
 
 _cache = {"at": 0.0, "key": None, "data": None}
+_reader = None
+
+
+def _shared_reader():
+    """The process-wide GPS reader, started on first use."""
+    global _reader
+    if _reader is None:
+        from .wardrive import GpsReader
+
+        _reader = GpsReader()
+        _reader.start()
+    return _reader
+
+
+def gps_fix(cfg: dict, wait_s: float = GPS_WAIT_S):
+    """Latest GPS fix dict {lat, lon, alt, sats}, or None.
+
+    Only attempted under the LoRa cap profile — that's the cap
+    carrying the GPS. Waits up to `wait_s` for a first fix; a fix
+    the shared reader already holds returns at once.
+    """
+    if cfg.get("cap") != "lora":
+        return None
+    try:
+        reader = _shared_reader()
+    except Exception:
+        return None
+    deadline = time.time() + wait_s
+    while True:
+        fix = reader.fix
+        if fix and fix.get("lat") is not None:
+            return fix
+        if time.time() >= deadline:
+            return None
+        time.sleep(0.25)
+
+
+def locate(cfg: dict):
+    """Where the radar centers: GPS first, configured home second.
+
+    Returns {"lat", "lon", "source"} (+"sats" for GPS), or None.
+    """
+    fix = gps_fix(cfg)
+    if fix:
+        return {"lat": fix["lat"], "lon": fix["lon"],
+                "source": "gps", "sats": fix.get("sats")}
+    h = home(cfg)
+    if h is not None:
+        return {"lat": h[0], "lon": h[1], "source": "home"}
+    return None
 
 
 def _dist_bearing_nm(lat1, lon1, lat2, lon2) -> tuple[float, float]:
@@ -49,12 +102,16 @@ def home(cfg: dict):
 
 
 def nearest(cfg: dict, limit: int = 12) -> dict:
-    """Nearest aircraft to home. {ok, aircraft:[...]} or a reason."""
-    h = home(cfg)
-    if h is None:
+    """Nearest aircraft to the resolved center (GPS, else home).
+
+    {ok, center, aircraft:[...]} or a reason. Aircraft carry
+    their own lat/lon so the portal can plot them on a map.
+    """
+    center = locate(cfg)
+    if center is None:
         return {"ok": False,
-                "reason": "no home location set (home_lat/home_lon)"}
-    lat, lon = h
+                "reason": "no GPS fix and no home location set"}
+    lat, lon = center["lat"], center["lon"]
     radius = int(cfg.get("flight_radius_nm", 30))
     key = (round(lat, 3), round(lon, 3), radius)
     now = time.time()
@@ -88,11 +145,14 @@ def nearest(cfg: dict, limit: int = 12) -> dict:
             "track": ac.get("track"),
             "vrate_fpm": ac.get("baro_rate"),
             "squawk": ac.get("squawk", ""),
+            "lat": ac["lat"],
+            "lon": ac["lon"],
             "dist_nm": round(dist, 1),
             "bearing": round(brg),
         })
     out.sort(key=lambda a: a["dist_nm"])
-    data = {"ok": True, "home": {"lat": lat, "lon": lon},
+    data = {"ok": True, "center": center,
+            "home": {"lat": lat, "lon": lon},
             "radius_nm": radius, "total": feed.get("total",
                                                    len(out)),
             "aircraft": out[:limit]}
@@ -107,7 +167,9 @@ if __name__ == "__main__":
     if not r["ok"]:
         print("unavailable:", r["reason"])
     else:
-        print(f"{r['total']} aircraft within {r['radius_nm']} nm")
+        print(f"{r['total']} aircraft within {r['radius_nm']} nm "
+              f"of {r['center']['source']} "
+              f"({r['center']['lat']:.4f}, {r['center']['lon']:.4f})")
         for a in r["aircraft"]:
             alt = "GND" if a["on_ground"] else f"{a['alt_ft']} ft"
             print(f"  {a['callsign']:<9} {a['type']:<5} {alt:>9} "
