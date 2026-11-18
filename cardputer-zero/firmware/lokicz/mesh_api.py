@@ -10,6 +10,15 @@ Usage: mesh_api.py info | nodes | send <text> | listen <secs>
 import json
 import sys
 import time
+from pathlib import Path
+
+# This file lives inside the lokicz package, next to lokicz's own
+# meshtastic.py supervisor module. Python puts the script's
+# directory first on sys.path, which would shadow the venv's
+# real `meshtastic` package with that module — remove it.
+_HERE = str(Path(__file__).resolve().parent)
+sys.path = [p for p in sys.path
+            if str(Path(p or ".").resolve()) != _HERE]
 
 
 def _iface():
