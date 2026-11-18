@@ -106,6 +106,8 @@
     color: var(--text); border: 1px solid var(--gold); border-radius: 4px; }
   .leaflet-popup-tip { background: #0a2413; }
   .leaflet-popup-content { font-size: 12px; line-height: 1.5; }
+  .dark-tiles { filter: invert(0.92) hue-rotate(185deg) saturate(0.5)
+                brightness(0.92) contrast(0.95); }
 </style>
 </head>
 <body>
@@ -446,20 +448,22 @@ async function renderFlightMap(r) {
   let L;
   try { L = await loadLeaflet(); } catch { return; }
   const c = r.center;
-  if (!_fmap) {
+  const first = !_fmap;
+  if (first) {
     _fmap = L.map("flightmap", { attributionControl: true });
     L.tileLayer(
-      "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-      { maxZoom: 18,
-        attribution: "© OpenStreetMap contributors © CARTO" })
+      "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+      { maxZoom: 18, className: "dark-tiles",
+        attribution: "© OpenStreetMap contributors" })
       .addTo(_fmap);
     _fmapLayers = L.layerGroup().addTo(_fmap);
     _fmap.setView([c.lat, c.lon], 9);
   }
   _fmapLayers.clearLayers();
-  L.circle([c.lat, c.lon], { radius: r.radius_nm * 1852,
+  const ring = L.circle([c.lat, c.lon], { radius: r.radius_nm * 1852,
     color: "#e8b33c", weight: 1, dashArray: "5 6", fill: false })
     .addTo(_fmapLayers);
+  if (first) _fmap.fitBounds(ring.getBounds(), { padding: [10, 10] });
   if (_fmapMe) _fmapMe.remove();
   _fmapMe = L.marker([c.lat, c.lon],
     { icon: L.divIcon({ className: "", html: `<div class="me-dot"></div>`,
