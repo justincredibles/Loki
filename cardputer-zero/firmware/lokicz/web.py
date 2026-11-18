@@ -167,6 +167,15 @@ def _act_audit(cfg, _seconds):
     return fn
 
 
+def _act_trackers(cfg, _seconds):
+    def fn(job):
+        from . import trackers
+
+        job["message"] = "listening for trackers (90s)..."
+        return trackers.watch(90)
+    return fn
+
+
 def _act_proximity(cfg, _seconds):
     def fn(job):
         from . import proximity
@@ -188,7 +197,8 @@ def _act_wpasec_sync(cfg, _seconds):
 ACTIONS = {"capture": _act_capture, "wardrive": _act_wardrive,
            "sniff": _act_sniff, "sweep": _act_sweep,
            "audit": _act_audit, "wpasec-sync": _act_wpasec_sync,
-           "proximity": _act_proximity}
+           "proximity": _act_proximity,
+           "trackers": _act_trackers}
 
 DEFAULT_SECONDS = {"capture": "capture_seconds",
                    "wardrive": "wardrive_seconds",
@@ -230,6 +240,10 @@ class Handler(BaseHTTPRequestHandler):
                        "text/html; charset=utf-8")
         elif path == "/api/flights":
             self._json(200, flights.nearest(config.load()))
+        elif path == "/api/trackers":
+            from . import trackers
+
+            self._json(200, trackers.known())
         elif path == "/icon.png" and ICON_FILE.exists():
             self._send(200, ICON_FILE.read_bytes(), "image/png")
         elif path == "/api/status":

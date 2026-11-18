@@ -29,7 +29,7 @@ def _chips(cfg: dict, page: int) -> list:
     if page == 2:
         return [("1", "WPA-SEC"), ("2", "LAST AUDIT"),
                 ("3", "STOP"), ("4", "FLIGHTS"), ("5", "RADAR"),
-                ("9", "◂ BACK")]
+                ("6", "TRACKER"), ("9", "◂ BACK")]
     cap_tone = "text" if cfg.get("capture_enabled", True) else "off"
     return [("1", "STATUS"), ("2", "CAPTURE", cap_tone),
             ("3", "SUB-GHZ"), ("4", "WARDRIVE"), ("5", "SNIFF"),
@@ -222,6 +222,28 @@ def run() -> int:
                 else:
                     rows = [("text", "NOTHING NEARBY", "dim"),
                             ("text", "no BLE heard in 25s", "dim")]
+            elif key == "6":
+                from . import trackers
+
+                with ui.Spinner("TRACKERS",
+                                "listening for trackers (90s)...",
+                                expected=90):
+                    r = trackers.watch(90)
+                if r["found"]:
+                    rows = [("big", f"{r['heard']} TRACKERS",
+                             "warn")]
+                    for d in r["found"][:3]:
+                        rows.append(("kv", d["kind"][:12],
+                                     d["verdict"][:13],
+                                     "warn" if "FOLLOW" in d["verdict"]
+                                     else "text"))
+                    title = "TRACKERS"
+                else:
+                    rows = [("big", "NO TRACKERS", "ok"),
+                            ("kv", "IN HISTORY",
+                             str(r["known_total"]), "dim"),
+                            ("text", "none heard in 90s", "dim")]
+                    title = "TRACKERS"
             elif key == "9":
                 page = 1
                 rows = _status_rows(cfg)
@@ -269,7 +291,8 @@ def run() -> int:
             page = 2
             rows = [("text", "PAGE 2 — SERVICES", "dim"),
                     ("text", "1 WPA-SEC · 2 LAST AUDIT", "text"),
-                    ("text", "3 STOP · 4 FLIGHTS · 5 RADAR", "text"),
+                    ("text", "3 STOP · 4 FLIGHTS · 5 RADAR · 6 TRK",
+                     "text"),
                     ("text", "9 back to page 1", "dim"),
                     ("kv", "WEB PORTAL",
                      f"{web.lan_ip()}:{web.PORT}", "gold")]

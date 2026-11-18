@@ -149,6 +149,11 @@
       <button onclick="run('proximity')">SCAN 25s</button>
     </div>
     <div class="act">
+      <h3>◈ TRACKER WATCH</h3>
+      <p>Listen 90 s for AirTag / SmartTag / Tile beacons and grade them against the on-device history — persistence is the tell.</p>
+      <button onclick="run('trackers')">WATCH 90s</button>
+    </div>
+    <div class="act">
       <h3>◈ SUB-GHZ SWEEP</h3>
       <p>Listen on 433 + 915 MHz bands (needs the CC1101 cap fitted).</p>
       <button onclick="run('sweep')">SWEEP</button>
@@ -166,6 +171,9 @@
 
   <h2>PROXIMITY RADAR</h2>
   <div id="prox"><span class="dim">run a scan from ACTIONS above</span></div>
+
+  <h2>TRACKER HISTORY</h2>
+  <div id="trackers"><span class="dim">loading…</span></div>
 
   <h2>AUDIT REPORTS</h2>
   <div id="audits"><span class="dim">loading…</span></div>
@@ -244,7 +252,7 @@ async function run(action, secsId) {
       document.querySelector("#job .fill").style.width =
         j.state === "done" ? "100%" : "0";
       if (action === "proximity" && j.state === "done") renderProx(j.result);
-      refreshStatus(); loadAudits(); loadCaptures();
+      refreshStatus(); loadAudits(); loadCaptures(); loadTrackers();
     }
   }, 1200);
 }
@@ -351,7 +359,21 @@ async function loadFlights() {
       `<td>${a.bearing}°</td></tr>`).join("") + `</table>`;
 }
 
-refreshStatus(); loadAudits(); loadCaptures(); loadFlights();
+async function loadTrackers() {
+  const list = await api("/api/trackers");
+  if (!list.length) {
+    $("trackers").innerHTML = `<span class="dim">no trackers in history — run a watch</span>`;
+    return;
+  }
+  const vc = v => v.includes("FOLLOW") ? "bad" : v === "PERSISTENT" ? "warn" : "dim";
+  $("trackers").innerHTML = `<table><tr><th>KIND</th><th>ADDRESS</th><th>VERDICT</th><th>WINDOWS</th><th>SPAN</th><th>BEST RSSI</th></tr>` +
+    list.map(t => `<tr><td>${esc(t.kind)}</td><td class="dim">${esc(t.address)}</td>` +
+      `<td class="${vc(t.verdict)}">${esc(t.verdict)}</td><td>${t.windows}</td>` +
+      `<td>${t.span_min} min</td><td>${t.best_rssi} dBm</td></tr>`).join("") + `</table>` +
+    `<div class="dim" style="margin-top:6px">A candidate is a lead, not a verdict — persistence while you move is the signal that matters. AirTags rotate addresses, so history undercounts them.</div>`;
+}
+
+refreshStatus(); loadAudits(); loadCaptures(); loadFlights(); loadTrackers();
 setInterval(refreshStatus, 10000);
 setInterval(loadFlights, 60000);
 </script>
