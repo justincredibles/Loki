@@ -1,0 +1,10 @@
+[Unit]
+Description=lokicz audit watchdog — nightly audit + diff
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=cardputer
+WorkingDirectory=/home/cardputer/loki/cardputer-zero/firmware
+ExecStart=/usr/bin/python3 -m lokicz.watchdog

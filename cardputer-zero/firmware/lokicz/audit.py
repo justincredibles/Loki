@@ -228,6 +228,13 @@ def run_audit(cfg: dict, progress=lambda msg: None) -> dict:
     subnet = cfg.get("audit_subnet") or local_subnet()
     progress("SWEEPING THE LAN...")
     hosts = discover(subnet)
+    try:
+        from . import lan_discovery
+
+        progress("ASKING DEVICES WHO THEY ARE...")
+        lan_discovery.enrich(hosts)
+    except Exception:
+        pass  # discovery is garnish; never break an audit for it
     progress(f"{len(hosts)} HOSTS — SCANNING")
     cache = _load_cache()
     pace = [0.0]

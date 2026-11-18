@@ -149,6 +149,11 @@
       <button onclick="run('proximity')">SCAN 25s</button>
     </div>
     <div class="act">
+      <h3>◈ AUDIT WATCHDOG</h3>
+      <p>Full audit, diffed against the last one: new devices, new ports, new CVEs. Also runs nightly at ~03:30 on a timer.</p>
+      <button onclick="run('watchdog')">RUN WATCHDOG</button>
+    </div>
+    <div class="act">
       <h3>◈ PROBE LOGGER</h3>
       <p>Monitor-mode ears on the dongle: which devices are asking for which networks by name. The preferred-network list is a travel diary.</p>
       <button onclick="run('probes')">LISTEN 60s</button>
@@ -182,6 +187,9 @@
 
   <h2>PROBE RESULTS</h2>
   <div id="probes"><span class="dim">run a probe listen from ACTIONS above</span></div>
+
+  <h2>WATCHDOG — LAST DIFF</h2>
+  <div id="watchdog"><span class="dim">loading…</span></div>
 
   <h2>AUDIT REPORTS</h2>
   <div id="audits"><span class="dim">loading…</span></div>
@@ -397,7 +405,30 @@ function renderProbes(r) {
     top + loud;
 }
 
-refreshStatus(); loadAudits(); loadCaptures(); loadFlights(); loadTrackers();
+async function loadWatchdog() {
+  const s = await api("/api/watchdog");
+  if (!s) { $("watchdog").innerHTML = `<span class="dim">no watchdog run yet</span>`; return; }
+  if (s.baseline || !s.counts) {
+    $("watchdog").innerHTML = `<span class="dim">baseline set ${esc(s.last_run)} — the next run diffs against it</span>`;
+    return;
+  }
+  const c = s.counts;
+  const hosts = s.new_hosts && s.new_hosts.length
+    ? `<table><tr><th>NEW HOST</th><th>IP</th><th>HOSTNAME</th></tr>` +
+      s.new_hosts.map(h => `<tr><td class="warn">${esc(h.mac || "?")}</td><td>${esc(h.ip)}</td><td>${esc(h.hostname || "")}</td></tr>`).join("") + `</table>` : "";
+  const cves = s.new_cves && s.new_cves.length
+    ? `<table><tr><th>NEW CVE</th><th>SCORE</th><th>PORT</th></tr>` +
+      s.new_cves.map(v => `<tr><td><a href="https://nvd.nist.gov/vuln/detail/${esc(v.id)}" target="_blank" rel="noopener">${esc(v.id)}</a></td><td class="${(v.score || 0) >= 9 ? "bad" : "warn"}">${v.score ?? "—"}</td><td>${v.port}</td></tr>`).join("") + `</table>` : "";
+  $("watchdog").innerHTML =
+    `<div class="dim" style="margin-bottom:6px">last run ${esc(s.last_run)} vs previous report</div>` +
+    `<div class="stat"><span class="${c.new_hosts ? "warn" : "dim"}">+${c.new_hosts} new hosts</span>` +
+    `<span class="dim">${c.gone_hosts} gone</span>` +
+    `<span class="${c.new_ports ? "warn" : "dim"}">+${c.new_ports} new ports</span>` +
+    `<span class="${c.new_cves ? "warn" : "dim"}">+${c.new_cves} new CVEs</span>` +
+    `<span class="ok">${c.fixed_cves} fixed</span></div>` + hosts + cves;
+}
+
+refreshStatus(); loadAudits(); loadCaptures(); loadFlights(); loadTrackers(); loadWatchdog();
 setInterval(refreshStatus, 10000);
 setInterval(loadFlights, 60000);
 </script>

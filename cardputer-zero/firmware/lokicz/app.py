@@ -44,7 +44,7 @@ def _status_rows(cfg: dict) -> list:
     dongle = wifi_recon.capture_available(cfg["capture_iface"])
     on = cfg.get("capture_enabled", True)
     w = wpasec.status(cfg)
-    return [
+    rows = [
         ("kv", "CAP", profile.name.upper(), "gold"),
         ("kv", "WI-FI", "RECON OK", "ok"),
         ("kv", "CAPTURE",
@@ -56,6 +56,19 @@ def _status_rows(cfg: dict) -> list:
          ("ON · %d CRACKED" % w["cracked"]) if w["enabled"] else "OFF",
          "ok" if w["enabled"] else "dim"),
     ]
+    try:
+        from . import watchdog
+
+        state = watchdog.latest_state()
+        if state and state.get("counts"):
+            c = state["counts"]
+            if c["new_hosts"] or c["new_cves"]:
+                rows.append(("kv", "WATCHDOG",
+                             f"+{c['new_hosts']} HOST "
+                             f"+{c['new_cves']} CVE", "warn"))
+    except Exception:
+        pass
+    return rows
 
 
 def _wpasec_rows(cfg: dict) -> list:

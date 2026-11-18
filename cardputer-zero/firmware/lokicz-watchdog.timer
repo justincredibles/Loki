@@ -1,0 +1,11 @@
+[Unit]
+Description=Nightly lokicz audit watchdog
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+RandomizedDelaySec=20m
+Persistent=true
+Unit=lokicz-watchdog.service
+
+[Install]
+WantedBy=timers.target

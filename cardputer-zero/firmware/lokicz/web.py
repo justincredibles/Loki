@@ -167,6 +167,15 @@ def _act_audit(cfg, _seconds):
     return fn
 
 
+def _act_watchdog(cfg, _seconds):
+    def fn(job):
+        from . import watchdog
+
+        return watchdog.run_once(
+            cfg, progress=lambda m: job.__setitem__("message", m))
+    return fn
+
+
 def _act_probes(cfg, _seconds):
     def fn(job):
         from . import probes
@@ -208,7 +217,8 @@ ACTIONS = {"capture": _act_capture, "wardrive": _act_wardrive,
            "audit": _act_audit, "wpasec-sync": _act_wpasec_sync,
            "proximity": _act_proximity,
            "trackers": _act_trackers,
-           "probes": _act_probes}
+           "probes": _act_probes,
+           "watchdog": _act_watchdog}
 
 DEFAULT_SECONDS = {"capture": "capture_seconds",
                    "wardrive": "wardrive_seconds",
@@ -254,6 +264,10 @@ class Handler(BaseHTTPRequestHandler):
             from . import trackers
 
             self._json(200, trackers.known())
+        elif path == "/api/watchdog":
+            from . import watchdog
+
+            self._json(200, watchdog.latest_state())
         elif path == "/icon.png" and ICON_FILE.exists():
             self._send(200, ICON_FILE.read_bytes(), "image/png")
         elif path == "/api/status":
