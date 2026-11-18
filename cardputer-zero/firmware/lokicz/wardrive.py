@@ -5,8 +5,10 @@ Plain-English tour:
   needs breadth, not monitor mode) lists the access points around
   us. Each NEW network is appended to a WiGLE-format CSV the moment
   it's first seen, stamped with the freshest GPS fix.
-- GPS comes from the LoRa cap's ATGM336H on /dev/ttyS0 (NMEA at
-  9600 baud). With any other cap fitted there is simply no GPS:
+- GPS comes from the LoRa cap's GP-02 module (CASIC; meshtasticd
+  detects it as "ATGM336H") on /dev/ttyS0, NMEA at 115200 baud —
+  zeroradio's hardware map for this cap is the source. With any
+  other cap fitted there is simply no GPS:
   the reader thread finds no sentences and rows go out with empty
   coordinates — the file stays valid, the map just waits for the
   cap swap.
@@ -57,7 +59,7 @@ class GpsReader(threading.Thread):
 
     def run(self) -> None:
         try:
-            subprocess.run(["stty", "-F", self.port, "9600", "raw", "-echo"],
+            subprocess.run(["stty", "-F", self.port, "115200", "raw", "-echo"],
                            capture_output=True, timeout=5)
             fd = os.open(self.port, os.O_RDONLY | os.O_NONBLOCK)
         except OSError:
