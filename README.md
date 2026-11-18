@@ -2,6 +2,8 @@
 
 An all-in-one pocket cybersecurity multi-tool for your own lab — a Raspberry Pi brain plus an ESP32-S3 radio coprocessor on one custom HAT.
 
+**Community:** Join the Loki Discord — https://discord.gg/xm54g9UsvF — build logs, lab notes, support, and the roadmap. Rules-gated: members accept the server rules (test only what you own) before posting.
+
 ## What it is
 
 Loki combines Wi-Fi network attacks and handshake capture, BLE, sub-GHz (CC1101), 2.4 GHz (nRF24L01+), infrared, NFC/RFID, and BadUSB into a single pocket device with a color display, 4-button navigation, a web UI, and a rechargeable battery.

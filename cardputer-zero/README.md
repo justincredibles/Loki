@@ -3,6 +3,9 @@
 A fork of the [Loki](../README.md) pocket security multi-tool, retargeted from
 Loki's custom PCB to the **M5Stack Cardputer Zero**.
 
+**Community & support:** the Loki Discord — https://discord.gg/xm54g9UsvF
+(build logs in #builds, help in #help-desk, releases in #announcements).
+
 Loki's firmware idea — **Pwnagotchi's Wi-Fi brain + Bjorn/Ragnar's network
 toolkit, in one pocket device** — carried onto a device you can buy off the
 shelf: a pocket Linux computer with a keyboard, a colour screen, and swappable
