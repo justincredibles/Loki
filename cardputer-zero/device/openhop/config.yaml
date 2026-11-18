@@ -1,0 +1,54 @@
+# openHop Repeater config for the lokicz LoRa cap (SX1262 + GPS).
+# Installed to /etc/openhop_repeater/config.yaml.
+# Radio values mirror the hardware-proven pyMC probe of this cap
+# (2026-11-17): spidev0.1, hardware CS (cs_pin -1), BUSY=GPIO22,
+# DIO1=GPIO23, no RESET wired (-1), DIO3 TCXO at 1.8 V mandatory,
+# DIO2 drives the RF switch. Air params are the MeshCore US
+# defaults from the openHop docs: 915 MHz, BW 62.5 kHz, SF8,
+# CR 4/8, sync word 0x12 (MeshCore — never 0x1424).
+radio_type: sx1262
+
+repeater:
+  node_name: "LokiCZ"
+  # Position comes from the cap GPS (below); adverts do NOT carry
+  # it — a home repeater's coordinates are not broadcast by
+  # default. Flip advertise_gps_location if that ever changes.
+  security:
+    allow_read_only: true
+
+radio:
+  frequency: 915000000
+  tx_power: 22
+  bandwidth: 62500
+  spreading_factor: 8
+  coding_rate: 8
+  preamble_length: 32
+  sync_word: 0x12
+
+sx1262:
+  bus_id: 0
+  cs_id: 1
+  cs_pin: -1
+  reset_pin: -1
+  busy_pin: 22
+  irq_pin: 23
+  txen_pin: -1
+  rxen_pin: -1
+  use_dio3_tcxo: true
+  dio3_tcxo_voltage: 1.8
+  use_dio2_rf: true
+
+gps:
+  enabled: true
+  source: serial
+  device: "/dev/ttyS0"
+  baud_rate: 115200
+  advertise_gps_location: false
+
+plugins:
+  enabled: false
+
+http:
+  enabled: true
+  host: "0.0.0.0"
+  port: 8000

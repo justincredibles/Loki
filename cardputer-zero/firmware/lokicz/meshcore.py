@@ -17,13 +17,23 @@ SX1262Radio initialized the cap's radio at 915 MHz with
 reset_pin=-1 accepted (no reset line on this cap) and read a
 live −99 dBm noise floor. The venv needs two extra packages
 beyond pymc-core: python-periphery (GPIO) and spidev (LoRaRF's
-SPI). The repeater *service* is still not stood up — that's the
-remaining step, and apply_mode() says so honestly.
+SPI).
+
+Service LANDED 2026-11-17 (evening): pyMC_Repeater upstream
+became openHop Repeater (openhop-dev/openhop_repeater, built on
+openhop_core); installed via its manage.sh (main branch) —
+/opt/openhop_repeater, config /etc/openhop_repeater/config.yaml,
+unit `openhop-repeater`, dashboard :8000. Radio config mirrors
+the proven probe: spidev0.1, cs_pin -1, busy 22, dio1 23,
+reset -1, DIO3 TCXO 1.8 V, DIO2 RF switch; US MeshCore air
+params 915 MHz / BW 62.5 / SF8 / CR8 / sync 0x12. A systemd
+drop-in runs cap-lora-init before start (the cap's power gate
+and I2C RF switch are lokicz bring-up, not the repeater's job).
 """
 
 import subprocess
 
-PYMC_SERVICE = "pymc-repeater"  # unit name from pyMC_Repeater's installer
+PYMC_SERVICE = "openhop-repeater"  # pyMC_Repeater became openHop
 
 
 def _run(cmd: str, timeout: int = 15) -> subprocess.CompletedProcess:
