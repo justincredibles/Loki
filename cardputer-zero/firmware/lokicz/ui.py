@@ -487,11 +487,63 @@ _HAIR = (16, 22, 18)
 # the fallback when the sprite files are missing) -------------------
 _SPRITES: dict = {}
 _SPRITE_DIR = Path(__file__).with_name("sprites")
-# Armor tiers read as a glow disc behind the sprite: the wardrobe
-# still shows on the character even though the art is one drawing.
+# Armor tiers read as a crafted medallion ring behind the
+# sprite: the wardrobe still shows on the character even
+# though the art is one drawing. Each tier gets its own
+# metalwork — stitches for leather, links for chain,
+# rivets for plate, studs for royal — instead of what used
+# to be a flat colored disc (Justin's words: "a brown
+# circle").
 _AURA = {"street": None, "leather": (146, 102, 52),
          "chain": (168, 178, 188), "plate": (46, 204, 130),
          "royal": (244, 200, 84)}
+
+
+def _ring_point(cx, cy, r, deg):
+    import math
+
+    a = math.radians(deg)
+    return (cx + r * math.cos(a), cy + r * math.sin(a))
+
+
+def _draw_aura(draw, cx, cy, r, tier):
+    color = _AURA[tier]
+    faint = tuple(int(c * 0.10) for c in color)
+    draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=faint)
+    for i in range(3):
+        draw.ellipse([cx - r + i, cy - r + i, cx + r - i,
+                      cy + r - i], outline=color)
+    if tier == "leather":
+        stitch = (228, 192, 128)
+        for deg in range(0, 360, 20):
+            x1, y1 = _ring_point(cx, cy, r - 6, deg - 5)
+            x2, y2 = _ring_point(cx, cy, r - 6, deg + 5)
+            draw.line([x1, y1, x2, y2], fill=stitch, width=2)
+    elif tier == "chain":
+        link = (216, 224, 232)
+        for deg in range(0, 360, 20):
+            px, py = _ring_point(cx, cy, r - 1, deg)
+            draw.ellipse([px - 3.5, py - 3.5, px + 3.5,
+                          py + 3.5], outline=link)
+    elif tier == "plate":
+        draw.ellipse([cx - r + 7, cy - r + 7, cx + r - 7,
+                      cy + r - 7],
+                     outline=tuple(min(255, int(c * 1.4))
+                                   for c in color))
+        rivet = (140, 255, 196)
+        for deg in range(0, 360, 30):
+            px, py = _ring_point(cx, cy, r - 4, deg)
+            draw.ellipse([px - 2, py - 2, px + 2, py + 2],
+                         fill=rivet)
+    elif tier == "royal":
+        draw.ellipse([cx - r + 6, cy - r + 6, cx + r - 6,
+                      cy + r - 6], outline=color)
+        stud = (255, 224, 130)
+        for deg in range(0, 360, 36):
+            px, py = _ring_point(cx, cy, r - 3, deg)
+            draw.polygon([(px, py - 3.5), (px + 3.5, py),
+                          (px, py + 3.5), (px - 3.5, py)],
+                         fill=stud)
 
 
 def _sprite(name: str):
@@ -520,13 +572,10 @@ def draw_loki(img, draw, box, gear: dict, mood: str = "idle",
     cx = x0 + w // 2
     spr = _sprite("excited" if mood == "excited" else "base")
     if spr is not None:
-        aura = _AURA.get(gear.get("armor", "street"))
-        if aura:
+        tier = gear.get("armor", "street")
+        if _AURA.get(tier):
             r = min(w, h) // 2 - 1
-            dim = tuple(int(c * 0.30) for c in aura)
-            draw.ellipse([cx - r, y0 + h - 2 * r - 2 + bob,
-                          cx + r, y0 + h - 2 + bob], fill=dim,
-                         outline=aura)
+            _draw_aura(draw, cx, y0 + h - r - 2 + bob, r, tier)
         scale = min(w / spr.width, h / spr.height)
         sw = max(1, int(spr.width * scale))
         sh = max(1, int(spr.height * scale))
