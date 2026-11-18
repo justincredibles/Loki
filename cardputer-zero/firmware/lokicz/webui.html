@@ -246,6 +246,11 @@
       <button onclick="run('proximity')">SCAN 25s</button>
     </div>
     <div class="act">
+      <h3><span class="capbar both"></span>◈ EVIL-TWIN CHECK</h3>
+      <p>Compares the air right now against your wardrive history: known SSIDs gone open, or broadcasting from hardware you've never seen.</p>
+      <button onclick="run('eviltwin')">CHECK NOW</button>
+    </div>
+    <div class="act">
       <h3><span class="capbar lora"></span>◈ GPS TRACK</h3>
       <p>Record a 2-minute GPX track from the LoRa cap's GPS. Needs open sky for a fix.</p>
       <button onclick="run('gps')">RECORD 2 MIN</button>
@@ -442,7 +447,7 @@ function pollJob(id, action, t0) {
    box no longer dies with the page. */
 const MY_ACTIONS = ["capture", "audit", "wardrive", "sniff",
   "proximity", "gps", "watchdog", "probes", "trackers", "sweep",
-  "ook", "replay", "nfc", "wpasec-sync"];
+  "ook", "replay", "nfc", "wpasec-sync", "eviltwin"];
 async function resumeJob() {
   try {
     const r = await api("/api/jobs");
@@ -520,6 +525,14 @@ function jobSummary(action, r) {
       ` ${r.max_sats} satellites → ${r.file}`;
   if (action === "proximity")
     return `${r.count} device(s) heard — radar in PROXIMITY below`;
+  if (action === "eviltwin") {
+    if (!(r.alerts || []).length)
+      return `all clear — ${r.scanned} network(s) match your ` +
+        `wardrive baseline (${r.baseline_networks} known)`;
+    return (r.alerts || []).map(a =>
+      `${a.ssid} (${a.bssid.slice(-8)}): ${a.kind} — ${a.detail}`
+    ).join(" · ");
+  }
   if (action === "probes")
     return `${r.probes_total} probe(s) from ${r.devices} device(s)` +
       ` · ${r.unique_ssids} unique SSID(s), ${r.directed_devices}` +

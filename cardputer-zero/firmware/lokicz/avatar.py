@@ -258,6 +258,10 @@ def award_for(action: str, result: dict) -> dict:
                      {"probes": 1})
     if action == "proximity":
         return award(5, {"proximity_max": result.get("count", 0)})
+    if action == "eviltwin":
+        alerts = len(result.get("alerts", []))
+        return award(10 + 20 * alerts,
+                     {"eviltwin_checks": 1, "eviltwin_alerts": alerts})
     if action == "flights":
         if not result.get("ok"):
             return {"xp_gained": 0, "level_up": None,

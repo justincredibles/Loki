@@ -398,6 +398,15 @@ def _act_proximity(cfg, _seconds):
     return fn
 
 
+def _act_eviltwin(cfg, _seconds):
+    def fn(job):
+        from . import eviltwin
+
+        job["message"] = "scanning for evil twins..."
+        return eviltwin.check()
+    return fn
+
+
 def _act_ook(cfg, seconds):
     def fn(job):
         import time as _time
@@ -538,7 +547,8 @@ ACTIONS = {"capture": _act_capture, "wardrive": _act_wardrive,
            "watchdog": _act_watchdog,
            "gps": _act_gps,
            "ook": _act_ook, "replay": _act_replay,
-           "nfc": _act_nfc, "mesh-listen": _act_mesh_listen,
+           "nfc": _act_nfc, "eviltwin": _act_eviltwin,
+           "mesh-listen": _act_mesh_listen,
            "mesh-nodes": _act_mesh_nodes}
 
 DEFAULT_SECONDS = {"capture": "capture_seconds",
