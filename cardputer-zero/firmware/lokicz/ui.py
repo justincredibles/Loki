@@ -98,42 +98,121 @@ def _base():
     return img, draw
 
 
-def _horns(draw, cx: int, base_y: int, w: int, color=GOLD,
-           h: int = None) -> None:
-    """Loki's horned HELMET — the helm only, never a face (Justin's
-    call): two horns sweeping up, out, then inward, a domed cap,
-    a band, and the emerald gem. Horns are stamped from tapering
-    circles along mirrored curves; the empty space under the dome
-    is the point — it's a helmet, worn by nobody."""
+def _horn_points(side: int, cx: float, base_y: float, w: float,
+                 h: float):
+    """Points along one horn's curve: up, out, then curving in."""
     import math
 
-    if h is None:
-        h = w * 0.92
+    pts = []
+    for i in range(31):
+        t = i / 30
+        x = cx + side * w * (0.32 + 0.24 * math.sin(1.35 * t)
+                             - 0.27 * t * t)
+        y = base_y - h * (t ** 0.9)
+        r = max(0.8, w * 0.058 * (1 - t) ** 0.8)
+        pts.append((x, y, r))
+    return pts
+
+
+def _helm_patch(w: int, h: int):
+    """Loki's horned HELMET as a shaded RGBA patch — the helm only,
+    never a face (Justin's call). Flat gold read as clip-art, so
+    the metal is shaded: a vertical gold gradient (pale at the
+    crown, bronze at the band), a soft light falloff from the
+    upper left, a blurred drop shadow, pale edge highlights along
+    the horns, and a faceted emerald gem with a sparkle. The empty
+    space under the dome is the point — a helmet, worn by nobody.
+
+    Anchor: the band's base line sits at y = pad + h in the patch.
+    """
+    from PIL import Image, ImageDraw, ImageFilter
+
+    pad = 10
+    pw = int(w * 1.24) + 2 * pad
+    ph = int(h + w * 0.24) + 2 * pad
+    cx, base_y = pw // 2, pad + h
+
+    # Silhouette masks: gold parts and the gem, drawn separately.
+    gold_mask = Image.new("L", (pw, ph), 0)
+    gd = ImageDraw.Draw(gold_mask)
     for side in (-1, 1):
-        steps = 30
-        for i in range(steps + 1):
-            t = i / steps
-            x = cx + side * w * (0.32 + 0.24 * math.sin(1.35 * t)
-                                 - 0.27 * t * t)
-            y = base_y - h * (t ** 0.9)
-            r = max(0.8, w * 0.058 * (1 - t) ** 0.8)
-            draw.ellipse([x - r, y - r, x + r, y + r], fill=color)
-    # Domed cap of the helmet.
-    dw = w * 0.30
-    dome_h = w * 0.21
-    draw.pieslice([cx - dw, base_y - dome_h, cx + dw,
-                   base_y + dome_h * 0.55], 180, 360, fill=color)
-    draw.arc([cx - dw * 0.78, base_y - dome_h * 0.76, cx + dw * 0.78,
-              base_y + dome_h * 0.4], 180, 360, fill=GOLD_DARK, width=2)
-    # Band + emerald gem.
+        for x, y, r in _horn_points(side, cx, base_y, w, h):
+            gd.ellipse([x - r, y - r, x + r, y + r], fill=255)
+    dw, dome_h = w * 0.30, w * 0.21
+    gd.pieslice([cx - dw, base_y - dome_h, cx + dw,
+                 base_y + dome_h * 0.55], 180, 360, fill=255)
     bw, bh = w * 0.36, max(3, w * 0.11)
-    draw.polygon([(cx - bw, base_y + bh), (cx + bw, base_y + bh),
-                  (cx + bw * 0.82, base_y - bh * 0.4),
-                  (cx - bw * 0.82, base_y - bh * 0.4)], fill=color)
+    gd.polygon([(cx - bw, base_y + bh), (cx + bw, base_y + bh),
+                (cx + bw * 0.82, base_y - bh * 0.4),
+                (cx - bw * 0.82, base_y - bh * 0.4)], fill=255)
     g = max(2, w * 0.055)
-    draw.polygon([(cx, base_y - g), (cx + g, base_y + bh * 0.35),
-                  (cx, base_y + bh * 0.9), (cx - g, base_y + bh * 0.35)],
-                 fill=EMERALD)
+    gem = [(cx, base_y - g), (cx + g, base_y + bh * 0.35),
+           (cx, base_y + bh * 0.9), (cx - g, base_y + bh * 0.35)]
+    gem_mask = Image.new("L", (pw, ph), 0)
+    ImageDraw.Draw(gem_mask).polygon(gem, fill=255)
+
+    patch = Image.new("RGBA", (pw, ph), (0, 0, 0, 0))
+    # Drop shadow from the gold silhouette.
+    shadow = Image.new("RGBA", (pw, ph), (0, 0, 0, 0))
+    sh_mask = gold_mask.filter(ImageFilter.GaussianBlur(3))
+    shadow.paste((0, 0, 0, 120), (0, 4), sh_mask)
+    patch.alpha_composite(shadow)
+
+    try:
+        import numpy as np
+
+        t = np.linspace(0, 1, ph, dtype=np.float32)[:, None]
+        stops = [(0.0, (255, 228, 152)), (0.35, (255, 214, 96)),
+                 (0.72, (232, 179, 60)), (1.0, (148, 104, 34))]
+        grad = np.zeros((ph, pw, 3), dtype=np.float32)
+        for (t0, c0), (t1, c1) in zip(stops, stops[1:]):
+            m = np.clip((t - t0) / (t1 - t0), 0, 1)
+            seg = (np.array(c0) * (1 - m) + np.array(c1) * m)
+            grad = np.where(((t >= t0) & (t <= t1))[..., None],
+                            seg, grad)
+        xs = np.linspace(0, 1, pw, dtype=np.float32)[None, :]
+        light = 1.06 - 0.16 * ((xs - 0.36) ** 2
+                               + (t - 0.30) ** 2) ** 0.5
+        grad = np.clip(grad * light[..., None], 0, 255)
+        gold_img = Image.fromarray(grad.astype("uint8"), "RGB")
+        gt = np.linspace(0, 1, ph, dtype=np.float32)[:, None]
+        gem_grad = (np.array((110, 255, 178)) * (1 - gt)
+                    + np.array((10, 148, 74)) * gt)
+        gem_img = Image.fromarray(
+            np.repeat(gem_grad[:, None, :], pw, axis=1)
+            .astype("uint8"), "RGB")
+    except Exception:
+        gold_img = Image.new("RGB", (pw, ph), GOLD)
+        gem_img = Image.new("RGB", (pw, ph), EMERALD)
+    patch.paste(gold_img, (0, 0), gold_mask)
+    patch.paste(gem_img, (0, 0), gem_mask)
+
+    # Painted detail on top: horn edge light, dome arc, band bevel,
+    # gem facet + sparkle.
+    d = ImageDraw.Draw(patch, "RGBA")
+    for side in (-1, 1):
+        pts = [(x + side * w * 0.016, y)
+               for x, y, _ in _horn_points(side, cx, base_y, w, h)]
+        d.line(pts, fill=(255, 243, 200, 165),
+               width=max(1, int(w * 0.016)))
+        inner = [(x - side * w * 0.020, y)
+                 for x, y, _ in _horn_points(side, cx, base_y, w, h)]
+        d.line(inner, fill=(110, 76, 18, 150),
+               width=max(1, int(w * 0.020)))
+    d.arc([cx - dw * 0.86, base_y - dome_h * 0.92, cx + dw * 0.86,
+           base_y + dome_h * 0.30], 195, 300,
+          fill=(255, 240, 190, 150), width=max(1, int(w * 0.016)))
+    d.arc([cx - dw * 0.78, base_y - dome_h * 0.76, cx + dw * 0.78,
+           base_y + dome_h * 0.4], 180, 360,
+          fill=(120, 84, 22, 200), width=max(1, int(w * 0.014)))
+    d.line([(cx - bw, base_y + bh), (cx + bw, base_y + bh)],
+           fill=(96, 66, 16, 220), width=max(1, int(w * 0.012)))
+    d.line([(gem[3][0], gem[3][1]), (cx, gem[2][1]), (gem[1][0],
+           gem[1][1])], fill=(6, 110, 54, 160), width=1)
+    sx, sy = cx - g * 0.34, base_y + bh * 0.02
+    d.ellipse([sx - 1.4, sy - 1.4, sx + 1.4, sy + 1.4],
+              fill=(255, 255, 255, 235))
+    return patch, pad
 
 
 def _mini_helm(draw, cx: int, base_y: int) -> None:
@@ -261,7 +340,9 @@ def show_text(lines: list[str]) -> None:
 def splash(seconds: float = 1.8) -> None:
     """Boot emblem: the horned helm over a gold LOKI wordmark."""
     img, draw = _base()
-    _horns(draw, SCREEN_W // 2, 68, 120, h=56)
+    helm, pad = _helm_patch(120, 56)
+    img.paste(helm, (SCREEN_W // 2 - helm.width // 2, 68 - pad - 56),
+              helm)
     f = _font("sans", 44)
     tw = draw.textlength("LOKI", font=f)
     x = (SCREEN_W - tw) / 2
