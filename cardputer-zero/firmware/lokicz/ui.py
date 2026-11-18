@@ -33,6 +33,35 @@ GOLD = (232, 179, 60)      # Loki gold
 GOLD_HI = (255, 214, 96)   # polished gold
 GOLD_DARK = (122, 86, 24)
 CYAN = (96, 228, 255)      # data accent
+# Cap-compat bars (Justin's scheme): dark blue = the feature
+# needs the CC1101 cap, magenta/pink = needs the LoRa cap, a
+# split bar = works with either fitted.
+CAP_CC1101 = (38, 64, 190)
+CAP_LORA = (219, 49, 164)
+
+
+def _cap_bar_h(draw, x0, x1, y, cap, h=3) -> None:
+    """Horizontal cap bar from x0..x1 at y (split = blue|pink)."""
+    if cap == "cc1101":
+        draw.rectangle([x0, y, x1, y + h - 1], fill=CAP_CC1101)
+    elif cap == "lora":
+        draw.rectangle([x0, y, x1, y + h - 1], fill=CAP_LORA)
+    elif cap == "both":
+        mid = (x0 + x1) // 2
+        draw.rectangle([x0, y, mid, y + h - 1], fill=CAP_CC1101)
+        draw.rectangle([mid + 1, y, x1, y + h - 1], fill=CAP_LORA)
+
+
+def _cap_bar_v(draw, x, y0, y1, cap, w=3) -> None:
+    """Vertical cap bar (split = blue over pink)."""
+    if cap == "cc1101":
+        draw.rectangle([x, y0, x + w - 1, y1], fill=CAP_CC1101)
+    elif cap == "lora":
+        draw.rectangle([x, y0, x + w - 1, y1], fill=CAP_LORA)
+    elif cap == "both":
+        mid = (y0 + y1) // 2
+        draw.rectangle([x, y0, x + w - 1, mid], fill=CAP_CC1101)
+        draw.rectangle([x, mid + 1, x + w - 1, y1], fill=CAP_LORA)
 RED = (255, 82, 82)
 AMBER = (255, 176, 66)
 
@@ -266,10 +295,13 @@ def _chips(draw, chips, top: int) -> None:
     for i, chip in enumerate(chips[:9]):
         key, label = chip[0], chip[1]
         tone = chip[2] if len(chip) > 2 else "text"
+        cap = chip[3] if len(chip) > 3 else None
         x = 8 + (i % cols) * (cw + gap)
         y = top + (i // cols) * (ch + 3)
         edge = FRAME if tone != "off" else (90, 40, 40)
         draw.rectangle([x, y, x + cw, y + ch], fill=PANEL, outline=edge)
+        if cap:
+            _cap_bar_v(draw, x, y, y + ch, cap)
         draw.text((x + 4, y + 1), key, font=_font("mono", 11),
                   fill=GOLD_HI if tone != "off" else DIM)
         draw.text((x + 15, y + 2), label, font=_font("mono", 9),
@@ -278,15 +310,20 @@ def _chips(draw, chips, top: int) -> None:
 
 # --- Screens ----------------------------------------------------------
 
-def show_screen(title: str, rows: list, chips=None, right: str = ""):
+def show_screen(title: str, rows: list, chips=None, right: str = "",
+                cap: str | None = None):
     """A themed screen.
 
     rows: ("kv", label, value, tone) | ("text", s, tone)
           | ("big", s, tone) | ("bar", frac, tone) | ("gap", px)
-    chips: [(key, label[, tone]), ...] drawn as the footer grid.
+    chips: [(key, label[, tone[, cap]]), ...] drawn as the footer
+    grid. `cap` ("cc1101" | "lora" | "both") draws a cap-compat
+    strip under the header for whole-screen features.
     """
     img, draw = _base()
     _frame(draw, title, right)
+    if cap:
+        _cap_bar_h(draw, 8, SCREEN_W - 8, 34, cap, h=3)
     y = 38
     for row in rows:
         kind = row[0]
@@ -575,7 +612,7 @@ def _wrap(text: str, width: int) -> list[str]:
 
 def _home_img(item_label: str, level: int, title: str,
               frac: float, xp_text: str, saying_text: str,
-              equipped: dict, bob: int = 0):
+              equipped: dict, bob: int = 0, cap: str | None = None):
     """One frame of Justin's home layout: avatar left, LV box +
     XP bar top right, a saying, and the PREV / item / NEXT
     carousel over keys 4 / 6 / 8."""
@@ -607,6 +644,9 @@ def _home_img(item_label: str, level: int, title: str,
     f_lab = _font("mono-bold", 11)
     draw.text((10, 145), "PREV", font=f_lab, fill=DIM)
     tw = draw.textlength(item_label.upper(), font=f_lab)
+    if cap:
+        _cap_bar_h(draw, int(160 - tw / 2), int(160 + tw / 2), 142,
+                   cap, h=2)
     draw.text((160 - tw / 2, 145), item_label.upper(), font=f_lab,
               fill=GOLD_HI)
     nxt = "NEXT"
@@ -620,7 +660,8 @@ def _home_img(item_label: str, level: int, title: str,
 
 def home_screen(item_label: str, level: int, title: str,
                 frac: float, xp_text: str, saying_text: str,
-                equipped: dict, saying_fn=None) -> str:
+                equipped: dict, saying_fn=None,
+                cap: str | None = None) -> str:
     """The home screen, alive: Loki bobs gently while he waits,
     and his saying rotates every few seconds (via `saying_fn`
     when given). Returns the key pressed."""
@@ -629,7 +670,8 @@ def home_screen(item_label: str, level: int, title: str,
     saying = saying_text
     while True:
         _push(_home_img(item_label, level, title, frac, xp_text,
-                        saying, equipped, bob=bobs[frame % 4]))
+                        saying, equipped, bob=bobs[frame % 4],
+                        cap=cap))
         key = read_key_timeout(0.85)
         if key is not None:
             return key

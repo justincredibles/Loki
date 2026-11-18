@@ -26,15 +26,27 @@ def _total_hashes() -> int:
 
 
 def _chips(cfg: dict, page: int) -> list:
+    # Chip tuples are (key, label[, tone[, cap]]) — the cap tag
+    # draws the compat bar: dark blue = CC1101 cap, magenta =
+    # LoRa cap, split = works with either (see ui._cap_bar_v).
     if page == 2:
-        return [("1", "WPA-SEC"), ("2", "LAST AUDIT"),
-                ("3", "STOP"), ("4", "FLIGHTS"), ("5", "RADAR"),
-                ("6", "TRACKER"), ("7", "PROBES"), ("8", "GPS LOG"),
+        return [("1", "WPA-SEC", "text", "both"),
+                ("2", "LAST AUDIT", "text", "both"),
+                ("3", "STOP"),
+                ("4", "FLIGHTS", "text", "both"),
+                ("5", "RADAR", "text", "both"),
+                ("6", "TRACKER", "text", "both"),
+                ("7", "PROBES", "text", "both"),
+                ("8", "GPS LOG", "text", "lora"),
                 ("9", "◂ BACK")]
     cap_tone = "text" if cfg.get("capture_enabled", True) else "off"
-    return [("1", "STATUS"), ("2", "CAPTURE", cap_tone),
-            ("3", "RADIO"), ("4", "WARDRIVE"), ("5", "SNIFF"),
-            ("6", "MESH"), ("7", "AUDIT"), ("8", "CAP TGL"),
+    return [("1", "STATUS"), ("2", "CAPTURE", cap_tone, "both"),
+            ("3", "RADIO", "text", "cc1101"),
+            ("4", "WARDRIVE", "text", "both"),
+            ("5", "SNIFF", "text", "both"),
+            ("6", "MESH", "text", "lora"),
+            ("7", "AUDIT", "text", "both"),
+            ("8", "CAP TGL"),
             ("9", "MORE ▸")]
 
 
@@ -69,6 +81,7 @@ def _status_rows(cfg: dict) -> list:
                              f"+{c['new_cves']} CVE", "warn"))
     except Exception:
         pass
+    rows.append(("text", "BAR: BLUE=CC1101 PINK=LORA", "dim"))
     return rows
 
 
@@ -195,34 +208,35 @@ def _last_audit_rows() -> list:
 
 
 def _screen(rows: list, cfg: dict, title: str = "LOKI",
-            page: int = 0) -> str:
+            page: int = 0, cap: str | None = None) -> str:
     """Draw a screen; page 0 = no chips, 1/2 = that menu page."""
     ui.show_screen(title, rows,
                    chips=_chips(cfg, page) if page else None,
-                   right="CAP " + cfg["cap"].upper())
+                   right="CAP " + cfg["cap"].upper(), cap=cap)
     return ui.read_key()
 
 
-# The home carousel (Justin's layout): label + dispatch target —
-# "status"/"loki"/"stop", or (page, key) into the classic menus.
+# The home carousel (Justin's layout): label + dispatch target
+# + cap tag for the compat bar — "status"/"loki"/"stop",
+# or (page, key) into the classic menus.
 HOME_ITEMS = [
-    ("Status", "status"),
-    ("Handshake Capture", (1, "2")),
-    ("Radio Lab", (1, "3")),
-    ("Wardrive", (1, "4")),
-    ("Sniff", (1, "5")),
-    ("Mesh", (1, "6")),
-    ("Network Audit", (1, "7")),
-    ("Capture On/Off", (1, "8")),
-    ("WPA-Sec", (2, "1")),
-    ("Last Audit", (2, "2")),
-    ("Flight Radar", (2, "4")),
-    ("Proximity Radar", (2, "5")),
-    ("Tracker Watch", (2, "6")),
-    ("Probe Logger", (2, "7")),
-    ("GPS Track", (2, "8")),
-    ("Loki", "loki"),
-    ("Stop", "stop"),
+    ("Status", "status", None),
+    ("Handshake Capture", (1, "2"), "both"),
+    ("Radio Lab", (1, "3"), "cc1101"),
+    ("Wardrive", (1, "4"), "both"),
+    ("Sniff", (1, "5"), "both"),
+    ("Mesh", (1, "6"), "lora"),
+    ("Network Audit", (1, "7"), "both"),
+    ("Capture On/Off", (1, "8"), None),
+    ("WPA-Sec", (2, "1"), "both"),
+    ("Last Audit", (2, "2"), "both"),
+    ("Flight Radar", (2, "4"), "both"),
+    ("Proximity Radar", (2, "5"), "both"),
+    ("Tracker Watch", (2, "6"), "both"),
+    ("Probe Logger", (2, "7"), "both"),
+    ("GPS Track", (2, "8"), "lora"),
+    ("Loki", "loki", None),
+    ("Stop", "stop", None),
 ]
 
 
@@ -298,7 +312,8 @@ def run() -> int:
                 HOME_ITEMS[home_idx][0], st["level"], st["title"],
                 st["frac"],
                 f"XP {st['xp']} · NEXT {st['needed'] - st['into']}",
-                saying, st["equipped"], saying_fn=avatar.saying)
+                saying, st["equipped"], saying_fn=avatar.saying,
+                cap=HOME_ITEMS[home_idx][2])
             if key in ("4", "8"):
                 home_idx = (home_idx
                             + (1 if key == "8" else -1)) \
@@ -327,8 +342,11 @@ def run() -> int:
                 continue
             continue
         else:
+            strip = "cc1101" if screen == "radio" else \
+                "lora" if title in ("MESH", "GPS TRACK") else None
             key = _screen(rows, cfg, title=title,
-                          page=page if screen == "main" else 0)
+                          page=page if screen == "main" else 0,
+                          cap=strip)
         title = "LOKI"
         if screen == "wpasec":
             # WPA-SEC screen has its own keys; anything else goes back.
