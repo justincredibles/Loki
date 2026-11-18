@@ -70,6 +70,22 @@ Titles: 1 Mortal · 2 Trickster · 3 Mischief Maker · 4 Illusionist ·
   (Sky Watcher) · Ruby (Exterminator)
 - **Scepter:** L10, or the Exterminator + Century Club combo
 
+## Home screen layout (Justin's sketch, 2026-11-17)
+
+The avatar screen IS the home screen, 320×170:
+
+- **Left:** the Loki avatar portrait, wearing the equipped gear.
+- **Top middle:** a small Level box (the number).
+- **Top right:** the XP bar (with level title + XP counts).
+- **Right middle:** funny Loki-like sayings, rotating randomly
+  from a list.
+- **Bottom:** three soft labels aligned to the keypad —
+  **PREV** over key **4**, the **selected menu item** (e.g.
+  "Handshake Capture", "Network Audit") over key **6** — press
+  6 to launch it — and **NEXT** over key **8**. The carousel
+  flattens every app action into one list; the classic chip
+  menus remain one keypress away (0 returns home from them).
+
 ## Implementation sketch
 
 - `lokicz/avatar.py`: profile at `~/.config/lokicz/avatar.json`

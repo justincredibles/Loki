@@ -380,6 +380,213 @@ def radar_screen(title: str, blips: list, rows: list,
     return read_key()
 
 
+_ARMOR = {"street": ((43, 52, 64), (31, 120, 60)),
+          "leather": ((122, 82, 44), (84, 56, 28)),
+          "chain": ((148, 163, 184), (100, 116, 139)),
+          "plate": ((6, 95, 70), GOLD),
+          "royal": (GOLD, (6, 95, 70))}
+_GEM_COLORS = {"emerald": (34, 220, 110), "sapphire": (80, 150, 255),
+               "ruby": (255, 80, 80)}
+_SKIN = (240, 194, 151)
+_HAIR = (16, 22, 18)
+
+
+def draw_loki(img, draw, box, gear: dict) -> None:
+    """The little Loki, wearing `gear`, drawn into box=(x, y, w, h).
+
+    Layered flat shapes: cape behind, armor torso, skin head with
+    slicked black hair, a mischief smirk, and the shaded helm
+    patch on top — horn variants extend or crown it, the chest
+    gem and scepter sit on the armor.
+    """
+    x0, y0, w, h = box
+    cx = x0 + w // 2
+    main, trim = _ARMOR.get(gear.get("armor", "street"),
+                            _ARMOR["street"])
+    dark = tuple(max(0, c - 18) for c in main)
+
+    if gear.get("cape") in ("green", "royal"):
+        cape = (18, 92, 46) if gear["cape"] == "green" else (24, 110, 54)
+        draw.polygon([(cx - w * 0.30, y0 + h * 0.50),
+                      (cx + w * 0.30, y0 + h * 0.50),
+                      (cx + w * 0.46, y0 + h * 0.99),
+                      (cx - w * 0.46, y0 + h * 0.99)], fill=cape)
+        if gear["cape"] == "royal":
+            draw.line([(cx - w * 0.46, y0 + h * 0.99),
+                       (cx + w * 0.46, y0 + h * 0.99)],
+                      fill=GOLD, width=2)
+    # arms
+    for side in (-1, 1):
+        ax = cx + side * w * 0.335 - w * 0.055
+        draw.rounded_rectangle([ax, y0 + h * 0.56, ax + w * 0.11,
+                                y0 + h * 0.94], radius=4, fill=dark)
+    # torso
+    draw.rounded_rectangle([cx - w * 0.30, y0 + h * 0.52,
+                            cx + w * 0.30, y0 + h * 0.99],
+                           radius=6, fill=main)
+    draw.line([(cx, y0 + h * 0.54), (cx, y0 + h * 0.97)],
+              fill=trim, width=2)
+    draw.line([(cx - w * 0.30, y0 + h * 0.80),
+               (cx + w * 0.30, y0 + h * 0.80)], fill=trim, width=2)
+    if gear.get("armor") == "chain":
+        for ry in range(4):
+            for rx in range(5):
+                px = cx - w * 0.22 + rx * w * 0.11
+                py = y0 + h * (0.58 + ry * 0.10)
+                draw.ellipse([px - 2, py - 2, px + 2, py + 2],
+                             outline=trim)
+    if gear.get("armor") == "street":
+        draw.line([(cx - w * 0.28, y0 + h * 0.60),
+                   (cx + w * 0.28, y0 + h * 0.74)], fill=trim, width=3)
+    # hair (sides + back sweep), then head
+    draw.rounded_rectangle([cx - w * 0.30, y0 + h * 0.20,
+                            cx + w * 0.30, y0 + h * 0.55],
+                           radius=12, fill=_HAIR)
+    draw.ellipse([cx - w * 0.25, y0 + h * 0.14,
+                  cx + w * 0.25, y0 + h * 0.54], fill=_SKIN)
+    # face: eyes, raised brows, smirk
+    ey = y0 + h * 0.355
+    for side in (-1, 1):
+        ex = cx + side * w * 0.115
+        draw.ellipse([ex - w * 0.045, ey - h * 0.028,
+                      ex + w * 0.045, ey + h * 0.028],
+                     fill=(255, 255, 255))
+        draw.ellipse([ex - w * 0.020, ey - h * 0.014,
+                      ex + w * 0.020, ey + h * 0.014],
+                     fill=(24, 120, 60))
+        draw.line([(ex - w * 0.055, ey - h * 0.075),
+                   (ex + w * 0.055, ey - h * 0.095)],
+                  fill=(40, 26, 16), width=2)
+    draw.arc([cx - w * 0.11, y0 + h * 0.415,
+              cx + w * 0.13, y0 + h * 0.50], start=15, end=80,
+             fill=(120, 60, 40), width=2)
+    # helm (the approved shaded patch) + variants
+    helm_w, helm_h = int(w * 0.66), int(h * 0.17)
+    patch, pad = _helm_patch(helm_w, helm_h)
+    brow_y = int(y0 + h * 0.235)
+    img.paste(patch, (cx - patch.width // 2,
+                      brow_y - (pad + helm_h)), patch)
+    horns = gear.get("horns", "classic")
+    if horns == "longhorn":
+        for side in (-1, 1):
+            for i in range(4):
+                t = i / 3.0
+                px = cx + side * (w * 0.30 + t * w * 0.17)
+                py = y0 + h * (0.10 - t * 0.085)
+                r = max(2, int(w * 0.045 * (1 - t * 0.5)))
+                draw.ellipse([px - r, py - r, px + r, py + r],
+                             fill=GOLD_HI)
+    elif horns == "crown":
+        by = y0 + h * 0.015
+        draw.rectangle([cx - w * 0.20, by + h * 0.05,
+                        cx + w * 0.20, by + h * 0.085], fill=GOLD)
+        for i in range(5):
+            sx = cx - w * 0.20 + i * w * 0.10
+            draw.polygon([(sx, by + h * 0.05),
+                          (sx + w * 0.05, by + h * 0.05),
+                          (sx + w * 0.025, by)], fill=GOLD_HI)
+    elif horns == "winged":
+        for side in (-1, 1):
+            for i in range(3):
+                wy = y0 + h * (0.16 + i * 0.055)
+                draw.polygon([(cx + side * w * 0.27, wy),
+                              (cx + side * w * 0.47,
+                               wy - h * 0.03 + i * h * 0.012),
+                              (cx + side * w * 0.28,
+                               wy + h * 0.045)], fill=GOLD)
+    # chest gem
+    gem = gear.get("gem", "none")
+    if gem in _GEM_COLORS:
+        gx, gy, gr = cx, y0 + h * 0.665, max(3, int(w * 0.05))
+        draw.ellipse([gx - gr, gy - gr, gx + gr, gy + gr],
+                     fill=_GEM_COLORS[gem], outline=GOLD_HI)
+        draw.point((gx - 1, gy - 1), fill=(255, 255, 255))
+    # scepter
+    if gear.get("scepter") == "scepter":
+        sx = x0 + w * 0.90
+        draw.line([(sx, y0 + h * 0.99), (sx, y0 + h * 0.30)],
+                  fill=GOLD, width=3)
+        draw.ellipse([sx - 6, y0 + h * 0.30 - 12, sx + 6,
+                      y0 + h * 0.30], outline=CYAN, width=2)
+        draw.ellipse([sx - 3, y0 + h * 0.30 - 9, sx + 3,
+                      y0 + h * 0.30 - 3], fill=CYAN)
+
+
+def _wrap(text: str, width: int) -> list[str]:
+    lines, cur = [], ""
+    for word in text.split():
+        if len(cur) + len(word) + 1 > width:
+            lines.append(cur)
+            cur = word
+        else:
+            cur = f"{cur} {word}".strip()
+    if cur:
+        lines.append(cur)
+    return lines
+
+
+def home_screen(item_label: str, level: int, title: str,
+                frac: float, xp_text: str, saying_text: str,
+                equipped: dict) -> str:
+    """Justin's home layout: avatar left, LV box + XP bar top
+    right, rotating sayings, and the PREV / item / NEXT carousel
+    over keys 4 / 6 / 8. Returns the key pressed."""
+    img, draw = _base()
+    _frame(draw, "LOKI", right=title.upper())
+    draw.rectangle([6, 36, 112, 138], outline=FRAME, fill=PANEL)
+    draw_loki(img, draw, (8, 38, 102, 98), equipped)
+    draw.rectangle([120, 36, 162, 74], outline=GOLD_DARK, fill=PANEL)
+    f_lv = _font("mono", 8)
+    lv = "LEVEL"
+    draw.text((141 - draw.textlength(lv, font=f_lv) / 2, 39), lv,
+              font=f_lv, fill=DIM)
+    f_num = _font("mono-bold", 20)
+    num = str(level)
+    draw.text((141 - draw.textlength(num, font=f_num) / 2, 47), num,
+              font=f_num, fill=GOLD_HI)
+    draw.rectangle([170, 38, 314, 52], outline=GOLD_DARK)
+    fill_w = int((314 - 170 - 4) * max(0.0, min(1.0, frac)))
+    if fill_w:
+        draw.rectangle([172, 40, 172 + fill_w, 50], fill=GOLD)
+    f_xp = _font("mono", 9)
+    draw.text((170, 56), xp_text, font=f_xp, fill=DIM)
+    f_say = _font("mono", 11)
+    y = 80
+    for line in _wrap(saying_text, 29)[:4]:
+        draw.text((120, y), line, font=f_say, fill=TEXT)
+        y += 15
+    draw.line([(6, 141), (314, 141)], fill=FRAME)
+    f_lab = _font("mono-bold", 11)
+    draw.text((10, 145), "PREV", font=f_lab, fill=DIM)
+    tw = draw.textlength(item_label.upper(), font=f_lab)
+    draw.text((160 - tw / 2, 145), item_label.upper(), font=f_lab,
+              fill=GOLD_HI)
+    nxt = "NEXT"
+    draw.text((310 - draw.textlength(nxt, font=f_lab), 145), nxt,
+              font=f_lab, fill=DIM)
+    f_key = _font("mono", 8)
+    for label, kx in (("KEY 4", 10), ("KEY 6", 148), ("KEY 8", 286)):
+        draw.text((kx, 158), label, font=f_key, fill=GOLD_DARK)
+    _push(img)
+    return read_key()
+
+
+def render_avatar_png(equipped: dict, w: int = 240,
+                      h: int = 300) -> bytes:
+    """The portrait as a PNG (portal wardrobe preview)."""
+    import io
+
+    from PIL import Image, ImageDraw
+
+    img = Image.new("RGB", (w, h), BG)
+    draw = ImageDraw.Draw(img)
+    draw.rectangle([4, 4, w - 5, h - 5], outline=FRAME)
+    draw_loki(img, draw, (14, 12, w - 28, h - 24), equipped)
+    buf = io.BytesIO()
+    img.save(buf, "PNG")
+    return buf.getvalue()
+
+
 def show_text(lines: list[str]) -> None:
     """Legacy plain-text screen, now wearing the theme."""
     show_screen("LOKI", [("text", line) for line in lines])

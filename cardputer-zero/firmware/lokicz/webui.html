@@ -117,6 +117,24 @@
     <pre id="jobResult"></pre>
   </div>
 
+  <h2>LOKI — YOUR AVATAR</h2>
+  <div class="card" style="margin-bottom:14px">
+    <div style="display:flex; gap:16px; flex-wrap:wrap">
+      <img id="av-img" src="/api/avatar.png" alt="Loki avatar"
+           style="width:150px; height:188px; border:1px solid var(--frame)">
+      <div style="flex:1; min-width:240px">
+        <div style="font-size:19px"><span class="gold" id="av-title">—</span>
+          <span class="dim" id="av-level"></span></div>
+        <div style="border:1px solid var(--gold); height:14px; margin:8px 0 4px">
+          <div id="av-xpfill" style="background:var(--gold); height:100%; width:0%"></div>
+        </div>
+        <div class="dim" id="av-xptext" style="font-size:12px">…</div>
+        <div id="av-ach" style="margin-top:10px; line-height:2"></div>
+      </div>
+      <div id="av-wardrobe" style="min-width:210px"></div>
+    </div>
+  </div>
+
   <h2>ACTIONS</h2>
   <div class="actions">
     <div class="act">
@@ -277,7 +295,16 @@ async function run(action, secsId) {
         j.state === "done" ? "100%" : "0";
       if (action === "proximity" && j.state === "done") renderProx(j.result);
       if (action === "probes" && j.state === "done") renderProbes(j.result);
-      refreshStatus(); loadAudits(); loadCaptures(); loadTrackers();
+      if (j.state === "done" && j.avatar) {
+        $("jobResult").textContent +=
+          `\n+${j.avatar.xp_gained} XP` +
+          (j.avatar.level_up ? ` — LEVEL ${j.avatar.level_up}!` : "") +
+          (j.avatar.achievements && j.avatar.achievements.length
+            ? ` — ACHIEVEMENT: ${j.avatar.achievements.join(", ")}` : "");
+        document.getElementById("av-img").src =
+          "/api/avatar.png?t=" + Date.now();
+      }
+      refreshStatus(); loadAudits(); loadCaptures(); loadTrackers(); loadAvatar();
     }
   }, 1200);
 }
@@ -446,7 +473,41 @@ async function loadTracks() {
       `<td class="${t.fix ? "ok" : "warn"}">${t.fix ? "yes" : "NO FIX"}</td><td class="dim">${esc(t.file)}</td></tr>`).join("") + `</table>`;
 }
 
-refreshStatus(); loadAudits(); loadCaptures(); loadFlights(); loadTrackers(); loadWatchdog(); loadTracks();
+async function loadAvatar() {
+  const a = await (await fetch("/api/avatar")).json();
+  document.getElementById("av-title").textContent = a.title;
+  document.getElementById("av-level").textContent = "· LEVEL " + a.level;
+  document.getElementById("av-xpfill").style.width =
+    Math.round(a.frac * 100) + "%";
+  document.getElementById("av-xptext").textContent =
+    `XP ${a.xp} — ${a.into}/${a.needed} to level ${a.level + 1}`;
+  document.getElementById("av-ach").innerHTML = a.achievements.map(x =>
+    `<span class="${x.unlocked ? "gold" : "dim"}" title="${x.progress}">` +
+    `${x.unlocked ? "★" : "☆"} ${x.name}</span>`).join(" · ");
+  document.getElementById("av-wardrobe").innerHTML =
+    Object.entries(a.gear).map(([slot, items]) => {
+      const opts = items.map(i =>
+        `<option value="${i.id}" ${i.equipped ? "selected" : ""} ` +
+        `${i.unlocked ? "" : "disabled"}>${i.name}` +
+        `${i.unlocked ? "" : " (locked)"}</option>`).join("");
+      return `<div style="margin-bottom:6px"><span class="dim" ` +
+        `style="font-size:11px; letter-spacing:2px">` +
+        `${slot.toUpperCase()}</span><br><select data-slot="${slot}" ` +
+        `onchange="equip(this)" style="width:100%; background:var(--panel2); ` +
+        `color:var(--text); border:1px solid var(--frame); padding:4px">` +
+        `${opts}</select></div>`;
+    }).join("");
+}
+async function equip(sel) {
+  await fetch("/api/avatar/equip", { method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ slot: sel.dataset.slot, item: sel.value }) });
+  document.getElementById("av-img").src =
+    "/api/avatar.png?t=" + Date.now();
+  loadAvatar();
+}
+
+refreshStatus(); loadAudits(); loadCaptures(); loadFlights(); loadTrackers(); loadWatchdog(); loadTracks(); loadAvatar();
 setInterval(refreshStatus, 10000);
 setInterval(loadFlights, 60000);
 </script>

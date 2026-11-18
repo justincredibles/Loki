@@ -90,6 +90,14 @@ def _run_job(job: dict, fn) -> None:
     try:
         job["result"] = fn(job)
         job["state"] = "done"
+        try:
+            from . import avatar
+
+            news = avatar.award_for(job["action"], job["result"])
+            if news.get("xp_gained"):
+                job["avatar"] = news
+        except Exception:
+            pass
     except Exception as exc:  # surface it; never die silently
         job["state"] = "error"
         job["error"] = f"{type(exc).__name__}: {exc}"
@@ -325,6 +333,15 @@ class Handler(BaseHTTPRequestHandler):
                                       "ssid": parts[2],
                                       "password": parts[3]})
             self._json(200, {"files": files, "cracked": found})
+        elif path == "/api/avatar":
+            from . import avatar
+
+            self._json(200, avatar.state())
+        elif path == "/api/avatar.png":
+            from . import avatar, ui
+
+            self._send(200, ui.render_avatar_png(
+                avatar.load()["gear"]), "image/png")
         else:
             self._json(404, {"error": "not found"})
 
@@ -356,6 +373,15 @@ class Handler(BaseHTTPRequestHandler):
             config.save(cfg)
             return self._json(200, {"wpasec_enabled":
                                     cfg["wpasec_enabled"]})
+        if path == "/api/avatar/equip":
+            from . import avatar
+
+            body = self._body()
+            ok, why = avatar.equip(str(body.get("slot", "")),
+                                   str(body.get("item", "")))
+            return self._json(200 if ok else 400,
+                              {"ok": ok, "reason": why,
+                               "state": avatar.state()})
         self._json(404, {"error": "not found"})
 
 

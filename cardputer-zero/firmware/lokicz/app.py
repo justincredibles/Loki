@@ -124,6 +124,68 @@ def _screen(rows: list, cfg: dict, title: str = "LOKI",
     return ui.read_key()
 
 
+# The home carousel (Justin's layout): label + dispatch target —
+# "status"/"loki"/"stop", or (page, key) into the classic menus.
+HOME_ITEMS = [
+    ("Status", "status"),
+    ("Handshake Capture", (1, "2")),
+    ("Sub-GHz Sweep", (1, "3")),
+    ("Wardrive", (1, "4")),
+    ("Sniff", (1, "5")),
+    ("Mesh", (1, "6")),
+    ("Network Audit", (1, "7")),
+    ("Capture On/Off", (1, "8")),
+    ("WPA-Sec", (2, "1")),
+    ("Last Audit", (2, "2")),
+    ("Flight Radar", (2, "4")),
+    ("Proximity Radar", (2, "5")),
+    ("Tracker Watch", (2, "6")),
+    ("Probe Logger", (2, "7")),
+    ("GPS Track", (2, "8")),
+    ("Loki", "loki"),
+    ("Stop", "stop"),
+]
+
+
+def _award(action: str, result) -> None:
+    """Feed a finished action to the avatar; celebrate any news."""
+    try:
+        from . import avatar
+
+        news = avatar.award_for(action, result)
+    except Exception:
+        return
+    if not (news.get("level_up") or news.get("achievements")):
+        return
+    rows = []
+    if news.get("level_up"):
+        from . import avatar
+
+        rows.append(("big", f"LEVEL {news['level_up']}!", "gold"))
+        rows.append(("kv", "NEW TITLE",
+                     avatar.TITLES[min(news["level_up"], 10) - 1]
+                     .upper(), "gold"))
+    for name in news.get("achievements", []):
+        rows.append(("kv", "ACHIEVEMENT", name.upper(), "cyan"))
+    rows.append(("kv", "XP GAINED", f"+{news['xp_gained']}", "text"))
+    ui.show_screen("LOKI", rows, right="")
+    ui.read_key()
+
+
+def _loki_rows() -> list:
+    from . import avatar
+
+    st = avatar.state()
+    return [("big", f"LEVEL {st['level']}", "gold"),
+            ("kv", "TITLE", st["title"].upper(), "gold"),
+            ("kv", "XP",
+             f"{st['xp']} · NEXT {st['needed'] - st['into']}",
+             "text"),
+            ("kv", "TROPHIES",
+             f"{sum(1 for a in st['achievements'] if a['unlocked'])}"
+             f"/{len(st['achievements'])}", "cyan")]
+
+
 def _stop() -> int:
     ui.show_screen("LOKI", [
         ("gap", 14),
@@ -135,6 +197,8 @@ def _stop() -> int:
 
 
 def run() -> int:
+    from . import avatar
+
     cfg = config.load()
     try:
         ui.splash()
@@ -142,11 +206,51 @@ def run() -> int:
         pass
     rows = _status_rows(cfg)
     title = "LOKI"
-    screen = "main"
+    screen = "home"
     page = 1
+    home_idx = 0
+    saying = avatar.saying()
+    pending = None
     while True:
-        key = _screen(rows, cfg, title=title,
-                      page=page if screen == "main" else 0)
+        if pending is not None:
+            key, pending = pending, None
+        elif screen == "home":
+            st = avatar.state()
+            key = ui.home_screen(
+                HOME_ITEMS[home_idx][0], st["level"], st["title"],
+                st["frac"],
+                f"XP {st['xp']} · NEXT {st['needed'] - st['into']}",
+                saying, st["equipped"])
+            if key in ("4", "8"):
+                home_idx = (home_idx
+                            + (1 if key == "8" else -1)) \
+                    % len(HOME_ITEMS)
+                saying = avatar.saying()
+                continue
+            if key in ("q", "esc"):
+                return _stop()
+            if key in ("6", "\n", "enter"):
+                kind = HOME_ITEMS[home_idx][1]
+                if kind == "status":
+                    screen = "main"
+                    page = 1
+                    rows = _status_rows(cfg)
+                elif kind == "loki":
+                    screen = "main"
+                    page = 1
+                    title = "LOKI"
+                    rows = _loki_rows()
+                elif kind == "stop":
+                    return _stop()
+                else:
+                    screen = "main"
+                    page, pending = kind
+                    rows = _status_rows(cfg)
+                continue
+            continue
+        else:
+            key = _screen(rows, cfg, title=title,
+                          page=page if screen == "main" else 0)
         title = "LOKI"
         if screen == "wpasec":
             # WPA-SEC screen has its own keys; anything else goes back.
@@ -161,6 +265,8 @@ def run() -> int:
             elif key == "0":
                 with ui.Spinner("WPA-SEC", "upload + download"):
                     r = wpasec.sync(cfg)
+                if r["ok"]:
+                    _award("wpasec-sync", r)
                 if r["ok"]:
                     rows = [("big", f"+{r['uploaded']} UP", "ok"),
                             ("kv", "CRACKED TOTAL",
@@ -177,6 +283,10 @@ def run() -> int:
             else:
                 screen = "main"
                 rows = _status_rows(cfg)
+            continue
+        if key == "0" and screen == "main":
+            screen = "home"
+            saying = avatar.saying()
             continue
         if key in ("q", "esc"):
             return _stop()
@@ -214,6 +324,7 @@ def run() -> int:
                 else:
                     rows = [("text", "FLIGHT RADAR OFFLINE", "bad"),
                             ("text", r["reason"][:28], "dim")]
+                _award("flights", r)
             elif key == "5":
                 from . import proximity
 
@@ -236,6 +347,7 @@ def run() -> int:
                 else:
                     rows = [("text", "NOTHING NEARBY", "dim"),
                             ("text", "no BLE heard in 25s", "dim")]
+                _award("proximity", r)
             elif key == "6":
                 from . import trackers
 
@@ -258,6 +370,7 @@ def run() -> int:
                              str(r["known_total"]), "dim"),
                             ("text", "none heard in 90s", "dim")]
                     title = "TRACKERS"
+                _award("trackers", r)
             elif key == "7":
                 from . import probes
 
@@ -275,6 +388,7 @@ def run() -> int:
                          (r["top_ssids"][0]["ssid"][:16]
                           if r["top_ssids"] else "—"), "gold")]
                 title = "PROBES"
+                _award("probes", r)
             elif key == "8":
                 from . import gpslog
 
@@ -294,6 +408,7 @@ def run() -> int:
                             ("text", "no position in 2 min", "text"),
                             ("text", "GPS needs open sky", "dim")]
                 title = "GPS TRACK"
+                _award("gps", r)
             elif key == "9":
                 page = 1
                 rows = _status_rows(cfg)
@@ -318,11 +433,14 @@ def run() -> int:
                     ("kv", "PCAP SAVED", f"{stats['bytes'] // 1024} KB",
                      "text")]
             title = "CAPTURE"
+            _award("capture", stats)
             if cfg.get("wpasec_enabled"):
                 from . import wpasec
 
                 with ui.Spinner("WPA-SEC", "auto-sync..."):
                     r = wpasec.sync(cfg)
+                if r["ok"]:
+                    _award("wpasec-sync", r)
                 if r["ok"]:
                     rows.append(("kv", "WPA-SEC",
                                  f"+{r['uploaded']} UP · "
@@ -363,6 +481,7 @@ def run() -> int:
             rows = [("text", "BAND SWEEP COMPLETE", "ok")] + [
                 ("kv", band, val, "text") for band, val in out]
             title = "SUB-GHZ"
+            _award("sweep", {})
         elif key == "4":
             from . import wardrive
 
@@ -374,6 +493,7 @@ def run() -> int:
                      "YES" if stats["gps_fix"] else "NO — NEEDS SKY",
                      "ok" if stats["gps_fix"] else "warn")]
             title = "WARDRIVE"
+            _award("wardrive", stats)
         elif key == "5":
             from . import sniffer
 
@@ -390,6 +510,7 @@ def run() -> int:
                              f"[{hit['confidence']}] {hit['label']}",
                              "warn"))
             title = "SNIFF"
+            _award("sniff", stats)
         elif key == "6":
             from . import meshtastic, meshcore
 
@@ -418,6 +539,7 @@ def run() -> int:
                                                     "message", m))
             rows = _audit_rows(stats)
             title = "AUDIT"
+            _award("audit", stats)
         # any other key: just redraw the current screen
 
 
