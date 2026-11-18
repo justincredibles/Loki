@@ -13,9 +13,11 @@ Plain-English tour:
   org's SubG-Chat reference app).
 
 This module is receive-only for now: frequency setting, an RSSI
-sweep (the radio's "ears" — channel power across a band), and a
-promiscuous FIFO listen (sync detection off, so ambient signals and
-noise stream in as bytes). Transmission lands later, behind the
+sweep (the radio's "ears" — channel power across a band), an RSSI
+activity listen (spikes = somebody transmitting), and a FIFO packet
+listen that collects packets carrying our sync word. Raw
+promiscuous OOK capture needs the chip's async-serial mode sampled
+on GDO0 — a later step. Transmission lands later still, behind the
 arm-token gate like every other attack-class feature in Loki.
 """
 
@@ -68,10 +70,14 @@ BASE_CONFIG = {
     IOCFG0: 0x06,
     PKTCTRL0: 0x05,  # packet mode, fixed length (PKTLEN below)
     0x11: 0xF8,      # MDMCFG3
+    0x10: 0x5B,      # MDMCFG4 — DRATE_E=11; pairs with MDMCFG3 above
     PKTLEN: 64,
-    # Promiscuous: GFSK, no preamble/sync-word detection, so the FIFO
-    # fills with whatever the demodulator hears.
-    MDMCFG2: 0x00,
+    # GFSK, 30/32 sync-word detection + carrier sense (sync word is
+    # the POR 0xD391). HARD-WON LESSON (2026-11-17): with sync
+    # detection OFF (MDMCFG2=0x00) this receiver goes deaf — RSSI
+    # freezes at a nonsense value and nothing is heard, on both
+    # bands, while the library-exact sync settings hear fine.
+    MDMCFG2: 0x03,
 }
 
 
@@ -184,12 +190,29 @@ class CC1101:
         self.strobe(SIDLE)
         return results
 
-    def listen_fifo(self, seconds: float) -> bytes:
-        """Collect whatever the demodulator hears for `seconds`.
+    def listen_activity(self, seconds: float) -> tuple[float, float]:
+        """Watch channel power for `seconds`; return (peak, mean) dBm.
 
-        Sync detection is off (see BASE_CONFIG), so this is ambient
-        signal energy rendered as bytes — a strong byte count means
-        the band is busy, silence means it isn't.
+        The honest "is anything transmitting here?" test: a key fob,
+        weather station or meter shows up as a clear spike above the
+        noise floor.
+        """
+        self.enter_rx()
+        samples = []
+        t_end = time.time() + seconds
+        while time.time() < t_end:
+            samples.append(self.rssi_dbm())
+            time.sleep(0.01)
+        self.strobe(SIDLE)
+        return max(samples), sum(samples) / len(samples)
+
+    def listen_fifo(self, seconds: float) -> bytes:
+        """Collect packets carrying our sync word for `seconds`.
+
+        Sync-word detection is ON (see BASE_CONFIG), so ambient
+        traffic — which doesn't carry 0xD391 — never lands here.
+        This is for talking to radios we've configured as peers;
+        use listen_activity() to sense a band.
         """
         self.enter_rx()
         data = bytearray()
@@ -215,9 +238,9 @@ def listen_test() -> None:
                   f"peak {peak_r:.0f} dBm at {peak_f:.1f} MHz")
         for mhz in (433.92, 915.0):
             radio.set_frequency(mhz)
-            heard = radio.listen_fifo(5.0)
-            print(f"{mhz} MHz dwell 5s: {len(heard)} FIFO bytes; "
-                  f"sample {heard[:16].hex()}")
+            peak, mean = radio.listen_activity(5.0)
+            print(f"{mhz} MHz dwell 5s: RSSI peak {peak:.0f} dBm, "
+                  f"mean {mean:.0f} dBm")
 
 
 if __name__ == "__main__":
