@@ -877,8 +877,19 @@ async function loadFiles() {
         `${label}</span> ` + files.map(f =>
           `<a href="/api/download/${kind}/${encodeURIComponent(f.name)}" ` +
           `style="color:var(--cyan)">${esc(f.name)}</a> ` +
-          `<span class="dim">(${f.kb} KB)</span>`).join(" · ") + `</div>`;
+          `<span class="dim">(${f.kb} KB)</span>` +
+          `<button class="ghost" title="delete this file" ` +
+          `onclick="deleteFile('${kind}', decodeURIComponent('${encodeURIComponent(f.name)}'))">✕</button>`
+        ).join(" · ") + `</div>`;
     }).join("") || `<span class="dim">no files yet</span>`;
+}
+async function deleteFile(kind, name) {
+  if (!confirm(`Delete ${name}? This cannot be undone.`)) return;
+  const r = await api("/api/files/delete",
+    {method: "POST", headers: {"Content-Type": "application/json"},
+     body: JSON.stringify({kind, name})});
+  if (r.error) alert(r.error);
+  loadFiles(); loadCaptures();
 }
 async function loadUpdate() {
   try {

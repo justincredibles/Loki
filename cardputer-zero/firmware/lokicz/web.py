@@ -853,6 +853,22 @@ class Handler(BaseHTTPRequestHandler):
                 seconds = max(10, min(seconds, 1800))
             job = _start(action, ACTIONS[action](cfg, seconds))
             return self._json(202, {"job": job["id"]})
+        if path == "/api/files/delete":
+            body = self._body()
+            kind = str(body.get("kind", ""))
+            name = str(body.get("name", ""))
+            folder = _download_dirs().get(kind)
+            target = folder / name if folder else None
+            if target is None or Path(name).name != name \
+                    or not target.is_file() \
+                    or target.resolve().parent != folder.resolve():
+                return self._json(404, {"error": "no such file"})
+            if name == "wpa-sec.found":
+                return self._json(400, {
+                    "error": "wpa-sec.found is the cracked-"
+                             "password record book — it stays"})
+            target.unlink()
+            return self._json(200, {"deleted": name})
         if path == "/api/mesh/mode":
             from . import meshcore
 
