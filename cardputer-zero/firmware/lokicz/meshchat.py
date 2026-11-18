@@ -57,8 +57,71 @@ def _call(cfg: dict, args: list[str], timeout: int) -> dict:
     return out
 
 
+def _revive_daemon() -> None:
+    """Config writes reboot the node; on portduino that exits
+    meshtasticd and systemd may leave it down. Bring it back."""
+    import subprocess as sp
+    import time
+
+    from . import meshtastic
+
+    for _ in range(10):
+        if meshtastic.service_active():
+            return
+        sp.run("sudo -n systemctl start meshtasticd", shell=True,
+               capture_output=True, timeout=20)
+        time.sleep(3)
+
+
 def info(cfg: dict) -> dict:
     return _call(cfg, ["info"], timeout=30)
+
+
+def channels(cfg: dict) -> dict:
+    return _call(cfg, ["channels"], timeout=40)
+
+
+def set_channel(cfg: dict, index: int, name: str,
+                psk_b64: str | None) -> dict:
+    import json as _json
+
+    if not 0 <= int(index) <= 7:
+        raise RuntimeError("channel slot must be 0–7")
+    spec = {"index": int(index), "name": (name or "").strip(),
+            "psk": psk_b64}
+    out = _call(cfg, ["setch", _json.dumps(spec)], timeout=60)
+    _revive_daemon()
+    return out
+
+
+def del_channel(cfg: dict, index: int) -> dict:
+    import json as _json
+
+    if int(index) == 0:
+        raise RuntimeError("the primary channel (slot 0) can't be "
+                           "disabled — edit it instead")
+    if not 1 <= int(index) <= 7:
+        raise RuntimeError("channel slot must be 1–7")
+    out = _call(cfg, ["delch", _json.dumps({"index": int(index)})],
+                timeout=60)
+    _revive_daemon()
+    return out
+
+
+def set_name(cfg: dict, long_name: str, short_name: str) -> dict:
+    import json as _json
+
+    long_name = (long_name or "").strip()
+    short_name = (short_name or "").strip()
+    if not long_name:
+        raise RuntimeError("long name can't be empty")
+    if not 1 <= len(short_name) <= 4:
+        raise RuntimeError("short name must be 1–4 characters "
+                           "(Meshtastic rule)")
+    spec = {"long": long_name, "short": short_name}
+    out = _call(cfg, ["setname", _json.dumps(spec)], timeout=60)
+    _revive_daemon()
+    return out
 
 
 def nodes(cfg: dict) -> dict:

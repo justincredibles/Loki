@@ -72,6 +72,10 @@
   button:hover { background: #123a1e; }
   button:disabled { opacity: .45; cursor: wait; }
   button.ghost { border-color: var(--frame); color: var(--dim); }
+  select {
+    background: #020604; color: var(--text); border: 1px solid var(--frame);
+    padding: 6px; font: inherit; font-size: 13px;
+  }
   input[type=text] {
     width: 62%; background: #020604; color: var(--text);
     border: 1px solid var(--frame); padding: 6px; font: inherit;
@@ -255,6 +259,27 @@
   </div>
   <div id="mesh-out"></div>
 
+  <div class="gold" style="letter-spacing:2px;margin:16px 0 6px">CHANNELS</div>
+  <div id="mesh-channels" class="dim">…</div>
+  <div style="margin-top:10px">
+    <select id="ch-index"></select>
+    <input type="text" id="ch-name" maxlength="11" placeholder="channel name (max 11)" style="width:170px">
+    <input type="text" id="ch-psk" placeholder="PSK base64 — empty = no encryption" style="width:min(300px,50%)">
+    <button class="ghost" onclick="pskDefault()">DEFAULT KEY</button>
+    <button class="ghost" onclick="pskRandom()">RANDOM</button>
+    <button onclick="saveChannel()">SAVE CHANNEL</button>
+  </div>
+  <p class="dim" style="margin:6px 0 0;font-size:12px">Slot 0 is the primary channel — renaming it changes its frequency slot, and other nodes need the same name + key to reach you. Saving a channel reboots the node (~30 s).</p>
+
+  <div class="gold" style="letter-spacing:2px;margin:16px 0 6px">NODE IDENTITY</div>
+  <div id="mesh-id" class="dim" style="margin-bottom:8px">…</div>
+  <div>
+    <input type="text" id="id-long" maxlength="39" placeholder="long name — e.g. LokiCZ Base" style="width:min(300px,55%)">
+    <input type="text" id="id-short" maxlength="4" placeholder="SHORT" style="width:80px">
+    <button onclick="saveIdentity()">SAVE NAMES</button>
+  </div>
+  <p class="dim" style="margin:6px 0 0;font-size:12px">Short name is 1–4 characters (a Meshtastic rule). Saving reboots the node (~30 s).</p>
+
   <h2>AIR TRAFFIC — FLIGHT RADAR</h2>
   <div id="flightmap"></div>
   <div id="flights"><span class="dim">loading…</span></div>
@@ -368,6 +393,7 @@ async function runBody(action, body) {
       if (action === "mesh-listen" && j.state === "done") renderMeshMsgs(j.result);
       if (action === "mesh-nodes" && j.state === "done") renderMeshNodes(j.result);
       if (action === "mesh-send" && j.state === "done") loadMesh();
+      if (["mesh-setch", "mesh-delch", "mesh-setname"].includes(action) && j.state === "done") { loadChannels(); loadMesh(); }
       if (j.state === "done" && j.avatar) {
         $("jobResult").textContent +=
           `\n+${j.avatar.xp_gained} XP` +
@@ -393,7 +419,13 @@ async function loadMesh() {
     } else if (m.mode === "meshtastic") {
       const t = m.meshtastic || {};
       s = `Meshtastic · daemon ${t.service ? "active" : "off"} · API ${t.api ? "up" : "down"} · radio ${t.radio ? "SX1262 OK" : "unproven"}`;
-      if (m.chat) { window.myNum = m.chat.my_num; s += ` · you are ${esc(m.chat.my_name)} · ${m.chat.nodes_known} nodes known`; }
+      if (m.chat) {
+        window.myNum = m.chat.my_num;
+        s += ` · you are ${esc(m.chat.my_name)} · ${m.chat.nodes_known} nodes known`;
+        $("mesh-id").textContent = `current: ${m.chat.my_name} (${m.chat.my_short || "—"})`;
+        if (document.activeElement !== $("id-long")) $("id-long").value = m.chat.my_name;
+        if (document.activeElement !== $("id-short")) $("id-short").value = m.chat.my_short || "";
+      }
       if (m.chat_error) s += ` · ${esc(m.chat_error)}`;
     } else if (m.mode === "meshcore") {
       s = `MeshCore (openHop repeater) · ${m.pymc_active ? "active" : m.pymc_installed ? "stopped" : "not installed"} · meshtasticd parked`;
@@ -402,6 +434,69 @@ async function loadMesh() {
     }
     $("mesh-line").textContent = s;
   } catch (e) { /* portal busy */ }
+}
+let chData = [];
+function encLabel(psk) {
+  if (!psk) return "none — cleartext";
+  if (psk === "AQ==") return "default key (public)";
+  let n = 0;
+  try { n = atob(psk).length; } catch (e) { return "custom key"; }
+  if (n === 16) return "AES-128";
+  if (n === 32) return "AES-256";
+  return n + "-byte key";
+}
+async function loadChannels() {
+  try {
+    const r = await api("/api/mesh/channels");
+    if (r.error) { $("mesh-channels").textContent = r.error; return; }
+    chData = r.channels || [];
+    const rows = chData.map(c => {
+      const dis = c.role === "DISABLED";
+      const name = dis ? `<span class="dim">(empty slot)</span>`
+        : `<span class="gold">${esc(c.name || "(preset default)")}</span>`;
+      const acts = dis ? "—" :
+        `<button class="ghost" onclick="editChannel(${c.index})">EDIT</button>` +
+        (c.url ? ` <a href="${c.url}" target="_blank" style="color:var(--cyan)">SHARE LINK</a>` : "") +
+        (c.index !== 0 ? ` <button class="ghost" onclick="disableChannel(${c.index})">DISABLE</button>` : "");
+      return `<tr><td>${c.index}</td><td>${esc(c.role)}</td><td>${name}</td><td>${dis ? "—" : encLabel(c.psk)}</td><td>${acts}</td></tr>`;
+    }).join("");
+    $("mesh-channels").innerHTML =
+      `<div style="margin-bottom:6px">preset ${esc(r.preset || "?")} · region ${esc(r.region || "?")} · ${chData.filter(c => c.role !== "DISABLED").length} active</div>` +
+      `<table><tr><th>SLOT</th><th>ROLE</th><th>NAME</th><th>ENCRYPTION</th><th></th></tr>${rows}</table>`;
+    $("ch-index").innerHTML = chData.map(c =>
+      `<option value="${c.index}">Slot ${c.index} — ${esc(c.role)}${c.role !== "DISABLED" && c.name ? " — " + esc(c.name) : ""}</option>`).join("");
+  } catch (e) { /* portal busy */ }
+}
+function editChannel(i) {
+  const c = chData.find(x => x.index === i);
+  if (!c) return;
+  $("ch-index").value = String(i);
+  $("ch-name").value = c.name || "";
+  $("ch-psk").value = c.psk || "";
+  $("ch-name").scrollIntoView({behavior: "smooth", block: "center"});
+  $("ch-name").focus();
+}
+function disableChannel(i) {
+  if (!confirm(`Disable channel slot ${i}? The node reboots.`)) return;
+  runBody("mesh-delch", {index: i});
+}
+function pskDefault() { $("ch-psk").value = "AQ=="; }
+function pskRandom() {
+  const b = crypto.getRandomValues(new Uint8Array(32));
+  $("ch-psk").value = btoa(String.fromCharCode(...b));
+}
+function saveChannel() {
+  const index = Number($("ch-index").value);
+  const name = $("ch-name").value.trim();
+  const psk = $("ch-psk").value.trim();
+  runBody("mesh-setch", {index, name, psk});
+}
+function saveIdentity() {
+  const long = $("id-long").value.trim();
+  const short = $("id-short").value.trim();
+  if (!long) { alert("long name can't be empty"); return; }
+  if (short.length < 1 || short.length > 4) { alert("short name must be 1–4 characters"); return; }
+  runBody("mesh-setname", {long, short});
 }
 async function meshMode(mode) {
   const r = await api("/api/mesh/mode",
@@ -423,6 +518,9 @@ function jobSummary(action, r) {
   if (action === "mesh-listen")
     return `${(r.messages || []).length} text(s) heard in ${r.seconds || 30}s — table in the MESH panel below`;
   if (action === "mesh-send") return `sent to the mesh: “${r.text}”`;
+  if (action === "mesh-setch") return `channel ${r.saved_channel} saved — node rebooted to apply`;
+  if (action === "mesh-delch") return `channel ${r.disabled_channel} disabled — node rebooted to apply`;
+  if (action === "mesh-setname") return `node names saved — node rebooted to apply`;
   return null;
 }
 function ago(ts) {
@@ -765,7 +863,7 @@ async function doUpdate() {
   setTimeout(() => clearInterval(iv), 120000);
 }
 
-refreshStatus(); loadAudits(); loadCaptures(); loadFlights(); loadTrackers(); loadWatchdog(); loadTracks(); loadAvatar(); loadFiles(); loadUpdate(); loadMesh();
+refreshStatus(); loadAudits(); loadCaptures(); loadFlights(); loadTrackers(); loadWatchdog(); loadTracks(); loadAvatar(); loadFiles(); loadUpdate(); loadMesh(); loadChannels();
 setInterval(refreshStatus, 10000);
 setInterval(loadFlights, 60000);
 </script>

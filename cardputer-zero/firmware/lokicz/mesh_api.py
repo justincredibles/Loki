@@ -53,9 +53,111 @@ def _name(nodes: dict, num) -> str:
 def op_info(iface) -> dict:
     nodes = _nodes(iface)
     my = iface.myInfo
+    me = nodes.get(my.my_node_num) or {}
+    user = me.get("user") or {}
     return {"my_num": my.my_node_num,
             "my_name": _name(nodes, my.my_node_num),
+            "my_short": user.get("shortName") or "",
             "nodes_known": len(nodes)}
+
+
+def _wait_config(iface) -> None:
+    node = iface.localNode
+    for _ in range(40):
+        if getattr(node, "channels", None):
+            return
+        time.sleep(0.25)
+
+
+def _enum_name(field_owner, field: str, value) -> str:
+    try:
+        desc = field_owner.DESCRIPTOR.fields_by_name[field]
+        return desc.enum_type.values_by_number[value].name
+    except Exception:
+        return str(value)
+
+
+def _channel_url(iface, settings) -> str | None:
+    """The meshtastic.org/e/ share link for one channel."""
+    import base64 as b64
+
+    try:
+        from meshtastic.protobuf import apponly_pb2
+
+        cs = apponly_pb2.ChannelSet()
+        cs.settings.append(settings)
+        cs.lora_config.CopyFrom(iface.localNode.localConfig.lora)
+        raw = b64.urlsafe_b64encode(
+            cs.SerializeToString()).decode().rstrip("=")
+        return f"https://meshtastic.org/e/#{raw}"
+    except Exception:
+        return None
+
+
+def op_channels(iface) -> dict:
+    import base64 as b64
+
+    from meshtastic.protobuf import channel_pb2
+
+    _wait_config(iface)
+    node = iface.localNode
+    out = []
+    for ch in node.channels or []:
+        out.append({
+            "index": ch.index,
+            "role": channel_pb2.Channel.Role.Name(ch.role),
+            "name": ch.settings.name,
+            "psk": b64.b64encode(ch.settings.psk).decode(),
+            "url": _channel_url(iface, ch.settings)
+                   if ch.role != channel_pb2.Channel.Role.DISABLED
+                   else None,
+        })
+    lora = node.localConfig.lora
+    return {"channels": out,
+            "preset": _enum_name(lora, "modem_preset",
+                                 lora.modem_preset),
+            "region": _enum_name(lora, "region", lora.region)}
+
+
+def op_setch(iface, spec: dict) -> dict:
+    import base64 as b64
+
+    from meshtastic.protobuf import channel_pb2
+
+    _wait_config(iface)
+    node = iface.localNode
+    idx = int(spec["index"])
+    ch = node.channels[idx]
+    ch.settings.name = str(spec.get("name", ""))[:11]
+    psk = spec.get("psk")
+    if psk is not None:
+        ch.settings.psk = b64.b64decode(psk) if psk else b""
+    if ch.role == channel_pb2.Channel.Role.DISABLED:
+        ch.role = channel_pb2.Channel.Role.SECONDARY
+    node.writeChannel(idx)
+    return {"saved_channel": idx, "note": "node reboots to apply"}
+
+
+def op_delch(iface, spec: dict) -> dict:
+    from meshtastic.protobuf import channel_pb2
+
+    _wait_config(iface)
+    node = iface.localNode
+    idx = int(spec["index"])
+    ch = node.channels[idx]
+    ch.role = channel_pb2.Channel.Role.DISABLED
+    ch.settings.name = ""
+    ch.settings.psk = b""
+    node.writeChannel(idx)
+    return {"disabled_channel": idx, "note": "node reboots to apply"}
+
+
+def op_setname(iface, spec: dict) -> dict:
+    _wait_config(iface)
+    node = iface.localNode
+    node.setOwner(long_name=str(spec["long"]),
+                  short_name=str(spec["short"]))
+    return {"saved_owner": True, "note": "node reboots to apply"}
 
 
 def op_nodes(iface) -> dict:
@@ -130,6 +232,14 @@ def main() -> int:
             elif op == "listen":
                 secs = max(5, min(int(sys.argv[2]), 120))
                 result = op_listen(iface, secs)
+            elif op == "channels":
+                result = op_channels(iface)
+            elif op == "setch":
+                result = op_setch(iface, json.loads(sys.argv[2]))
+            elif op == "delch":
+                result = op_delch(iface, json.loads(sys.argv[2]))
+            elif op == "setname":
+                result = op_setname(iface, json.loads(sys.argv[2]))
             else:
                 result = op_info(iface)
         finally:

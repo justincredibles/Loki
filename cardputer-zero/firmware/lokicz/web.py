@@ -311,6 +311,36 @@ def _act_mesh_send(cfg, text):
     return fn
 
 
+def _act_mesh_setch(cfg, body):
+    def fn(job):
+        from . import meshchat
+
+        job["message"] = "writing channel (node reboots)..."
+        return meshchat.set_channel(cfg, body.get("index", 0),
+                                    str(body.get("name", "")),
+                                    body.get("psk"))
+    return fn
+
+
+def _act_mesh_delch(cfg, body):
+    def fn(job):
+        from . import meshchat
+
+        job["message"] = "disabling channel (node reboots)..."
+        return meshchat.del_channel(cfg, body.get("index", -1))
+    return fn
+
+
+def _act_mesh_setname(cfg, body):
+    def fn(job):
+        from . import meshchat
+
+        job["message"] = "setting node names (node reboots)..."
+        return meshchat.set_name(cfg, str(body.get("long", "")),
+                                 str(body.get("short", "")))
+    return fn
+
+
 def _act_nfc(cfg, _seconds):
     def fn(job):
         from . import nfc
@@ -410,6 +440,13 @@ class Handler(BaseHTTPRequestHandler):
                 except Exception as exc:
                     out["chat_error"] = str(exc)
             self._json(200, out)
+        elif path == "/api/mesh/channels":
+            from . import meshchat
+
+            try:
+                self._json(200, meshchat.channels(config.load()))
+            except Exception as exc:
+                self._json(200, {"error": str(exc)})
         elif path == "/api/status":
             self._json(200, status_payload())
         elif path.startswith("/api/jobs/"):
@@ -514,6 +551,15 @@ class Handler(BaseHTTPRequestHandler):
             if action == "mesh-send":  # takes {text}, not {seconds}
                 job = _start(action, _act_mesh_send(
                     cfg, str(body.get("text", ""))))
+                return self._json(202, {"job": job["id"]})
+            if action == "mesh-setch":
+                job = _start(action, _act_mesh_setch(cfg, body))
+                return self._json(202, {"job": job["id"]})
+            if action == "mesh-delch":
+                job = _start(action, _act_mesh_delch(cfg, body))
+                return self._json(202, {"job": job["id"]})
+            if action == "mesh-setname":
+                job = _start(action, _act_mesh_setname(cfg, body))
                 return self._json(202, {"job": job["id"]})
             if action not in ACTIONS:
                 return self._json(404, {"error": "unknown action"})
