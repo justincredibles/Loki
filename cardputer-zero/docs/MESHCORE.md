@@ -97,9 +97,23 @@ held throughout.
   cap is fitted (with its antenna — an unloaded PA can be damaged
   by TX). Status 2026-11-17: research ✓, supervisor ✓, pymc_core
   import ✓, **radio ✓ proven on the fitted cap** (see above).
-  Still outstanding: standing up the `pymc-repeater` service
-  itself and verifying against a known MeshCore node (or the
-  companion app).
+
+**Service LANDED 2026-11-17 (evening):** pyMC_Repeater upstream
+renamed to **openHop Repeater** (openhop-dev/openhop_repeater,
+openhop_core 1.1.3, repeater 1.1.4). Its manage.sh demands an
+interactive TTY, so the install was done manually to the same
+layout: `repeater` system user (gpio/spi/plugdev/dialout),
+/opt/openhop_repeater venv (installed from the git clone — the
+rsync'd copy fails: setuptools_scm needs .git for the version),
+/etc/openhop_repeater/config.yaml (device/openhop/config.yaml),
+the shipped systemd unit plus lokicz's cap-lora-init drop-in.
+**Verified live: `SX1262 radio initialized successfully` at
+915 MHz / SF8 / BW 62.5 / CR8, identity registered, GPS serial
+service up, dashboard HTTP 200 on :8000.** Mode flipped back to
+Meshtastic afterwards (meshtasticd re-verified with
+`SX126x init result 0`); MeshCore is one apply_mode away.
+Still outstanding: verifying against a known MeshCore node (or
+the companion app) — needs another MeshCore radio in range.
 
 ## Verdict
 
