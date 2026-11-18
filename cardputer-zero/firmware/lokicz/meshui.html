@@ -3,6 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#030a06">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="apple-touch-icon" href="/icon.png">
+<link rel="icon" type="image/png" href="/icon.png">
 <title>LokiCZ — Mesh</title>
 <style>
   :root {
@@ -144,6 +151,35 @@
   .nodesbox table { width: 100%; }
   .nodesbox thead th { position: sticky; top: 0;
     background: var(--panel); z-index: 1; }
+  /* Wide tables scroll inside their section instead of
+     stretching the page (a no-op on desktop, where they fit). */
+  #audits, #captures, #files, #trackers, #watchdog, #report,
+  #mesh-channels, #mesh-out { overflow-x: auto;
+    -webkit-overflow-scrolling: touch; }
+  /* ---- small screens (phones) ---- */
+  @media (max-width: 700px) {
+    main { padding: 12px; }
+    header { padding: 10px 12px; flex-wrap: wrap; row-gap: 6px; }
+    header img { width: 42px; height: 42px; }
+    header h1 { font-size: 21px; letter-spacing: 3px; }
+    header .sub { font-size: 11px; }
+    header .addr { margin-left: 0; width: 100%; text-align: left; }
+    h2 { font-size: 13px; letter-spacing: 2px; }
+    .cards { grid-template-columns: repeat(auto-fit, minmax(105px, 1fr)); }
+    .card .v { font-size: 16px; }
+    .actions { grid-template-columns: 1fr; }
+    .act p { min-height: 0; }
+    button { padding: 10px 14px; }
+    select, input[type=text], input[type=number] {
+      padding: 9px 6px; font-size: 16px; }
+    table { font-size: 12px; }
+    th, td { padding: 4px 5px; }
+    #flightmap { height: 300px; }
+    .nodesbox { overflow: auto; }
+    .nodesbox table { font-size: 12px; }
+    .secttl { font-size: 15px; }
+    table.cfg td.fname { width: 30%; }
+  }
 </style>
 </head>
 <body>
@@ -156,7 +192,7 @@
 
   <div class="secttl">STATUS</div>
   <div id="mesh-line" class="dim" style="margin-bottom:10px">…</div>
-  <div style="margin-bottom:6px">
+  <div style="margin-bottom:6px;display:flex;flex-wrap:wrap;gap:6px">
     <button onclick="meshMode('meshtastic')">MESHTASTIC</button>
     <button onclick="meshMode('meshcore')">MESHCORE</button>
     <button class="ghost" onclick="meshMode('off')">OFF</button>
@@ -181,7 +217,7 @@
   <div class="secttl">CHAT — MESHTASTIC</div>
   <p class="dim" style="margin:0 0 8px">Meshtastic itself keeps no history — a listener on the Cardputer records texts as they arrive, so this log reaches back to when the listener started, not before. It collects whenever Meshtastic mode is on.</p>
   <div id="chat-box" class="nodesbox" style="max-height:380px"><span class="dim">…</span></div>
-  <div style="margin:8px 0">
+  <div style="margin:8px 0;display:flex;flex-wrap:wrap;gap:6px;align-items:center">
     <select id="chat-filter" onchange="loadMessages()">
       <option value="0">Primary channel</option>
       <option value="all">All channels</option>
@@ -190,7 +226,7 @@
     <button class="ghost" onclick="loadMessages()">REFRESH CHAT</button>
     <span id="chat-meta" class="dim" style="margin-left:8px"></span>
   </div>
-  <div style="margin-bottom:10px">
+  <div style="margin-bottom:10px;display:flex;flex-wrap:wrap;gap:6px;align-items:center">
     <input type="text" id="mesh-text" maxlength="200" placeholder="mesh text — broadcasts on the primary channel" style="width:min(520px,70%)">
     <button onclick="meshSend()">SEND</button>
     <button onclick="runBody('mesh-listen', {})">LISTEN 30s</button>
@@ -199,7 +235,7 @@
 
   <div class="secttl">CHANNELS</div>
   <div id="mesh-channels" class="dim">…</div>
-  <div style="margin-top:10px">
+  <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;align-items:center">
     <select id="ch-index"></select>
     <input type="text" id="ch-name" maxlength="11" placeholder="channel name (max 11)" style="width:170px">
     <input type="text" id="ch-psk" placeholder="PSK base64 — empty = no encryption" style="width:min(300px,50%)">
@@ -211,7 +247,7 @@
 
   <div class="secttl">NODE IDENTITY</div>
   <div id="mesh-id" class="dim" style="margin-bottom:8px">…</div>
-  <div>
+  <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
     <input type="text" id="id-long" maxlength="39" placeholder="long name — e.g. LokiCZ Base" style="width:min(300px,55%)">
     <input type="text" id="id-short" maxlength="4" placeholder="SHORT" style="width:80px">
     <button onclick="saveIdentity()">SAVE NAMES</button>
@@ -220,7 +256,7 @@
 
   <div class="secttl">NODE TYPE</div>
   <p class="dim" style="margin:0 0 8px">The Meshtastic device role. CLIENT hears and talks; ROUTER / REPEATER nodes repeat for others and sleep less; CLIENT_MUTE listens without repeating or announcing. MeshCore on this box is the openHop <i>repeater</i> build — its kind is chosen by the daemon, not a setting.</p>
-  <div>
+  <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
     <select id="cfg-role"></select>
     <button onclick="saveRole()">SAVE NODE TYPE</button>
   </div>

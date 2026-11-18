@@ -3,6 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#030a06">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="apple-touch-icon" href="/icon.png">
+<link rel="icon" type="image/png" href="/icon.png">
 <title>LOKI — Cardputer Zero</title>
 <style>
   :root {
@@ -58,6 +65,9 @@
   .capbar.lora { background: #db31a4; }
   .capbar.both { background: linear-gradient(90deg, #2640be 50%,
                    #db31a4 50%); }
+  .dongletag { float: right; border: 1px solid var(--cyan);
+               color: var(--cyan); font-size: 10px; padding: 2px 6px;
+               letter-spacing: 1px; }
   .caplegend { color: var(--dim); font-size: 12px; margin: -6px 0 12px; }
   .caplegend .sw { display: inline-block; width: 22px; height: 6px;
                    border-radius: 3px; vertical-align: middle;
@@ -127,6 +137,31 @@
   .leaflet-popup-content { font-size: 12px; line-height: 1.5; }
   .dark-tiles { filter: invert(0.92) hue-rotate(185deg) saturate(0.5)
                 brightness(0.92) contrast(0.95); }
+  /* Wide tables scroll inside their section instead of
+     stretching the page (a no-op on desktop, where they fit). */
+  #audits, #captures, #files, #trackers, #watchdog, #report,
+  #mesh-channels, #mesh-out { overflow-x: auto;
+    -webkit-overflow-scrolling: touch; }
+  /* ---- small screens (phones) ---- */
+  @media (max-width: 700px) {
+    main { padding: 12px; }
+    header { padding: 10px 12px; flex-wrap: wrap; row-gap: 6px; }
+    header img { width: 42px; height: 42px; }
+    header h1 { font-size: 21px; letter-spacing: 3px; }
+    header .sub { font-size: 11px; }
+    header .addr { margin-left: 0; width: 100%; text-align: left; }
+    h2 { font-size: 13px; letter-spacing: 2px; }
+    .cards { grid-template-columns: repeat(auto-fit, minmax(105px, 1fr)); }
+    .card .v { font-size: 16px; }
+    .actions { grid-template-columns: 1fr; }
+    .act p { min-height: 0; }
+    button { padding: 10px 14px; }
+    select, input[type=text], input[type=number] {
+      padding: 9px 6px; font-size: 16px; }
+    table { font-size: 12px; }
+    th, td { padding: 4px 5px; }
+    #flightmap { height: 300px; }
+  }
 </style>
 </head>
 <body>
@@ -172,14 +207,17 @@
   <p class="caplegend">Cap bars:
     <span class="sw" style="background:#2640be"></span>CC1101 cap
     <span class="sw" style="background:#db31a4"></span>LoRa cap
-    <span class="sw" style="background:linear-gradient(90deg,#2640be 50%,#db31a4 50%)"></span>works with either</p>
+    <span class="sw" style="background:linear-gradient(90deg,#2640be 50%,#db31a4 50%)"></span>works with either
+    <br><span class="dongletag" style="float:none">USB DONGLE</span>
+    needs a supported USB Wi-Fi dongle instead — <a href="/dongles" target="_blank" rel="noopener" style="color:var(--cyan)">the list</a></p>
   <div class="actions">
     <div class="act">
-      <h3><span class="capbar both"></span>◈ HANDSHAKE CAPTURE</h3>
-      <p>Monitor-mode capture on the USB dongle (deauth disabled). Auto-syncs to WPA-SEC when enabled.</p>
+      <h3><span class="dongletag">USB DONGLE</span>◈ HANDSHAKE CAPTURE</h3>
+      <p>Monitor-mode capture on a supported USB Wi-Fi dongle — the caps can't do this one; the built-in radio has no monitor mode. Deauth disabled. Auto-syncs to WPA-SEC when enabled.</p>
       <input type="number" id="capSecs" value="90" min="10" max="1800"> s
       <button onclick="run('capture','capSecs')">START</button>
       <button class="ghost" onclick="toggle('capture')">TOGGLE ON/OFF</button>
+      <div style="margin-top:8px"><a href="/dongles" target="_blank" rel="noopener" style="color:var(--cyan)">SUPPORTED DONGLES →</a></div>
     </div>
     <div class="act">
       <h3><span class="capbar both"></span>◈ NETWORK AUDIT</h3>
@@ -214,7 +252,7 @@
       <button onclick="run('watchdog')">RUN WATCHDOG</button>
     </div>
     <div class="act">
-      <h3><span class="capbar both"></span>◈ PROBE LOGGER</h3>
+      <h3><span class="dongletag">USB DONGLE</span>◈ PROBE LOGGER</h3>
       <p>Monitor-mode ears on the dongle: which devices are asking for which networks by name. The preferred-network list is a travel diary.</p>
       <button onclick="run('probes')">LISTEN 60s</button>
     </div>

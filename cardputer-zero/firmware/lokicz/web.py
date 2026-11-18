@@ -25,6 +25,111 @@ from pathlib import Path
 PORT = 8420
 UI_FILE = Path(__file__).with_name("webui.html")
 MESH_UI_FILE = Path(__file__).with_name("meshui.html")
+
+_DONGLES_FALLBACK = """# Supported USB Wi-Fi dongles
+
+The full list lives in docs/DONGLES.md in the Loki repo; this
+install couldn't find that file, so here is the short version.
+
+## Tier 1 — plug-and-play (in-kernel drivers)
+
+| Adapter | Chipset | Bands | Notes |
+|---|---|---|---|
+| **ALFA AWUS036ACM** | MediaTek MT7612U | dual | **Recommended** — monitor + injection + active monitor |
+| ALFA AWUS036ACHM / Panda PAU0B / ASUS USB-AC51 | MT7610U | dual | Same class, smaller |
+| ALFA AWUS036NHA | Atheros AR9271 | 2.4 GHz | Long-capture reliability king |
+| Panda PAU09 | Ralink RT5572 | dual | Cheaper dual-band |
+| Panda PAU06 | Ralink RT5372 | 2.4 GHz | Cheapest solid option |
+| TP-Link Archer T3U class | Realtek RTL8822BU | dual | The verified baseline — capture works, injection weak |
+
+## Not supported
+
+- TL-WN722N v2/v3, RTL8821CU/8811CU combo sticks, RTL8852AU,
+  MT7921AU, anything Broadcom.
+"""
+
+
+def _md_inline(text: str) -> str:
+    import html as _html
+    import re as _re
+
+    out = _html.escape(text)
+    out = _re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", out)
+    out = _re.sub(r"`([^`]+)`", r"<code>\1</code>", out)
+    out = _re.sub(r"\*([^*]+)\*", r"<i>\1</i>", out)
+    return out
+
+
+def _md_to_html(md: str) -> str:
+    """Just enough markdown for docs/DONGLES.md: headings,
+    paragraphs, bold/code/italic, bullet lists, pipe tables."""
+    lines = md.splitlines()
+    out, i = [], 0
+
+    def cells(row):
+        return [c.strip() for c in row.strip().strip("|").split("|")]
+
+    while i < len(lines):
+        line = lines[i].rstrip()
+        if line.startswith("|") and i + 1 < len(lines) and \
+                set(lines[i + 1].replace("|", "")
+                    .replace(" ", "")) <= set("-:"):
+            head = cells(line)
+            rows = []
+            i += 2
+            while i < len(lines) and lines[i].startswith("|"):
+                rows.append(cells(lines[i]))
+                i += 1
+            out.append(
+                "<table><tr>" + "".join(
+                    f"<th>{_md_inline(c)}</th>" for c in head) + "</tr>"
+                + "".join(
+                    "<tr>" + "".join(
+                        f"<td>{_md_inline(c)}</td>" for c in r) + "</tr>"
+                    for r in rows) + "</table>")
+            continue
+        if line.startswith("## "):
+            out.append(f"<h2>{_md_inline(line[3:])}</h2>")
+        elif line.startswith("# "):
+            out.append(
+                f"<h1 style=\"color:var(--gold-hi);"
+                f"letter-spacing:3px\">{_md_inline(line[2:])}</h1>")
+        elif line.startswith("- "):
+            items = []
+            while i < len(lines) and lines[i].startswith("- "):
+                items.append(f"<li>{_md_inline(lines[i][2:])}</li>")
+                i += 1
+            out.append("<ul>" + "".join(items) + "</ul>")
+            continue
+        elif line.strip():
+            out.append(f"<p>{_md_inline(line)}</p>")
+        i += 1
+    return "\n".join(out)
+
+
+def _dongles_html() -> bytes:
+    md_path = Path(__file__).resolve().parents[2] / "docs" \
+        / "DONGLES.md"
+    try:
+        md = md_path.read_text()
+        src = "Rendered live from docs/DONGLES.md in the Loki repo."
+    except OSError:
+        md = _DONGLES_FALLBACK
+        src = "Bundled summary (repo doc not found in this install)."
+    css = UI_FILE.read_text().split("<style>", 1)[1] \
+        .split("</style>", 1)[0]
+    page = (
+        "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\">"
+        "<meta name=\"viewport\" content=\"width=device-width, "
+        "initial-scale=1\">"
+        "<title>LOKI — Supported USB Wi-Fi Dongles</title>"
+        f"<style>{css}</style></head><body><main>"
+        f"{_md_to_html(md)}"
+        f"<p class=\"dim\">{src}</p>"
+        "<p><a href=\"/\" style=\"color:var(--cyan)\">"
+        "← back to the portal</a></p>"
+        "</main></body></html>")
+    return page.encode()
 ICON_FILE = Path(__file__).resolve().parents[2] / "app" \
     / "packaging" / "icon.png"
 
@@ -463,6 +568,19 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/mesh":
             self._send(200, MESH_UI_FILE.read_bytes(),
                        "text/html; charset=utf-8")
+        elif path == "/dongles":
+            self._send(200, _dongles_html(),
+                       "text/html; charset=utf-8")
+        elif path == "/manifest.webmanifest":
+            self._send(200, (
+                '{"name": "LokiCZ — Cardputer Zero", '
+                '"short_name": "LokiCZ", "start_url": "/", '
+                '"scope": "/", "display": "standalone", '
+                '"background_color": "#030a06", '
+                '"theme_color": "#030a06", '
+                '"icons": [{"src": "/icon.png", "sizes": "256x256", '
+                '"type": "image/png", "purpose": "any"}]}'
+            ).encode(), "application/manifest+json")
         elif path == "/api/mesh/messages":
             import json as _json
             import time as _time
