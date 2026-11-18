@@ -29,7 +29,7 @@ def _chips(cfg: dict, page: int) -> list:
     if page == 2:
         return [("1", "WPA-SEC"), ("2", "LAST AUDIT"),
                 ("3", "STOP"), ("4", "FLIGHTS"), ("5", "RADAR"),
-                ("6", "TRACKER"), ("9", "◂ BACK")]
+                ("6", "TRACKER"), ("7", "PROBES"), ("9", "◂ BACK")]
     cap_tone = "text" if cfg.get("capture_enabled", True) else "off"
     return [("1", "STATUS"), ("2", "CAPTURE", cap_tone),
             ("3", "SUB-GHZ"), ("4", "WARDRIVE"), ("5", "SNIFF"),
@@ -244,6 +244,23 @@ def run() -> int:
                              str(r["known_total"]), "dim"),
                             ("text", "none heard in 90s", "dim")]
                     title = "TRACKERS"
+            elif key == "7":
+                from . import probes
+
+                with ui.Spinner("PROBES",
+                                "listening for probe requests...",
+                                expected=60):
+                    r = probes.run_probes(60, cfg["capture_iface"])
+                rows = [("big", f"{r['directed_devices']} DEVICES",
+                         "gold" if r["directed_devices"] else "text"),
+                        ("kv", "PROBES HEARD",
+                         str(r["probes_total"]), "text"),
+                        ("kv", "UNIQUE SSIDS",
+                         str(r["unique_ssids"]), "text"),
+                        ("kv", "TOP SSID",
+                         (r["top_ssids"][0]["ssid"][:16]
+                          if r["top_ssids"] else "—"), "gold")]
+                title = "PROBES"
             elif key == "9":
                 page = 1
                 rows = _status_rows(cfg)

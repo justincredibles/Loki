@@ -167,6 +167,15 @@ def _act_audit(cfg, _seconds):
     return fn
 
 
+def _act_probes(cfg, _seconds):
+    def fn(job):
+        from . import probes
+
+        job["message"] = "listening for probe requests (60s)..."
+        return probes.run_probes(60, cfg["capture_iface"])
+    return fn
+
+
 def _act_trackers(cfg, _seconds):
     def fn(job):
         from . import trackers
@@ -198,7 +207,8 @@ ACTIONS = {"capture": _act_capture, "wardrive": _act_wardrive,
            "sniff": _act_sniff, "sweep": _act_sweep,
            "audit": _act_audit, "wpasec-sync": _act_wpasec_sync,
            "proximity": _act_proximity,
-           "trackers": _act_trackers}
+           "trackers": _act_trackers,
+           "probes": _act_probes}
 
 DEFAULT_SECONDS = {"capture": "capture_seconds",
                    "wardrive": "wardrive_seconds",

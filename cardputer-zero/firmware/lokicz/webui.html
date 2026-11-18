@@ -149,6 +149,11 @@
       <button onclick="run('proximity')">SCAN 25s</button>
     </div>
     <div class="act">
+      <h3>◈ PROBE LOGGER</h3>
+      <p>Monitor-mode ears on the dongle: which devices are asking for which networks by name. The preferred-network list is a travel diary.</p>
+      <button onclick="run('probes')">LISTEN 60s</button>
+    </div>
+    <div class="act">
       <h3>◈ TRACKER WATCH</h3>
       <p>Listen 90 s for AirTag / SmartTag / Tile beacons and grade them against the on-device history — persistence is the tell.</p>
       <button onclick="run('trackers')">WATCH 90s</button>
@@ -174,6 +179,9 @@
 
   <h2>TRACKER HISTORY</h2>
   <div id="trackers"><span class="dim">loading…</span></div>
+
+  <h2>PROBE RESULTS</h2>
+  <div id="probes"><span class="dim">run a probe listen from ACTIONS above</span></div>
 
   <h2>AUDIT REPORTS</h2>
   <div id="audits"><span class="dim">loading…</span></div>
@@ -252,6 +260,7 @@ async function run(action, secsId) {
       document.querySelector("#job .fill").style.width =
         j.state === "done" ? "100%" : "0";
       if (action === "proximity" && j.state === "done") renderProx(j.result);
+      if (action === "probes" && j.state === "done") renderProbes(j.result);
       refreshStatus(); loadAudits(); loadCaptures(); loadTrackers();
     }
   }, 1200);
@@ -371,6 +380,21 @@ async function loadTrackers() {
       `<td class="${vc(t.verdict)}">${esc(t.verdict)}</td><td>${t.windows}</td>` +
       `<td>${t.span_min} min</td><td>${t.best_rssi} dBm</td></tr>`).join("") + `</table>` +
     `<div class="dim" style="margin-top:6px">A candidate is a lead, not a verdict — persistence while you move is the signal that matters. AirTags rotate addresses, so history undercounts them.</div>`;
+}
+
+function renderProbes(r) {
+  if (!r) return;
+  const top = r.top_ssids.length
+    ? `<table><tr><th>SSID ASKED FOR</th><th>DEVICES ASKING</th></tr>` +
+      r.top_ssids.map(t => `<tr><td class="gold">${esc(t.ssid)}</td><td>${t.devices}</td></tr>`).join("") + `</table>`
+    : `<span class="dim">no directed probes heard — a quiet, well-behaved room</span>`;
+  const loud = r.loudest.length
+    ? `<h3 class="gold">LOUDEST DIRECTED DEVICES</h3><table><tr><th>MAC</th><th>ASKING FOR</th><th>RSSI</th></tr>` +
+      r.loudest.map(d => `<tr><td class="dim">${esc(d.mac)}</td><td>${d.ssids.map(esc).join(", ")}</td><td>${d.best_rssi}</td></tr>`).join("") + `</table>`
+    : "";
+  $("probes").innerHTML =
+    `<div class="dim" style="margin-bottom:6px">${r.probes_total} probes · ${r.devices} devices · ${r.directed_devices} directed · ${r.unique_ssids} unique SSIDs (MACs are randomised per burst — SSID lists are the durable signal)</div>` +
+    top + loud;
 }
 
 refreshStatus(); loadAudits(); loadCaptures(); loadFlights(); loadTrackers();
