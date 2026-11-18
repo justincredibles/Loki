@@ -55,7 +55,31 @@ def status() -> dict:
             "api": api_up(), "radio": radio_ok()}
 
 
+def apply_profile(cap: str) -> str:
+    """Tie the daemon to the fitted-cap profile.
+
+    With the LoRa cap configured, enable + start meshtasticd. With
+    anything else fitted, stop + disable it: its cap-init hook
+    (correctly) refuses to run without the LoRa cap's I2C expander,
+    and a boot-time restart loop helps nobody. Returns what it did.
+    """
+    if cap == "lora":
+        _run("sudo -n systemctl enable --now meshtasticd")
+        return "meshtasticd enabled + started (LoRa profile)"
+    _run("sudo -n systemctl stop meshtasticd")
+    _run("sudo -n systemctl disable meshtasticd")
+    _run("sudo -n systemctl reset-failed meshtasticd")
+    return "meshtasticd stopped + disabled (non-LoRa profile)"
+
+
 def main() -> int:
+    import sys
+
+    if "--apply-profile" in sys.argv:
+        from . import config
+
+        print(apply_profile(config.load()["cap"]))
+        return 0
     s = status()
     lines = [
         "Meshtastic (meshtasticd)",
