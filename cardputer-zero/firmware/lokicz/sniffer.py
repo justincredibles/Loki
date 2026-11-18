@@ -183,6 +183,36 @@ def run_sniff(seconds: int = 120, progress=None) -> dict:
             break
         time.sleep(10)
 
+    # v2: decode OpenDroneID Wi-Fi broadcasts on the dongle —
+    # a decoded frame carries the drone's position AND its
+    # operator's, which no fingerprint can. Failure-isolated:
+    # the decode pass never sinks the sniff.
+    try:
+        from pathlib import Path as _P
+
+        if _P("/sys/class/net/wlan1").exists():
+            from . import droneid
+
+            if progress:
+                progress("DroneID: decoding Wi-Fi broadcasts...")
+            for drone in droneid.capture(24):
+                detail = drone["id"] or ""
+                if drone.get("lat") is not None:
+                    detail += f" @ {drone['lat']:.5f}," \
+                              f"{drone['lon']:.5f}"
+                if drone.get("operator_lat") is not None:
+                    detail += f" · pilot {drone['operator_lat']:.5f}," \
+                              f"{drone['operator_lon']:.5f}"
+                hits[("opendroneid-wifi", drone["mac"])] = {
+                    "signature": "opendroneid-wifi",
+                    "label": "OpenDroneID drone (Wi-Fi, decoded)",
+                    "confidence": "HIGH", "radio": "wifi",
+                    "identifier": drone["mac"],
+                    "detail": detail.strip(), "rssi": None,
+                    "drone": drone}
+    except Exception:
+        pass
+
     with open(log_path, "w") as f:
         for hit in hits.values():
             f.write(json.dumps(hit) + "\n")
