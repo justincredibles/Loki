@@ -19,6 +19,16 @@ DEFAULTS = {
     "wardrive_seconds": 300,    # default wardriving session length
     "sniff_seconds": 120,       # default surveillance-sniff length
     "mesh_mode": "meshtastic",  # LoRa cap owner: meshtastic | meshcore | off
+    # Master toggle for handshake capture (menu key 8). When off,
+    # the Capture action refuses to run — nothing is captured and
+    # nothing is uploaded, automatically or otherwise.
+    "capture_enabled": True,
+    # WPA-SEC addon (menu key 9): uploads new captures to
+    # wpa-sec.stanev.org and downloads cracked passwords. Off by
+    # default; needs an API key (wpasec_key below, or the
+    # LOKICZ_WPASEC_KEY environment variable) before it can sync.
+    "wpasec_enabled": False,
+    "wpasec_key": "",
 }
 
 
@@ -32,6 +42,8 @@ def load() -> dict:
         cfg["cap"] = os.environ["LOKICZ_CAP"]
     if os.environ.get("LOKICZ_CAPTURE_IFACE"):
         cfg["capture_iface"] = os.environ["LOKICZ_CAPTURE_IFACE"]
+    if os.environ.get("LOKICZ_WPASEC_KEY"):
+        cfg["wpasec_key"] = os.environ["LOKICZ_WPASEC_KEY"]
     return cfg
 
 

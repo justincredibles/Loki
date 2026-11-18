@@ -25,15 +25,38 @@ def _total_hashes() -> int:
 
 
 def _status_lines(cfg: dict) -> list[str]:
+    from . import wpasec
+
     profile = caps.detect_cap(cfg["cap"])
+    dongle = ("dongle ready"
+              if wifi_recon.capture_available(cfg["capture_iface"])
+              else "dongle missing")
+    w = wpasec.status(cfg)
     return [
         "Loki — Cardputer Zero",
         f"cap: {profile.name}",
         "wifi recon: managed mode OK",
-        "capture: " + ("USB dongle ready"
-                       if wifi_recon.capture_available(cfg["capture_iface"])
-                       else "dongle missing"),
+        "capture: " + ("ON" if cfg.get("capture_enabled", True)
+                       else "OFF") + f" · {dongle}",
         f"hashes caught (all runs): {_total_hashes()}",
+        "wpa-sec: " + ("ON" if w["enabled"] else "OFF")
+        + (f" · {w['cracked']} cracked" if w["enabled"] else ""),
+    ]
+
+
+def _wpasec_lines(cfg: dict) -> list[str]:
+    from . import wpasec
+
+    w = wpasec.status(cfg)
+    return [
+        "WPA-SEC — wpa-sec.stanev.org",
+        "auto-sync: " + ("ON" if w["enabled"] else "OFF"),
+        "api key: " + ("set" if w["key_set"] else "NOT set"),
+        f"captures to upload: {w['pending']}",
+        f"cracked passwords: {w['cracked']}",
+        "",
+        "9 on/off   0 sync now",
+        "any other key: back",
     ]
 
 
@@ -41,18 +64,50 @@ def _screen(lines: list[str], cfg: dict) -> str:
     """Draw a screen with the menu footer; return the key pressed."""
     ui.show_text(lines + ["", "1 Status  2 Capture  3 Sub-GHz",
                           "4 Wardrive  5 Sniff  6 Mesh",
-                          "7 Stop lokicz"])
+                          "7 Stop  8 Capture on/off",
+                          "9 WPA-SEC"])
     return ui.read_key()
 
 
 def run() -> int:
     cfg = config.load()
     lines = _status_lines(cfg)
+    screen = "main"
     while True:
         key = _screen(lines, cfg)
+        if screen == "wpasec":
+            # WPA-SEC screen has its own keys; anything else goes back.
+            from . import wpasec
+
+            if key == "9":
+                cfg["wpasec_enabled"] = not cfg.get("wpasec_enabled",
+                                                    False)
+                config.save(cfg)
+                lines = _wpasec_lines(cfg)
+            elif key == "0":
+                ui.show_text(["WPA-SEC syncing...", "upload + download"])
+                r = wpasec.sync(cfg)
+                if r["ok"]:
+                    lines = ["WPA-SEC sync done",
+                             f"uploaded: {r['uploaded']}",
+                             f"cracked: {r['cracked_total']} total "
+                             f"(+{r['cracked_new']} new)"]
+                else:
+                    lines = ["WPA-SEC sync failed",
+                             r.get("reason",
+                                   f"{r.get('failures', 0)} step(s) failed")]
+                screen = "main"
+            else:
+                screen = "main"
+                lines = _status_lines(cfg)
+            continue
         if key == "1":
             lines = _status_lines(cfg)
         elif key == "2":
+            if not cfg.get("capture_enabled", True):
+                lines = ["Capture is OFF",
+                         "press 8 to turn it on"]
+                continue
             ui.show_text([f"Capturing {cfg['capture_seconds']}s on "
                           f"{cfg['capture_iface']}...", "",
                           "deauth: disabled (default)"])
@@ -61,6 +116,24 @@ def run() -> int:
             lines = ["Capture done",
                      f"hashes: {stats['hashes']}  EAPOL: {stats['eapol']}",
                      f"pcap: {stats['bytes'] // 1024} KB saved"]
+            if cfg.get("wpasec_enabled"):
+                from . import wpasec
+
+                ui.show_text(["WPA-SEC auto-sync..."])
+                r = wpasec.sync(cfg)
+                if r["ok"]:
+                    lines.append(f"wpa-sec: +{r['uploaded']} up, "
+                                 f"{r['cracked_total']} cracked")
+                else:
+                    lines.append("wpa-sec: " + r.get(
+                        "reason", "sync had failures"))
+        elif key == "8":
+            cfg["capture_enabled"] = not cfg.get("capture_enabled", True)
+            config.save(cfg)
+            lines = _status_lines(cfg)
+        elif key == "9":
+            screen = "wpasec"
+            lines = _wpasec_lines(cfg)
         elif key == "3":
             ui.show_text(["Sub-GHz sweep...", "listening on both bands"])
             from .cc1101 import CC1101
