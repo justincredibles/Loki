@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LOKI — Cardputer Zero</title>
+<style>
+  :root {
+    --bg: #030a06; --panel: #071a0e; --panel2: #0a2413;
+    --frame: #166e3a; --emerald: #40ff8a; --gold: #e8b33c;
+    --gold-hi: #ffd257; --text: #d6ffe2; --dim: #74a884;
+    --red: #ff5252; --amber: #ffb042; --cyan: #60e4ff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: "DejaVu Sans Mono", ui-monospace, Menlo, monospace;
+    background-image: repeating-linear-gradient(
+      0deg, rgba(64,255,138,.025) 0 1px, transparent 1px 4px);
+  }
+  header {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 20px; border-bottom: 2px solid var(--gold);
+    background: linear-gradient(180deg, #0a2413, #050f08);
+  }
+  header img { width: 54px; height: 54px; }
+  header h1 { margin: 0; color: var(--gold-hi); font-size: 30px;
+              letter-spacing: 6px; }
+  header .sub { color: var(--dim); font-size: 12px; }
+  header .addr { margin-left: auto; text-align: right; color: var(--dim);
+                 font-size: 12px; }
+  header .addr b { color: var(--emerald); }
+  main { max-width: 1080px; margin: 0 auto; padding: 18px; }
+  h2 { color: var(--gold); font-size: 15px; letter-spacing: 3px;
+       border-bottom: 1px solid var(--frame); padding-bottom: 6px; }
+  .cards { display: grid; gap: 10px;
+           grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+  .card { background: var(--panel); border: 1px solid var(--frame);
+          padding: 10px 12px; position: relative; }
+  .card::before, .card::after { content: ""; position: absolute;
+    width: 10px; height: 10px; border: 2px solid var(--gold); }
+  .card::before { top: -2px; left: -2px; border-right: 0; border-bottom: 0; }
+  .card::after { bottom: -2px; right: -2px; border-left: 0; border-top: 0; }
+  .card .k { color: var(--dim); font-size: 11px; letter-spacing: 2px; }
+  .card .v { font-size: 19px; margin-top: 4px; }
+  .ok { color: var(--emerald); } .gold { color: var(--gold-hi); }
+  .warn { color: var(--amber); } .bad { color: var(--red); }
+  .dim { color: var(--dim); } .cyan { color: var(--cyan); }
+  .actions { display: grid; gap: 10px;
+             grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+  .act { background: var(--panel); border: 1px solid var(--frame);
+         padding: 12px; }
+  .act h3 { margin: 0 0 4px; color: var(--text); font-size: 14px;
+            letter-spacing: 1px; }
+  .act p { margin: 0 0 10px; color: var(--dim); font-size: 12px;
+           min-height: 28px; }
+  button {
+    background: var(--panel2); color: var(--gold-hi);
+    border: 1px solid var(--gold); padding: 7px 14px; cursor: pointer;
+    font: inherit; font-size: 13px; letter-spacing: 1px;
+  }
+  button:hover { background: #123a1e; }
+  button:disabled { opacity: .45; cursor: wait; }
+  button.ghost { border-color: var(--frame); color: var(--dim); }
+  input[type=number] {
+    width: 70px; background: #020604; color: var(--text);
+    border: 1px solid var(--frame); padding: 6px; font: inherit;
+    font-size: 13px;
+  }
+  #job { display: none; margin: 16px 0; background: var(--panel);
+         border: 1px solid var(--gold); padding: 12px; }
+  #job .bar { height: 12px; border: 1px solid var(--frame);
+              margin-top: 8px; overflow: hidden; }
+  #job .fill { height: 100%; width: 40%; background: var(--gold);
+    animation: slide 1.2s ease-in-out infinite alternate; }
+  @keyframes slide { from { margin-left: 0; } to { margin-left: 60%; } }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 5px 8px;
+           border-bottom: 1px solid #0d2c17; }
+  th { color: var(--dim); font-weight: normal; letter-spacing: 1px; }
+  .host { background: var(--panel); border: 1px solid var(--frame);
+          margin: 10px 0; padding: 10px 12px; }
+  .host .ip { color: var(--gold-hi); font-size: 15px; }
+  .cve { display: inline-block; margin: 2px 3px 2px 0; padding: 2px 7px;
+         border: 1px solid var(--frame); background: #04120a;
+         text-decoration: none; color: var(--text); font-size: 12px; }
+  .cve:hover { border-color: var(--gold); }
+  .cve .score { font-weight: bold; margin-left: 5px; }
+  .tag { font-size: 10px; color: var(--amber); border: 1px solid var(--amber);
+         padding: 0 4px; margin-left: 5px; }
+  .audit-row { cursor: pointer; }
+  .audit-row:hover td { background: #0a2413; }
+  footer { color: var(--dim); font-size: 11px; text-align: center;
+           padding: 18px; }
+  pre { white-space: pre-wrap; word-break: break-word; font-size: 12px;
+        color: var(--dim); }
+</style>
+</head>
+<body>
+<header>
+  <img src="/icon.png" alt="Loki helm">
+  <div>
+    <h1>LOKI</h1>
+    <div class="sub">CARDPUTER ZERO · POCKET SECURITY MULTI-TOOL</div>
+  </div>
+  <div class="addr" id="addr">connecting…</div>
+</header>
+<main>
+  <h2>STATUS</h2>
+  <div class="cards" id="statusCards"></div>
+
+  <div id="job">
+    <div><b id="jobTitle" class="gold">WORKING</b>
+      <span id="jobMsg" class="dim"></span>
+      <span id="jobTime" class="dim" style="float:right"></span></div>
+    <div class="bar"><div class="fill"></div></div>
+    <pre id="jobResult"></pre>
+  </div>
+
+  <h2>ACTIONS</h2>
+  <div class="actions">
+    <div class="act">
+      <h3>◈ HANDSHAKE CAPTURE</h3>
+      <p>Monitor-mode capture on the USB dongle (deauth disabled). Auto-syncs to WPA-SEC when enabled.</p>
+      <input type="number" id="capSecs" value="90" min="10" max="1800"> s
+      <button onclick="run('capture','capSecs')">START</button>
+      <button class="ghost" onclick="toggle('capture')">TOGGLE ON/OFF</button>
+    </div>
+    <div class="act">
+      <h3>◈ NETWORK AUDIT</h3>
+      <p>Bjorn-style: discover every host, scan ports + services, correlate CVEs with NVD links. Takes minutes.</p>
+      <button onclick="run('audit')">START AUDIT</button>
+    </div>
+    <div class="act">
+      <h3>◈ WARDRIVE</h3>
+      <p>Log Wi-Fi networks to a WiGLE CSV, with GPS positions when the LoRa cap has a fix.</p>
+      <input type="number" id="warSecs" value="300" min="10" max="1800"> s
+      <button onclick="run('wardrive','warSecs')">START</button>
+    </div>
+    <div class="act">
+      <h3>◈ SURVEILLANCE SNIFF</h3>
+      <p>Passive Wi-Fi + BLE watch for drone / ALPR fingerprints. Detection only.</p>
+      <input type="number" id="snfSecs" value="120" min="10" max="1800"> s
+      <button onclick="run('sniff','snfSecs')">START</button>
+    </div>
+    <div class="act">
+      <h3>◈ SUB-GHZ SWEEP</h3>
+      <p>Listen on 433 + 915 MHz bands (needs the CC1101 cap fitted).</p>
+      <button onclick="run('sweep')">SWEEP</button>
+    </div>
+    <div class="act">
+      <h3>◈ WPA-SEC</h3>
+      <p>Upload captures to wpa-sec.stanev.org, download cracked passwords.</p>
+      <button onclick="run('wpasec-sync')">SYNC NOW</button>
+      <button class="ghost" onclick="toggle('wpasec')">TOGGLE ON/OFF</button>
+    </div>
+  </div>
+
+  <h2>AUDIT REPORTS</h2>
+  <div id="audits"><span class="dim">loading…</span></div>
+  <div id="report"></div>
+
+  <h2>CAPTURES &amp; CRACKED</h2>
+  <div id="captures"><span class="dim">loading…</span></div>
+</main>
+<footer>LOKI · Asgard build · LAN portal — anyone on this network can drive it. Guard your Wi-Fi password accordingly.</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  return r.json();
+}
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"]/g,
+    c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+}
+function scoreClass(s) {
+  if (s == null) return "dim";
+  return s >= 9 ? "bad" : s >= 7 ? "warn" : s >= 4 ? "gold" : "ok";
+}
+
+async function refreshStatus() {
+  const s = await api("/api/status");
+  $("addr").innerHTML =
+    `portal <b>http://${esc(s.web.ip)}:${s.web.port}</b><br>` +
+    `cap <b>${esc(s.cap.toUpperCase())}</b>`;
+  const cap = s.capture_enabled
+    ? `<span class="ok">ON</span>` +
+      (s.dongle ? "" : ` <span class="warn">· NO DONGLE</span>`)
+    : `<span class="bad">OFF</span>`;
+  const wp = s.wpasec.enabled
+    ? `<span class="ok">ON</span> <span class="dim">· ${s.wpasec.cracked} cracked</span>`
+    : `<span class="dim">OFF</span>`;
+  const mesh = s.mesh.meshtastic_active
+    ? `<span class="ok">MESHTASTIC</span>` : `<span class="dim">${esc(s.mesh.mode.toUpperCase())}</span>`;
+  const la = s.last_audit
+    ? `<span class="${s.last_audit.crit ? "bad" : "gold"}">${s.last_audit.cves} CVEs</span>` +
+      ` <span class="dim">${esc(s.last_audit.when)}</span>`
+    : `<span class="dim">none yet</span>`;
+  $("statusCards").innerHTML = [
+    ["CAP", `<span class="gold">${esc(s.cap.toUpperCase())}</span>`],
+    ["CAPTURE", cap], ["HASHES CAUGHT", `<span class="gold">${s.hashes}</span>`],
+    ["WPA-SEC", wp], ["MESH", mesh], ["LAST AUDIT", la],
+  ].map(([k, v]) => `<div class="card"><div class="k">${k}</div><div class="v">${v}</div></div>`).join("");
+}
+
+let polling = null;
+async function run(action, secsId) {
+  const body = secsId ? {seconds: Number($(secsId).value)} : {};
+  const r = await api(`/api/run/${action}`,
+    {method: "POST", headers: {"Content-Type": "application/json"},
+     body: JSON.stringify(body)});
+  if (!r.job) { alert("could not start: " + JSON.stringify(r)); return; }
+  $("job").style.display = "block";
+  $("jobTitle").textContent = action.toUpperCase();
+  $("jobResult").textContent = "";
+  const t0 = Date.now();
+  clearInterval(polling);
+  polling = setInterval(async () => {
+    const j = await api(`/api/jobs/${r.job}`);
+    $("jobMsg").textContent = j.message || "";
+    $("jobTime").textContent =
+      Math.round((Date.now() - t0) / 1000) + "s";
+    if (j.state !== "running") {
+      clearInterval(polling);
+      $("jobTitle").textContent =
+        action.toUpperCase() + (j.state === "done" ? " — DONE" : " — FAILED");
+      $("jobResult").textContent = j.state === "done"
+        ? JSON.stringify(j.result, null, 1)
+        : (j.error || "unknown error");
+      document.querySelector("#job .fill").style.animation = "none";
+      document.querySelector("#job .fill").style.width =
+        j.state === "done" ? "100%" : "0";
+      refreshStatus(); loadAudits(); loadCaptures();
+    }
+  }, 1200);
+}
+async function toggle(which) {
+  await api(`/api/toggle/${which}`, {method: "POST"});
+  refreshStatus();
+}
+
+async function loadAudits() {
+  const list = await api("/api/audits");
+  if (!list.length) {
+    $("audits").innerHTML = `<span class="dim">no audits yet — run one above</span>`;
+    return;
+  }
+  $("audits").innerHTML = `<table><tr><th>WHEN</th><th>SUBNET</th>` +
+    `<th>HOSTS</th><th>OPEN PORTS</th><th>CVEs</th><th>CRIT/HIGH</th></tr>` +
+    list.slice().reverse().map(a =>
+      `<tr class="audit-row" onclick="loadReport('${a.file}')">` +
+      `<td>${esc(a.when)}</td><td>${esc(a.subnet)}</td>` +
+      `<td>${a.scanned}/${a.hosts}</td><td>${a.open_ports}</td>` +
+      `<td class="${a.crit ? "bad" : "gold"}">${a.cves}</td>` +
+      `<td>${a.crit} / ${a.high}</td></tr>`).join("") + `</table>`;
+}
+
+async function loadReport(file) {
+  const r = await api(`/api/audits/${file}`);
+  $("report").innerHTML = `<h2>REPORT — ${esc(r.started)} · ${esc(r.subnet)}</h2>` +
+    r.hosts.map(h => {
+      const ports = h.ports.map(p => {
+        const cves = p.vulns.map(v =>
+          `<a class="cve" href="${esc(v.url)}" target="_blank" rel="noopener">` +
+          `${esc(v.id)}<span class="score ${scoreClass(v.score)}">` +
+          `${v.score ?? "?"}</span>` +
+          (v.version_unknown ? `<span class="tag">VERSION?</span>` : "") +
+          `</a>`).join("");
+        return `<tr><td>${p.port}/${esc(p.proto)}</td>` +
+          `<td>${esc(p.product || p.service)} ${esc(p.version)}</td>` +
+          `<td>${cves || '<span class="dim">—</span>'}</td></tr>`;
+      }).join("");
+      return `<div class="host"><span class="ip">${esc(h.ip)}</span> ` +
+        `<span class="dim">${esc(h.hostname)} ${esc(h.mac)} ${esc(h.vendor)}</span>` +
+        (h.scanned
+          ? (ports ? `<table>${ports}</table>` : `<div class="dim">no open ports in top 100</div>`)
+          : `<div class="dim">discovered, not scanned (cap reached)</div>`) +
+        `</div>`;
+    }).join("");
+  $("report").scrollIntoView({behavior: "smooth"});
+}
+
+async function loadCaptures() {
+  const c = await api("/api/captures");
+  const files = c.files.length
+    ? `<table><tr><th>FILE</th><th>SIZE</th></tr>` +
+      c.files.map(f => `<tr><td>${esc(f.name)}</td><td>${f.kb} KB</td></tr>`).join("") +
+      `</table>`
+    : `<span class="dim">no capture files</span>`;
+  const cracked = c.cracked.length
+    ? `<table><tr><th>SSID</th><th>PASSWORD</th><th>BSSID</th></tr>` +
+      c.cracked.map(k => `<tr><td>${esc(k.ssid)}</td>` +
+        `<td class="gold">${esc(k.password)}</td><td class="dim">${esc(k.bssid)}</td></tr>`).join("") +
+      `</table>`
+    : `<span class="dim">nothing cracked yet</span>`;
+  $("captures").innerHTML = files + `<h3 class="gold">CRACKED BY WPA-SEC</h3>` + cracked;
+}
+
+refreshStatus(); loadAudits(); loadCaptures();
+setInterval(refreshStatus, 10000);
+</script>
+</body>
+</html>
