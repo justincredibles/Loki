@@ -247,6 +247,51 @@ def _act_proximity(cfg, _seconds):
     return fn
 
 
+def _act_ook(cfg, seconds):
+    def fn(job):
+        import time as _time
+
+        from . import subghz
+        from .cc1101 import CC1101
+
+        secs = seconds or 20
+        job["message"] = f"listening on 433.92 MHz ({secs}s) — " \
+                         "press the fob now..."
+        stamp = _time.strftime("%Y%m%d-%H%M%S")
+        path = subghz.SUBGHZ_DIR / f"ook-433.92MHz-{stamp}.sub"
+        with CC1101() as radio:
+            stats = radio.capture_ook(433.92, secs, str(path))
+        job["message"] = "decoding..."
+        stats["decode"] = subghz.decode_file(str(path))
+        return stats
+    return fn
+
+
+def _act_replay(cfg, _seconds):
+    def fn(job):
+        from . import subghz
+        from .cc1101 import CC1101
+
+        caps_list = subghz.list_captures()
+        if not caps_list:
+            raise RuntimeError("no .sub captures yet — run an OOK "
+                               "capture first")
+        path = subghz.SUBGHZ_DIR / caps_list[0]["name"]
+        job["message"] = f"replaying {path.name} (TX)..."
+        with CC1101() as radio:
+            return radio.replay_sub(str(path), 3)
+    return fn
+
+
+def _act_nfc(cfg, _seconds):
+    def fn(job):
+        from . import nfc
+
+        job["message"] = "NFC field on — hold a tag to the cap..."
+        return nfc.scan_once()
+    return fn
+
+
 def _act_wpasec_sync(cfg, _seconds):
     def fn(job):
         from . import wpasec
@@ -263,7 +308,9 @@ ACTIONS = {"capture": _act_capture, "wardrive": _act_wardrive,
            "trackers": _act_trackers,
            "probes": _act_probes,
            "watchdog": _act_watchdog,
-           "gps": _act_gps}
+           "gps": _act_gps,
+           "ook": _act_ook, "replay": _act_replay,
+           "nfc": _act_nfc}
 
 DEFAULT_SECONDS = {"capture": "capture_seconds",
                    "wardrive": "wardrive_seconds",

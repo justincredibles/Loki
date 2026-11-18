@@ -33,7 +33,7 @@ def _chips(cfg: dict, page: int) -> list:
                 ("9", "◂ BACK")]
     cap_tone = "text" if cfg.get("capture_enabled", True) else "off"
     return [("1", "STATUS"), ("2", "CAPTURE", cap_tone),
-            ("3", "SUB-GHZ"), ("4", "WARDRIVE"), ("5", "SNIFF"),
+            ("3", "RADIO"), ("4", "WARDRIVE"), ("5", "SNIFF"),
             ("6", "MESH"), ("7", "AUDIT"), ("8", "CAP TGL"),
             ("9", "MORE ▸")]
 
@@ -89,6 +89,85 @@ def _wpasec_rows(cfg: dict) -> list:
     ]
 
 
+def _radio_rows(cfg: dict) -> list:
+    rows = [("text", "CAP RADIO LAB", "gold"),
+            ("text", "1 sweep · 2 ook 433 · 3 ook 315", "text"),
+            ("text", "4 ook 915 · 5 replay · 6 nfc", "text"),
+            ("text", "0 back", "dim")]
+    if cfg["cap"] != "cc1101":
+        rows.append(("kv", "WARNING", "NEEDS CC1101 CAP", "warn"))
+    return rows
+
+
+def _ook_capture(freq: float) -> list:
+    """15 s OOK capture at `freq` + protocol decode of the result."""
+    import time as _time
+
+    from . import subghz
+    from .cc1101 import CC1101
+
+    stamp = _time.strftime("%Y%m%d-%H%M%S")
+    path = subghz.SUBGHZ_DIR / f"ook-{freq:.2f}MHz-{stamp}.sub"
+    with ui.Spinner("OOK CAPTURE", f"{freq} MHz — press the fob",
+                    expected=15):
+        with CC1101() as radio:
+            stats = radio.capture_ook(freq, 15, str(path))
+    dec = subghz.decode_file(str(path))
+    rows = [("big", f"{stats['bursts']} BURSTS",
+             "gold" if stats["bursts"] else "text"),
+            ("kv", "PROTOCOL", dec["protocol"][:20], "text")]
+    if dec["bits"]:
+        rows.append(("kv", "CODE", "0x" + dec["code_hex"][:14],
+                     "gold"))
+        rows.append(("kv", "CONFIDENCE",
+                     dec["confidence"].upper(), "ok"))
+    rows.append(("kv", "FILE", path.name[:24], "dim"))
+    _award("ook", stats)
+    return rows
+
+
+def _replay_rows() -> list:
+    from . import subghz
+    from .cc1101 import CC1101
+
+    found = subghz.list_captures()
+    if not found:
+        return [("text", "NO CAPTURES YET", "warn"),
+                ("text", "capture a fob first (2/3/4)", "dim")]
+    path = subghz.SUBGHZ_DIR / found[0]["name"]
+    with ui.Spinner("REPLAY", f"sending {path.name[:18]} (TX)"):
+        with CC1101() as radio:
+            r = radio.replay_sub(str(path), 3)
+    if r.get("sent"):
+        return [("big", "SENT", "ok"),
+                ("kv", "FILE", path.name[:24], "text"),
+                ("kv", "FRAMES", str(r["frames"]), "text")]
+    return [("text", "REPLAY FAILED", "bad"),
+            ("text", str(r.get("reason", ""))[:26], "dim")]
+
+
+def _nfc_rows() -> list:
+    from . import nfc
+
+    with ui.Spinner("NFC", "hold a tag to the cap..."):
+        try:
+            r = nfc.scan_once()
+        except RuntimeError as exc:
+            return [("text", "NFC UNAVAILABLE", "bad"),
+                    ("text", str(exc)[:26], "dim")]
+    _award("nfc", r)
+    if r["found"]:
+        return [("big", "TAG FOUND", "ok"),
+                ("kv", "UID", r["uid"][:20], "gold"),
+                ("kv", "ATQA", r["atqa"] or "—", "text"),
+                ("kv", "SAK", f"0x{r['sak']:02X}", "text")]
+    if r.get("collision"):
+        return [("big", "COLLISION", "warn"),
+                ("text", "two tags — one at a time", "dim")]
+    return [("big", "NO TAG", "text"),
+            ("text", "nothing in the field", "dim")]
+
+
 def _audit_rows(stats: dict) -> list:
     tone = "bad" if stats["crit"] else "warn" if stats["high"] \
         else "ok"
@@ -129,7 +208,7 @@ def _screen(rows: list, cfg: dict, title: str = "LOKI",
 HOME_ITEMS = [
     ("Status", "status"),
     ("Handshake Capture", (1, "2")),
-    ("Sub-GHz Sweep", (1, "3")),
+    ("Radio Lab", (1, "3")),
     ("Wardrive", (1, "4")),
     ("Sniff", (1, "5")),
     ("Mesh", (1, "6")),
@@ -209,6 +288,7 @@ def run() -> int:
     home_idx = 0
     saying = avatar.saying()
     pending = None
+    radio_result = False
     while True:
         if pending is not None:
             key, pending = pending, None
@@ -281,6 +361,59 @@ def run() -> int:
             else:
                 screen = "main"
                 rows = _status_rows(cfg)
+            continue
+        if screen == "radio":
+            # The radio lab has its own keys; a result screen
+            # consumes one keypress to return to the radio menu.
+            title = "RADIO"
+            if radio_result:
+                radio_result = False
+                rows = _radio_rows(cfg)
+                continue
+            if key == "0":
+                screen = "main"
+                rows = _status_rows(cfg)
+                continue
+            if cfg["cap"] != "cc1101" and key in \
+                    ("1", "2", "3", "4", "5", "6"):
+                rows = [("text", "NEEDS THE CC1101 CAP", "warn"),
+                        ("text", "fit it, set profile, reboot",
+                         "dim")]
+                radio_result = True
+                continue
+            if key == "1":
+                from .cc1101 import CC1101
+
+                with ui.Spinner("SUB-GHZ", "listening on both bands"):
+                    with CC1101() as radio:
+                        out = []
+                        for start, stop in ((430.0, 437.0),
+                                            (902.0, 928.0)):
+                            sweep = radio.sweep(start, stop, 0.5,
+                                                dwell_s=0.05)
+                            floor = sorted(r for _, r in sweep)[
+                                len(sweep) // 2]
+                            peak_f, peak_r = max(
+                                sweep, key=lambda t: t[1])
+                            out.append((f"{start:.0f}-{stop:.0f} MHZ",
+                                        f"FLR {floor:.0f} · "
+                                        f"PK {peak_r:.0f}@{peak_f:.0f}"))
+                rows = [("text", "BAND SWEEP COMPLETE", "ok")] + [
+                    ("kv", band, val, "text") for band, val in out]
+                _award("sweep", {})
+                radio_result = True
+            elif key in ("2", "3", "4"):
+                freq = {"2": 433.92, "3": 315.0, "4": 915.0}[key]
+                rows = _ook_capture(freq)
+                radio_result = True
+            elif key == "5":
+                rows = _replay_rows()
+                radio_result = True
+            elif key == "6":
+                rows = _nfc_rows()
+                radio_result = True
+            else:
+                rows = _radio_rows(cfg)
             continue
         if key == "0" and screen == "main":
             screen = "home"
@@ -465,23 +598,9 @@ def run() -> int:
                     ("kv", "WEB PORTAL",
                      f"{web.lan_ip()}:{web.PORT}", "gold")]
         elif key == "3":
-            from .cc1101 import CC1101
-
-            with ui.Spinner("SUB-GHZ", "listening on both bands"):
-                with CC1101() as radio:
-                    out = []
-                    for start, stop in ((430.0, 437.0), (902.0, 928.0)):
-                        sweep = radio.sweep(start, stop, 0.5,
-                                            dwell_s=0.05)
-                        floor = sorted(r for _, r in sweep)[len(sweep) // 2]
-                        peak_f, peak_r = max(sweep, key=lambda t: t[1])
-                        out.append((f"{start:.0f}-{stop:.0f} MHZ",
-                                    f"FLR {floor:.0f} · PK {peak_r:.0f}"
-                                    f"@{peak_f:.0f}"))
-            rows = [("text", "BAND SWEEP COMPLETE", "ok")] + [
-                ("kv", band, val, "text") for band, val in out]
-            title = "SUB-GHZ"
-            _award("sweep", {})
+            screen = "radio"
+            title = "RADIO"
+            rows = _radio_rows(cfg)
         elif key == "4":
             from . import wardrive
 

@@ -64,6 +64,7 @@ ACHIEVEMENTS = [
     ("crowded_room", "Crowded Room", "proximity_max", 50),
     ("ghosted", "Ghosted", "tracker_follows", 1),
     ("signal_thief", "Signal Thief", "ook_signals", 1),
+    ("sleight_of_hand", "Sleight of Hand", "nfc_tags", 1),
     ("well_connected", "Well Connected", "mesh_nodes", 10),
 ]
 
@@ -91,7 +92,7 @@ SAYINGS = [
 _COUNTERS = ["hashes", "cracks", "wardrive_networks", "sniff_hits",
              "cves", "crits", "audits", "flight_checks",
              "proximity_max", "tracker_follows", "ook_signals",
-             "mesh_nodes", "captures", "probes", "tracks"]
+             "mesh_nodes", "captures", "probes", "tracks", "nfc_tags"]
 
 
 def _default() -> dict:
@@ -280,6 +281,10 @@ def award_for(action: str, result: dict) -> dict:
     if action == "ook":
         return award(15 * result.get("bursts", 0),
                      {"ook_signals": result.get("bursts", 0)})
+    if action == "nfc":
+        found = bool(result.get("found"))
+        return award(10 + (25 if found else 0),
+                     {"nfc_tags": 1 if found else 0})
     if action == "wpasec-sync":
         return award(2 + 25 * result.get("cracked_new", 0),
                      {"cracks": result.get("cracked_new", 0)})

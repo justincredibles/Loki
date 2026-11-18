@@ -201,9 +201,15 @@
       <button onclick="run('trackers')">WATCH 90s</button>
     </div>
     <div class="act">
-      <h3>◈ SUB-GHZ SWEEP</h3>
-      <p>Listen on 433 + 915 MHz bands (needs the CC1101 cap fitted).</p>
+      <h3>◈ RADIO LAB — SUB-GHZ + NFC</h3>
+      <p>CC1101 cap workbench: sweep the bands, capture a fob at
+         433.92 MHz and decode it (EV1527-family remotes, Manchester
+         frames), replay the newest capture back out (TX), or read
+         an NFC tag's UID (ST25R3916). Needs the CC1101 cap fitted.</p>
       <button onclick="run('sweep')">SWEEP</button>
+      <button onclick="run('ook')">OOK CAPTURE + DECODE</button>
+      <button onclick="run('replay')">REPLAY LAST (TX)</button>
+      <button onclick="run('nfc')">NFC SCAN</button>
     </div>
     <div class="act">
       <h3>◈ WPA-SEC</h3>
