@@ -161,8 +161,10 @@ def _field_dump(msg) -> dict:
     out = {}
     for f in msg.DESCRIPTOR.fields:
         entry = {"name": f.name}
-        if f.label == FD.LABEL_REPEATED or \
-                f.type == FD.TYPE_MESSAGE:
+        repeated = getattr(f, "is_repeated", None)
+        if repeated is None:  # older pure-python protobuf
+            repeated = f.label == FD.LABEL_REPEATED
+        if repeated or f.type == FD.TYPE_MESSAGE:
             entry["kind"] = "complex"
             try:
                 from google.protobuf.json_format import MessageToDict
