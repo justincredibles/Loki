@@ -138,6 +138,12 @@
   table.cfg input, table.cfg select { width: min(300px, 100%); }
   .secttl { color: var(--gold-hi); letter-spacing: 2px;
     margin: 22px 0 8px; font-size: 17px; }
+  .nodesbox { max-height: 460px; overflow-y: auto;
+    border: 1px solid var(--frame); background: var(--panel);
+    padding: 4px 8px; }
+  .nodesbox table { width: 100%; }
+  .nodesbox thead th { position: sticky; top: 0;
+    background: var(--panel); z-index: 1; }
 </style>
 </head>
 <body>
@@ -165,12 +171,18 @@
     <pre id="jobResult"></pre>
   </div>
 
+  <div class="secttl">NODES</div>
+  <div style="margin-bottom:8px">
+    <button onclick="runBody('mesh-nodes', {})">REFRESH NODES</button>
+    <span id="nodes-meta" class="dim" style="margin-left:8px">auto-scans when this page opens</span>
+  </div>
+  <div id="mesh-nodes-box"><span class="dim">…</span></div>
+
   <div class="secttl">CHAT — MESHTASTIC</div>
   <div style="margin-bottom:10px">
     <input type="text" id="mesh-text" maxlength="200" placeholder="mesh text — broadcasts on the primary channel" style="width:min(520px,70%)">
     <button onclick="meshSend()">SEND</button>
     <button onclick="runBody('mesh-listen', {})">LISTEN 30s</button>
-    <button class="ghost" onclick="runBody('mesh-nodes', {})">NODES</button>
   </div>
   <div id="mesh-out"></div>
 
@@ -273,7 +285,7 @@ async function runBody(action, body) {
 function jobSummary(action, r) {
   if (!r) return null;
   if (action === "mesh-nodes")
-    return `${(r.nodes || []).length} nodes known — readable table under CHAT`;
+    return `${(r.nodes || []).length} nodes known — table under NODES`;
   if (action === "mesh-listen")
     return `${(r.messages || []).length} text(s) heard in ${r.seconds || 30}s — table under CHAT`;
   if (action === "mesh-send") return `sent to the mesh: “${r.text}”`;
@@ -315,7 +327,8 @@ async function loadMesh() {
       s = "mesh off — both daemons parked";
     }
     $("mesh-line").textContent = s;
-  } catch (e) { /* portal busy */ }
+    return m;
+  } catch (e) { return null; }
 }
 async function meshMode(mode) {
   const r = await api("/api/mesh/mode",
@@ -340,8 +353,10 @@ function renderMeshMsgs(r) {
 function renderMeshNodes(r) {
   const nodes = (r.nodes || []).slice().sort((a, b) =>
     (b.last_heard || 0) - (a.last_heard || 0));
+  $("nodes-meta").textContent =
+    `${nodes.length} nodes · updated ${new Date().toLocaleTimeString()}`;
   if (!nodes.length) {
-    $("mesh-out").innerHTML = `<span class="dim">no nodes in the local database yet</span>`;
+    $("mesh-nodes-box").innerHTML = `<span class="dim">no nodes in the local database yet</span>`;
     return;
   }
   const row = n => {
@@ -355,9 +370,9 @@ function renderMeshNodes(r) {
       `<td>${n.snr != null ? n.snr + " dB" : "—"}</td>` +
       `<td>${n.hops != null ? n.hops : "—"}</td><td>${loc}</td></tr>`;
   };
-  $("mesh-out").innerHTML =
-    `<table><tr><th>NODE</th><th>LAST HEARD</th><th>SNR</th><th>HOPS</th><th>POSITION</th></tr>` +
-    nodes.map(row).join("") + `</table>`;
+  $("mesh-nodes-box").innerHTML =
+    `<div class="nodesbox"><table><thead><tr><th>NODE</th><th>LAST HEARD</th><th>SNR</th><th>HOPS</th><th>POSITION</th></tr></thead><tbody>` +
+    nodes.map(row).join("") + `</tbody></table></div>`;
 }
 </script>
 
@@ -527,7 +542,11 @@ function saveMcConfig() {
   runBody("meshcore-setconfig", {fields});
 }
 
-loadMesh(); loadChannels(); loadConfig(); loadMcConfig();
+(async () => {
+  const m = await loadMesh();
+  loadChannels(); loadConfig(); loadMcConfig();
+  if (m && m.chat) runBody("mesh-nodes", {});  // auto-scan on open
+})();
 </script>
 </body>
 </html>
