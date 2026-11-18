@@ -379,8 +379,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, out)
         elif path.startswith("/api/download/"):
             parts = path.split("/")
-            kind = parts[2] if len(parts) > 2 else ""
-            name = parts[3] if len(parts) > 3 else ""
+            kind = parts[3] if len(parts) > 3 else ""
+            name = parts[4] if len(parts) > 4 else ""
             folder = _download_dirs().get(kind)
             target = folder / name if folder else None
             if target is None or Path(name).name != name \
