@@ -45,6 +45,29 @@ LoRa-1262 (per zeroradio's verified hardware map) differs:
 | RF switch | DIO2_AS_RF_SWITCH **and** PI4IOE expander P0 (I2C 0x43) | reuse `cap-lora-init.sh` for the expander half |
 | Band plan | US 915 | pyMC US preset values |
 
+## The adaptation, concretely (verified on-device 2026-11-17)
+
+`pymc-core 1.0.12` is installed in `~/pymc-venv` on the Zero and
+imports cleanly. Its `SX1262Radio` constructor turns out to speak
+this cap's language almost natively:
+
+```python
+SX1262Radio(
+    bus_id=0, cs_id=1,          # = /dev/spidev0.1, kernel CS (cs_pin=-1)
+    busy_pin=22, irq_pin=23,    # the cap's BUSY / DIO1
+    use_dio3_tcxo=True, dio3_tcxo_voltage=1.8,
+    use_dio2_rf=True,           # DIO2 as RF switch
+    frequency=915_000_000,      # US plan (exact MeshCore channel
+                                # params from pyMC's US preset)
+    # reset_pin: the cap has NO reset line — whether -1 is accepted
+    # is the one open question for cap day; worst case a tiny patch
+    # to skip the reset pulse (power-on reset covers us).
+)
+```
+
+plus `cap-lora-init.sh` (already written for meshtasticd) driving
+the PI4IOE expander's P0 — the other half of the RF switch.
+
 ## lokicz design
 
 - Config gains `mesh_mode`: `meshtastic` | `meshcore` | `off`.
