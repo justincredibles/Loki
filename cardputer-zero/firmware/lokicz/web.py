@@ -28,6 +28,33 @@ ICON_FILE = Path(__file__).resolve().parents[2] / "app" \
     / "packaging" / "icon.png"
 
 _jobs: dict = {}
+
+REPO_DIR = Path(__file__).resolve().parents[3]
+UPDATE_LOG = Path("/tmp/lokicz-update.log")
+
+
+def _download_dirs() -> dict:
+    from . import gpslog, probes, sniffer, wardrive
+
+    return {"captures": capture.CAPTURE_DIR,
+            "audits": audit.AUDIT_DIR,
+            "subghz": Path.home() / "lokicz-subghz",
+            "wardrives": wardrive.WARDRIVE_DIR,
+            "tracks": gpslog.TRACK_DIR,
+            "probes": probes.PROBE_DIR,
+            "sniffs": sniffer.SNIFF_DIR}
+
+
+def _repo_rev() -> str:
+    import subprocess
+
+    try:
+        return subprocess.run(
+            ["git", "-C", str(REPO_DIR), "rev-parse", "--short",
+             "HEAD"], capture_output=True, text=True,
+            timeout=10).stdout.strip() or "unknown"
+    except Exception:
+        return "unknown"
 _op_lock = threading.Lock()
 _job_seq = [0]
 
@@ -251,10 +278,13 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):  # keep the journal quiet
         pass
 
-    def _send(self, code: int, body: bytes, ctype: str) -> None:
+    def _send(self, code: int, body: bytes, ctype: str,
+              headers: dict | None = None) -> None:
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
+        for key, value in (headers or {}).items():
+            self.send_header(key, value)
         self.end_headers()
         self.wfile.write(body)
 
@@ -333,6 +363,41 @@ class Handler(BaseHTTPRequestHandler):
                                       "ssid": parts[2],
                                       "password": parts[3]})
             self._json(200, {"files": files, "cracked": found})
+        elif path == "/api/files":
+            out = {}
+            for kind, folder in _download_dirs().items():
+                files = []
+                if folder.exists():
+                    for p in sorted(folder.iterdir(),
+                                    key=lambda p: p.stat().st_mtime,
+                                    reverse=True):
+                        if p.is_file():
+                            files.append(
+                                {"name": p.name,
+                                 "kb": p.stat().st_size // 1024})
+                out[kind] = files[:60]
+            self._json(200, out)
+        elif path.startswith("/api/download/"):
+            parts = path.split("/")
+            kind = parts[2] if len(parts) > 2 else ""
+            name = parts[3] if len(parts) > 3 else ""
+            folder = _download_dirs().get(kind)
+            target = folder / name if folder else None
+            if target is None or Path(name).name != name \
+                    or not target.is_file() \
+                    or target.resolve().parent != folder.resolve():
+                return self._json(404, {"error": "no such file"})
+            self._send(200, target.read_bytes(),
+                       "application/octet-stream",
+                       {"Content-Disposition":
+                        f'attachment; filename="{name}"'})
+        elif path == "/api/update/status":
+            log = ""
+            if UPDATE_LOG.exists():
+                log = "\n".join(
+                    UPDATE_LOG.read_text(errors="replace")
+                    .splitlines()[-12:])
+            self._json(200, {"rev": _repo_rev(), "log": log})
         elif path == "/api/avatar":
             from . import avatar
 
@@ -373,6 +438,23 @@ class Handler(BaseHTTPRequestHandler):
             config.save(cfg)
             return self._json(200, {"wpasec_enabled":
                                     cfg["wpasec_enabled"]})
+        if path == "/api/update":
+            import subprocess
+
+            script_path = Path("/tmp/lokicz-update.sh")
+            script_path.write_text(
+                "#!/bin/bash\n"
+                "echo '--- update started'\n"
+                f"git -C {REPO_DIR} pull --ff-only\n"
+                "echo '--- restarting services'\n"
+                "sleep 1\n"
+                "sudo systemctl restart lokicz lokicz-web\n"
+                "echo '--- update done'\n")
+            subprocess.Popen(
+                ["bash", "-c",
+                 f"nohup bash {script_path} > {UPDATE_LOG} 2>&1 &"])
+            return self._json(202, {"started": True,
+                                    "from_rev": _repo_rev()})
         if path == "/api/avatar/equip":
             from . import avatar
 

@@ -217,6 +217,16 @@
   <h2>GPS TRACKS</h2>
   <div id="tracks"><span class="dim">loading…</span></div>
 
+  <h2>DOWNLOADS</h2>
+  <div id="files"><span class="dim">loading…</span></div>
+
+  <h2>SYSTEM UPDATE</h2>
+  <div class="card">
+    <div class="dim" style="font-size:12px">lokicz build <span class="gold" id="upd-rev">…</span> — pulls the latest code from the repo and restarts both services. The page will blink while the web service restarts.</div>
+    <div style="margin-top:8px"><button onclick="doUpdate()">PULL + RESTART</button></div>
+    <pre id="upd-log" style="white-space:pre-wrap; font-size:11px; color:var(--dim); margin:8px 0 0"></pre>
+  </div>
+
   <h2>AUDIT REPORTS</h2>
   <div id="audits"><span class="dim">loading…</span></div>
   <div id="report"></div>
@@ -304,7 +314,7 @@ async function run(action, secsId) {
         document.getElementById("av-img").src =
           "/api/avatar.png?t=" + Date.now();
       }
-      refreshStatus(); loadAudits(); loadCaptures(); loadTrackers(); loadAvatar();
+      refreshStatus(); loadAudits(); loadCaptures(); loadTrackers(); loadAvatar(); loadFiles();
     }
   }, 1200);
 }
@@ -507,7 +517,41 @@ async function equip(sel) {
   loadAvatar();
 }
 
-refreshStatus(); loadAudits(); loadCaptures(); loadFlights(); loadTrackers(); loadWatchdog(); loadTracks(); loadAvatar();
+async function loadFiles() {
+  const all = await (await fetch("/api/files")).json();
+  const kinds = { captures: "Captures", audits: "Audits",
+    subghz: "Sub-GHz", wardrives: "Wardrives (WiGLE)",
+    tracks: "GPS tracks", probes: "Probe logs", sniffs: "Sniff logs" };
+  document.getElementById("files").innerHTML =
+    Object.entries(kinds).map(([kind, label]) => {
+      const files = all[kind] || [];
+      if (!files.length) return "";
+      return `<div style="margin-bottom:6px"><span class="gold">` +
+        `${label}</span> ` + files.map(f =>
+          `<a href="/api/download/${kind}/${encodeURIComponent(f.name)}" ` +
+          `style="color:var(--cyan)">${esc(f.name)}</a> ` +
+          `<span class="dim">(${f.kb} KB)</span>`).join(" · ") + `</div>`;
+    }).join("") || `<span class="dim">no files yet</span>`;
+}
+async function loadUpdate() {
+  try {
+    const s = await (await fetch("/api/update/status")).json();
+    document.getElementById("upd-rev").textContent = s.rev;
+    document.getElementById("upd-log").textContent = s.log || "";
+  } catch (e) { /* service mid-restart */ }
+}
+async function doUpdate() {
+  await fetch("/api/update", { method: "POST" });
+  document.getElementById("upd-log").textContent = "update started…";
+  const iv = setInterval(async () => {
+    await loadUpdate();
+    if (document.getElementById("upd-log").textContent
+        .includes("update done")) clearInterval(iv);
+  }, 3000);
+  setTimeout(() => clearInterval(iv), 120000);
+}
+
+refreshStatus(); loadAudits(); loadCaptures(); loadFlights(); loadTrackers(); loadWatchdog(); loadTracks(); loadAvatar(); loadFiles(); loadUpdate();
 setInterval(refreshStatus, 10000);
 setInterval(loadFlights, 60000);
 </script>
