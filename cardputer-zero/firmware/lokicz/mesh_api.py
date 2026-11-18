@@ -198,13 +198,19 @@ def _field_dump(msg) -> dict:
 
 
 def op_config(iface) -> dict:
+    from google.protobuf.descriptor import FieldDescriptor as FD
+
     _wait_config(iface)
     node = iface.localNode
     sections = {}
     for f in node.localConfig.DESCRIPTOR.fields:
+        if f.type != FD.TYPE_MESSAGE:
+            continue  # e.g. the scalar `version` field
         sections[f.name] = _field_dump(getattr(node.localConfig,
                                                f.name))
     for f in node.moduleConfig.DESCRIPTOR.fields:
+        if f.type != FD.TYPE_MESSAGE:
+            continue
         sections["mod:" + f.name] = _field_dump(
             getattr(node.moduleConfig, f.name))
     return {"sections": sections}
