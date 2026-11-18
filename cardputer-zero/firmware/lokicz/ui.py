@@ -43,7 +43,46 @@ def _to_rgb565(img) -> bytes:
     return bytes(out)
 
 
+_keyboard = None
+
+
+def _open_keyboard():
+    """Find the TCA8418 keyboard among the evdev devices (cached)."""
+    global _keyboard
+    if _keyboard is None:
+        import evdev
+
+        for path in evdev.list_devices():
+            dev = evdev.InputDevice(path)
+            if "tca8418" in dev.name.lower():
+                _keyboard = dev
+                break
+        else:
+            raise RuntimeError("TCA8418 keyboard not found in /dev/input")
+    return _keyboard
+
+
 def read_key() -> str | None:
-    """TODO: open the TCA8418 evdev device and return the next key name.
-    Stub for the skeleton — menu navigation lands with the real UI."""
+    """Block until a key is pressed; return its simple name.
+
+    Digits come back as "1".."9"/"0", letters lowercase, and the
+    specials as "enter", "esc", "space", "up"/"down"/"left"/"right".
+    Anything else returns its evdev name (e.g. "KEY_F1") so callers
+    can ignore what they don't care about.
+    """
+    import evdev
+
+    dev = _open_keyboard()
+    for event in dev.read_loop():
+        if event.type != evdev.ecodes.EV_KEY or event.value != 1:
+            continue  # only key-down events count
+        name = evdev.ecodes.KEY[event.code]
+        if isinstance(name, list):
+            name = name[0]
+        simple = name.removeprefix("KEY_")
+        if len(simple) == 1:
+            return simple.lower()
+        return {"ENTER": "enter", "ESC": "esc", "SPACE": "space",
+                "UP": "up", "DOWN": "down", "LEFT": "left",
+                "RIGHT": "right"}.get(simple, name)
     return None

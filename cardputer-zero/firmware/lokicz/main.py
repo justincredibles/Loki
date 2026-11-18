@@ -16,7 +16,12 @@ from . import caps, ui, wifi_recon
 
 
 def main() -> int:
-    configured_cap = sys.argv[1] if len(sys.argv) > 1 else os.environ.get("LOKICZ_CAP")
+    if "--menu" in sys.argv:
+        from . import app
+
+        return app.run()
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    configured_cap = args[0] if args else os.environ.get("LOKICZ_CAP")
     profile = caps.detect_cap(configured_cap)
     capture_iface = os.environ.get("LOKICZ_CAPTURE_IFACE")  # USB dongle, if any
 

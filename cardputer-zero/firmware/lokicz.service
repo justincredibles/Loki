@@ -1,0 +1,13 @@
+[Unit]
+Description=lokicz — Loki for Cardputer Zero (on-device menu)
+After=network.target
+
+[Service]
+User=cardputer
+WorkingDirectory=/home/cardputer/loki/cardputer-zero/firmware
+ExecStart=/usr/bin/python3 -m lokicz.main --menu
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
