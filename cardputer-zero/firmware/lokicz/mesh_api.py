@@ -55,9 +55,12 @@ def op_info(iface) -> dict:
     my = iface.myInfo
     me = nodes.get(my.my_node_num) or {}
     user = me.get("user") or {}
+    pos = me.get("position") or {}
     return {"my_num": my.my_node_num,
             "my_name": _name(nodes, my.my_node_num),
             "my_short": user.get("shortName") or "",
+            "my_lat": pos.get("latitude"),
+            "my_lon": pos.get("longitude"),
             "nodes_known": len(nodes)}
 
 
@@ -263,6 +266,7 @@ def op_nodes(iface) -> dict:
     for num, node in _nodes(iface).items():
         user = node.get("user") or {}
         pos = node.get("position") or {}
+        metrics = node.get("deviceMetrics") or {}
         rows.append({
             "num": num,
             "name": user.get("longName") or user.get("id")
@@ -273,6 +277,8 @@ def op_nodes(iface) -> dict:
             "hops": node.get("hopsAway"),
             "lat": pos.get("latitude"),
             "lon": pos.get("longitude"),
+            "batt": metrics.get("batteryLevel"),
+            "voltage": metrics.get("voltage"),
         })
     rows.sort(key=lambda r: -(r["last_heard"] or 0))
     return {"nodes": rows[:40]}

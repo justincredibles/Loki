@@ -603,6 +603,8 @@ class Handler(BaseHTTPRequestHandler):
 
             cfg = config.load()
             out = {"cap": cfg.get("cap"), **meshcore.status(),
+                   "home": {"lat": cfg.get("home_lat"),
+                            "lon": cfg.get("home_lon")},
                    "chat": None}
             if out["meshtastic"].get("api"):
                 try:

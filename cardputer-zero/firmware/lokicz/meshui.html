@@ -222,6 +222,7 @@
       <option value="0">Primary channel</option>
       <option value="all">All channels</option>
       <option value="dm">Direct messages</option>
+      <option value="mentions">Mentions of you</option>
     </select>
     <button class="ghost" onclick="loadMessages()">REFRESH CHAT</button>
     <span id="chat-meta" class="dim" style="margin-left:8px"></span>
@@ -407,6 +408,12 @@ async function loadMesh() {
       s = `Meshtastic · daemon ${t.service ? "active" : "off"} · API ${t.api ? "up" : "down"} · radio ${t.radio ? "SX1262 OK" : "unproven"}`;
       if (m.chat) {
         window.myNum = m.chat.my_num;
+        window.myNames = [m.chat.my_name, m.chat.my_short]
+          .filter(x => x && x.length >= 2);
+        window.myPos = (m.chat.my_lat != null && m.chat.my_lon != null)
+          ? {lat: m.chat.my_lat, lon: m.chat.my_lon}
+          : (m.home && m.home.lat != null
+             ? {lat: m.home.lat, lon: m.home.lon} : null);
         s += ` · you are ${esc(m.chat.my_name)} · ${m.chat.nodes_known} nodes known`;
         $("mesh-id").textContent = `current: ${m.chat.my_name} (${m.chat.my_short || "—"})`;
         if (document.activeElement !== $("id-long")) $("id-long").value = m.chat.my_name;
@@ -435,14 +442,23 @@ function meshSend() {
   $("mesh-text").value = "";
   runBody("mesh-send", {text});
 }
+function isMention(m) {
+  if (m.out || !m.text) return false;
+  const text = m.text.toLowerCase();
+  const needles = (window.myNames || []).map(n => n.toLowerCase());
+  needles.push("lokicz", "loki");
+  return needles.some(n => n && text.includes(n));
+}
 async function loadMessages() {
   try {
     const chan = $("chat-filter").value;
-    const r = await api(`/api/mesh/messages?limit=300&channel=${chan}`);
+    const fetchChan = chan === "mentions" ? "all" : chan;
+    const r = await api(`/api/mesh/messages?limit=300&channel=${fetchChan}`);
     const box = $("chat-box");
     const nearBottom = box.scrollTop + box.clientHeight
       >= box.scrollHeight - 60;
-    const msgs = r.messages || [];
+    let msgs = r.messages || [];
+    if (chan === "mentions") msgs = msgs.filter(isMention);
     box.innerHTML = msgs.length ? msgs.map(m => {
       const t = new Date((m.ts || 0) * 1000).toLocaleTimeString(
         [], {hour: "2-digit", minute: "2-digit"});
@@ -450,11 +466,15 @@ async function loadMessages() {
         ? `<span class="gold">You</span>`
         : `<span class="cyan">${esc(m.from_name || "?")}</span>`;
       const tag = m.dm ? ` <span class="dim">(DM)</span>`
-        : (chan === "all" && (m.channel || 0) !== 0
+        : (fetchChan === "all" && (m.channel || 0) !== 0
            ? ` <span class="dim">(ch ${m.channel})</span>` : "");
-      return `<div style="padding:2px 0;border-bottom:1px solid #0d2b16">` +
+      const hl = isMention(m)
+        ? "border-left:3px solid var(--gold);padding-left:5px;" : "";
+      return `<div style="padding:2px 0;border-bottom:1px solid #0d2b16;${hl}">` +
         `<span class="dim">${t}</span> ${who}${tag}: ${esc(m.text || "")}</div>`;
-    }).join("") : `<span class="dim">nothing logged here yet — texts appear as they're heard</span>`;
+    }).join("") : `<span class="dim">${chan === "mentions"
+      ? "no mentions logged yet — messages naming you or Loki land here"
+      : "nothing logged here yet — texts appear as they're heard"}</span>`;
     if (nearBottom) box.scrollTop = box.scrollHeight;
     $("chat-meta").textContent = r.collecting
       ? `listener collecting · ${r.total} message(s) stored · auto-refreshes`
@@ -467,6 +487,14 @@ function renderMeshMsgs(r) {
     ? `<table><tr><th>FROM</th><th>TEXT</th><th>WHEN</th><th>SIGNAL</th></tr>` +
       msgs.map(m => `<tr><td class="gold">${esc(m.from_name || "?")}</td><td class="cyan">${esc(m.text || "")}</td><td>${m.rx_time ? new Date(m.rx_time * 1000).toLocaleTimeString() : "—"}</td><td>${m.rssi != null ? m.rssi + " dBm" : "—"}</td></tr>`).join("") + `</table>`
     : `<span class="dim">no mesh texts heard in ${r.seconds || 30}s — the mesh may just be quiet</span>`;
+}
+function haversineKm(a, b) {
+  const R = 6371, rad = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * rad, dLon = (b.lon - a.lon) * rad;
+  const h = Math.sin(dLat / 2) ** 2 +
+    Math.cos(a.lat * rad) * Math.cos(b.lat * rad) *
+    Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
 }
 function renderMeshNodes(r) {
   const nodes = (r.nodes || []).slice().sort((a, b) =>
@@ -482,14 +510,25 @@ function renderMeshNodes(r) {
     const loc = (n.lat != null && n.lon != null)
       ? `<a href="https://www.openstreetmap.org/?mlat=${n.lat}&mlon=${n.lon}#map=12/${n.lat}/${n.lon}" target="_blank" style="color:var(--cyan)">${n.lat.toFixed(3)}, ${n.lon.toFixed(3)}</a>`
       : "—";
+    const batt = n.batt != null
+      ? `<span${n.batt <= 20 ? ' class="gold"' : ""}>${n.batt}%</span>` +
+        (n.voltage ? ` <span class="dim">${Number(n.voltage).toFixed(1)}V</span>` : "")
+      : "—";
+    let dist = "—";
+    if (!you && window.myPos && n.lat != null && n.lon != null) {
+      const km = haversineKm(window.myPos, {lat: n.lat, lon: n.lon});
+      dist = km < 1 ? Math.round(km * 1000) + " m" : km.toFixed(1) + " km";
+    }
     return `<tr${you ? ' style="background:#123a1e"' : ""}>` +
       `<td class="gold">${esc(n.name)}${n.short ? " (" + esc(n.short) + ")" : ""}${you ? " · YOU" : ""}</td>` +
       `<td>${ago(n.last_heard)}</td>` +
       `<td>${n.snr != null ? n.snr + " dB" : "—"}</td>` +
-      `<td>${n.hops != null ? n.hops : "—"}</td><td>${loc}</td></tr>`;
+      `<td>${batt}</td>` +
+      `<td>${n.hops != null ? n.hops : "—"}</td>` +
+      `<td>${dist}</td><td>${loc}</td></tr>`;
   };
   $("mesh-nodes-box").innerHTML =
-    `<div class="nodesbox"><table><thead><tr><th>NODE</th><th>LAST HEARD</th><th>SNR</th><th>HOPS</th><th>POSITION</th></tr></thead><tbody>` +
+    `<div class="nodesbox"><table><thead><tr><th>NODE</th><th>LAST HEARD</th><th>SNR</th><th>BATT</th><th>HOPS</th><th>DIST</th><th>POSITION</th></tr></thead><tbody>` +
     nodes.map(row).join("") + `</tbody></table></div>`;
 }
 </script>
