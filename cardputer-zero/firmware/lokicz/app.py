@@ -217,10 +217,14 @@ def run() -> int:
             config.save(cfg)
             rows = _status_rows(cfg)
         elif key == "9":
+            from . import web
+
             page = 2
             rows = [("text", "PAGE 2 — SERVICES", "dim"),
                     ("text", "1 WPA-SEC · 2 LAST AUDIT", "text"),
-                    ("text", "3 STOP · 9 back to page 1", "text")]
+                    ("text", "3 STOP · 9 back to page 1", "text"),
+                    ("kv", "WEB PORTAL",
+                     f"{web.lan_ip()}:{web.PORT}", "gold")]
         elif key == "3":
             from .cc1101 import CC1101
 
