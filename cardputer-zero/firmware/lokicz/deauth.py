@@ -69,23 +69,30 @@ def watch(seconds: int = 60, iface: str = "wlan1") -> dict:
              "-e", "wlan.sa", "-E", "separator=|"],
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
             text=True)
-        try:
-            deadline = time.time() + seconds
-            while time.time() < deadline:
-                line = proc.stdout.readline()
-                if not line:
-                    break
+
+        def _reader():
+            # A dedicated reader thread: a blocking readline
+            # in the main thread would hang forever on a
+            # quiet night when zero frames arrive — the
+            # deadline must live outside the read.
+            for line in proc.stdout:
                 parts = line.strip().split("|")
                 if len(parts) < 2 or not parts[1]:
                     continue
                 kinds[parts[0]] += 1
                 counts[parts[1].upper()] += 1
+
+        reader = threading.Thread(target=_reader, daemon=True)
+        reader.start()
+        try:
+            stop.wait(seconds)
         finally:
             proc.terminate()
             try:
                 proc.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 proc.kill()
+            reader.join(timeout=3)
     finally:
         stop.set()
         capture._restore(iface)

@@ -63,12 +63,13 @@ def run_probes(seconds: int = 60, iface: str = "wlan1") -> dict:
              "-e", "radiotap.dbm_antsignal", "-E", "separator=|"],
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
             text=True)
-        try:
-            deadline = time.time() + seconds
-            while time.time() < deadline:
-                line = proc.stdout.readline()
-                if not line:
-                    break
+        stats = {"total": 0, "wildcard": 0}
+
+        def _reader():
+            # Reader thread, same reason as deauth.watch: a
+            # blocking readline in the main thread hangs
+            # forever if zero frames arrive before deadline.
+            for line in proc.stdout:
                 parts = line.strip().split("|")
                 if len(parts) < 2 or not parts[0]:
                     continue
@@ -88,7 +89,7 @@ def run_probes(seconds: int = 60, iface: str = "wlan1") -> dict:
                         and parts[2] else 0
                 except ValueError:
                     rssi = 0
-                total += 1
+                stats["total"] += 1
                 dev = devices.setdefault(mac, {
                     "mac": mac, "ssids": [], "count": 0,
                     "best_rssi": -999})
@@ -99,13 +100,20 @@ def run_probes(seconds: int = 60, iface: str = "wlan1") -> dict:
                     if ssid not in dev["ssids"]:
                         dev["ssids"].append(ssid)
                 else:
-                    wildcard += 1
+                    stats["wildcard"] += 1
+
+        reader = threading.Thread(target=_reader, daemon=True)
+        reader.start()
+        try:
+            stop.wait(seconds)
         finally:
             proc.terminate()
             try:
                 proc.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 proc.kill()
+            reader.join(timeout=3)
+        total, wildcard = stats["total"], stats["wildcard"]
     finally:
         stop.set()
         capture._restore(iface)
