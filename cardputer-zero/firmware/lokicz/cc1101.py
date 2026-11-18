@@ -256,15 +256,19 @@ class CC1101:
 
         # Squelch first: an OOK demodulator with no signal outputs
         # pure slicer noise, so we measure the noise floor and gate
-        # the recording on RSSI (floor + 10 dB), polled every ~4 ms
-        # alongside the pin. Only gated-open stretches reach the file.
+        # the recording on RSSI (floor + 8 dB), polled every ~4 ms
+        # alongside the pin. Only gated-open stretches reach the
+        # file. +8 was chosen against a measured ambient: at
+        # Justin's house the quiet-band RSSI wanders at most +4 dB
+        # over the floor, while any real in-house remote lands at
+        # -50..-80 dBm — miles above the gate.
         floor_samples = []
         t_end = time.time() + 0.5
         while time.time() < t_end:
             floor_samples.append(self.rssi_dbm())
             time.sleep(0.01)
         floor = sorted(floor_samples)[len(floor_samples) // 2]
-        threshold = floor + 10.0
+        threshold = floor + 8.0
 
         pin = DigitalInputDevice(GDO0_GPIO, pull_up=False)
         try:
