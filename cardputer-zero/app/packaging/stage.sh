@@ -8,7 +8,7 @@ set -euo pipefail
 
 SRC="../firmware/lokicz"
 install -d "$STAGE$APP_INSTALL_DIR/lokicz"
-for f in "$SRC"/*.py "$SRC"/*.json; do
+for f in "$SRC"/*.py "$SRC"/*.json "$SRC"/*.html; do
     install -m 0644 "$f" "$STAGE$APP_INSTALL_DIR/lokicz/"
 done
 

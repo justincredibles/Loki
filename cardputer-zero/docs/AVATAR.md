@@ -70,6 +70,15 @@ Titles: 1 Mortal · 2 Trickster · 3 Mischief Maker · 4 Illusionist ·
   (Sky Watcher) · Ruby (Exterminator)
 - **Scepter:** L10, or the Exterminator + Century Club combo
 
+## Status: SHIPPED 2026-11-17 (evening)
+
+Engine (`lokicz/avatar.py`), character renderer + home screen
+(`ui.draw_loki` / `ui.home_screen`), XP hooks in every LCD
+handler and portal job, portal wardrobe — all live and verified
+on the device (engine unit checks, framebuffer pixel check,
+first live award: +10 XP from a portal sniff). Profile starts
+fresh at Level 1 / Mortal.
+
 ## Home screen layout (Justin's sketch, 2026-11-17)
 
 The avatar screen IS the home screen, 320×170:
