@@ -18,6 +18,7 @@ well-behaved modern devices mostly wildcard-probe.
 """
 
 import json
+import re
 import subprocess
 import threading
 import time
@@ -72,6 +73,16 @@ def run_probes(seconds: int = 60, iface: str = "wlan1") -> dict:
                 if len(parts) < 2 or not parts[0]:
                     continue
                 mac, ssid = parts[0].upper(), parts[1]
+                # tshark's fields mode emits SSIDs as hex bytes;
+                # hand back the real name when it decodes clean.
+                if ssid and len(ssid) % 2 == 0 and \
+                        re.fullmatch(r"[0-9a-fA-F]+", ssid):
+                    try:
+                        dec = bytes.fromhex(ssid).decode("utf-8")
+                        if dec.isprintable():
+                            ssid = dec
+                    except (ValueError, UnicodeDecodeError):
+                        pass
                 try:
                     rssi = int(parts[2]) if len(parts) > 2 \
                         and parts[2] else 0
