@@ -142,6 +142,9 @@
   #audits, #captures, #files, #trackers, #watchdog, #report,
   #mesh-channels, #mesh-out { overflow-x: auto;
     -webkit-overflow-scrolling: touch; }
+  /* Report-only mode (opened via /?report=<file> in its own
+     window): everything but the report stays hidden. */
+  body.report-only main > *:not(.report-keep) { display: none; }
   /* ---- small screens (phones) ---- */
   @media (max-width: 700px) {
     main { padding: 12px; }
@@ -314,9 +317,9 @@
     <pre id="upd-log" style="white-space:pre-wrap; font-size:11px; color:var(--dim); margin:8px 0 0"></pre>
   </div>
 
-  <h2>AUDIT REPORTS</h2>
+  <h2 class="report-keep">AUDIT REPORTS</h2>
   <div id="audits"><span class="dim">loading…</span></div>
-  <div id="report"></div>
+  <div id="report" class="report-keep"></div>
 
   <h2>CAPTURES &amp; CRACKED</h2>
   <div id="captures"><span class="dim">loading…</span></div>
@@ -591,7 +594,7 @@ async function loadAudits() {
   $("audits").innerHTML = `<table><tr><th>WHEN</th><th>SUBNET</th>` +
     `<th>HOSTS</th><th>OPEN PORTS</th><th>CVEs</th><th>CRIT/HIGH</th></tr>` +
     list.slice().reverse().map(a =>
-      `<tr class="audit-row" onclick="loadReport('${a.file}')">` +
+      `<tr class="audit-row" title="opens the full report in a new window" onclick="window.open('/?report=${a.file}', '_blank', 'noopener')">` +
       `<td>${esc(a.when)}</td><td>${esc(a.subnet)}</td>` +
       `<td>${a.scanned}/${a.hosts}</td><td>${a.open_ports}</td>` +
       `<td class="${a.crit ? "bad" : "gold"}">${a.cves}</td>` +
@@ -857,9 +860,18 @@ async function doUpdate() {
   setTimeout(() => clearInterval(iv), 120000);
 }
 
-refreshStatus(); loadAudits(); loadCaptures(); loadFlights(); loadTrackers(); loadWatchdog(); loadTracks(); loadAvatar(); loadFiles(); loadUpdate(); loadMesh(); resumeJob();
-setInterval(refreshStatus, 10000);
-setInterval(loadFlights, 60000);
+/* A report window (/?report=<file>) shows just that report —
+   the same renderer, in its own tab like the dongle list. */
+const reportFile = new URLSearchParams(location.search).get("report");
+if (reportFile) {
+  document.body.classList.add("report-only");
+  document.title = "LOKI — AUDIT REPORT";
+  loadReport(reportFile);
+} else {
+  refreshStatus(); loadAudits(); loadCaptures(); loadFlights(); loadTrackers(); loadWatchdog(); loadTracks(); loadAvatar(); loadFiles(); loadUpdate(); loadMesh(); resumeJob();
+  setInterval(refreshStatus, 10000);
+  setInterval(loadFlights, 60000);
+}
 </script>
 <footer style="margin-top:28px;padding-top:10px;border-top:1px solid var(--frame);color:var(--dim);font-size:11px;line-height:1.6">
   ◈ LokiCZ is an educational security-research tool for your own
