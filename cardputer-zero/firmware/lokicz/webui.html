@@ -469,6 +469,83 @@ async function loadMesh() {
 }
 function jobSummary(action, r) {
   if (!r) return null;
+  const base = p => (p || "").split("/").pop();
+  if (action === "capture") {
+    let s = `${r.hashes ?? 0} hash line(s) caught in ${r.seconds}s` +
+      ` — ${r.eapol ?? 0} EAPOL · ${r.pmkid ?? 0} PMKID`;
+    if (r.wpasec) s += ` · wpa-sec: ${(r.wpasec.uploaded || []).length}` +
+      ` uploaded, ${r.wpasec.cracked_new ?? 0} new crack(s)`;
+    return s;
+  }
+  if (action === "audit")
+    return `${r.scanned}/${r.hosts} hosts scanned · ${r.open_ports}` +
+      ` open ports · ${r.cves} CVEs (${r.crit} critical, ${r.high}` +
+      ` high) — full report in NETWORK AUDITS below`;
+  if (action === "watchdog") {
+    const c = (r.watchdog || {}).counts || {};
+    return `audit done — ${r.cves} CVEs (${r.crit} critical)` +
+      ` · watchdog: ${c.new_hosts ?? 0} new host(s),` +
+      ` ${c.new_ports ?? 0} new port(s),` +
+      ` ${(r.watchdog || {}).fixed_cves ?? 0} CVE(s) fixed,` +
+      ` ${(r.watchdog || {}).unseen_cves ?? 0} unseen`;
+  }
+  if (action === "wardrive")
+    return `${r.networks} network(s) logged (${r.sightings} sightings)` +
+      `${r.gps_fix ? " · GPS fix" : " · no GPS fix"}` +
+      ` → ${base(r.file)}`;
+  if (action === "sniff") {
+    const hits = (r.hits || []).length;
+    return hits
+      ? `${hits} signature hit(s) — ${r.wifi_obs} Wi-Fi + ${r.ble_obs}` +
+        ` BLE observations; details in the sniffer log`
+      : `no drone / ALPR signatures seen — ${r.wifi_obs} Wi-Fi +` +
+        ` ${r.ble_obs} BLE observations`;
+  }
+  if (action === "sweep")
+    return (r.bands || []).map(b =>
+      `${b.band}: floor ${b.floor_dbm} dBm · peak ${b.peak_dbm}` +
+      ` dBm @ ${b.peak_mhz} MHz`).join("  ·  ");
+  if (action === "gps")
+    return `${r.points} point(s) · ${r.distance_m} m · up to` +
+      ` ${r.max_sats} satellites → ${r.file}`;
+  if (action === "proximity")
+    return `${r.count} device(s) heard — radar in PROXIMITY below`;
+  if (action === "probes")
+    return `${r.probes_total} probe(s) from ${r.devices} device(s)` +
+      ` · ${r.unique_ssids} unique SSID(s), ${r.directed_devices}` +
+      ` directed — table in PROBE LOGGER below`;
+  if (action === "trackers") {
+    const cand = (r.found || [])
+      .filter(d => d.verdict === "FOLLOWING CANDIDATE").length;
+    return `${r.heard} tracker(s) heard this window` +
+      ` · ${r.known_total} known total` +
+      (cand ? ` · ${cand} FOLLOWING CANDIDATE(S)` : "");
+  }
+  if (action === "ook") {
+    const d = r.decode || {};
+    if (d.decoded)
+      return `decoded: ${d.protocol || "OOK"} · code ${d.code}` +
+        ` (${d.bits} bits, ${d.confidence || ""} confidence)` +
+        ` → ${base(r.file)}`;
+    return `${r.bursts ?? 0} burst(s) captured, no clean decode` +
+      ` (unknown OOK — pulse stats in the file) → ${base(r.file)}`;
+  }
+  if (action === "replay")
+    return r.sent
+      ? `replayed ${base(r.file)} — ${r.frames ?? 3} frame(s)` +
+        ` at ${r.frequency_mhz} MHz`
+      : `not sent — ${r.reason || "unknown reason"}`;
+  if (action === "nfc")
+    return r.found
+      ? `TAG FOUND — UID ${r.uid} · ATQA ${r.atqa}` +
+        ` · SAK 0x${(r.sak ?? 0).toString(16)}`
+      : `no tag in the field (reader OK · ${r.vdd_mv} mV)`;
+  if (action === "wpasec-sync") {
+    if (r.ok === false && r.reason) return r.reason;
+    return `${(r.uploaded || []).length} capture(s) uploaded` +
+      ` · ${r.cracked_new ?? 0} new crack(s)` +
+      ` · ${r.cracked_total ?? 0} cracked total`;
+  }
   if (action === "mesh-nodes")
     return `${(r.nodes || []).length} nodes known — readable table in the MESH panel below`;
   if (action === "mesh-listen")
