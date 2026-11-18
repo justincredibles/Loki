@@ -100,8 +100,11 @@ def _base():
 
 def _horns(draw, cx: int, base_y: int, w: int, color=GOLD,
            h: int = None) -> None:
-    """Loki's horned helm, stamped from tapering circles along two
-    mirrored curves — horns sweep up, out, then curve inward."""
+    """Loki's horned HELMET — the helm only, never a face (Justin's
+    call): two horns sweeping up, out, then inward, a domed cap,
+    a band, and the emerald gem. Horns are stamped from tapering
+    circles along mirrored curves; the empty space under the dome
+    is the point — it's a helmet, worn by nobody."""
     import math
 
     if h is None:
@@ -115,7 +118,14 @@ def _horns(draw, cx: int, base_y: int, w: int, color=GOLD,
             y = base_y - h * (t ** 0.9)
             r = max(0.8, w * 0.058 * (1 - t) ** 0.8)
             draw.ellipse([x - r, y - r, x + r, y + r], fill=color)
-    # Helmet band + emerald gem.
+    # Domed cap of the helmet.
+    dw = w * 0.30
+    dome_h = w * 0.21
+    draw.pieslice([cx - dw, base_y - dome_h, cx + dw,
+                   base_y + dome_h * 0.55], 180, 360, fill=color)
+    draw.arc([cx - dw * 0.78, base_y - dome_h * 0.76, cx + dw * 0.78,
+              base_y + dome_h * 0.4], 180, 360, fill=GOLD_DARK, width=2)
+    # Band + emerald gem.
     bw, bh = w * 0.36, max(3, w * 0.11)
     draw.polygon([(cx - bw, base_y + bh), (cx + bw, base_y + bh),
                   (cx + bw * 0.82, base_y - bh * 0.4),
@@ -142,6 +152,8 @@ def _mini_helm(draw, cx: int, base_y: int) -> None:
             y = base_y - h * (t ** 0.9)
             pts.append((x, y))
         draw.line(pts, fill=GOLD, width=2)
+    draw.arc([cx - 8, base_y - 10, cx + 8, base_y + 2], 180, 360,
+             fill=GOLD, width=2)
     draw.rectangle([cx - 8, base_y - 2, cx + 8, base_y + 2], fill=GOLD)
     draw.polygon([(cx, base_y - 3), (cx + 2, base_y), (cx, base_y + 3),
                   (cx - 2, base_y)], fill=EMERALD)
