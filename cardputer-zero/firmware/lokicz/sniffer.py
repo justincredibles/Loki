@@ -124,6 +124,9 @@ def scan_ble(seconds: int) -> tuple[list[dict], str]:
             name_m = re.search(r"Name \(complete\): (.+)", block)
             if name_m:
                 dev["name"] = name_m.group(1).strip()
+            rssi_m = re.search(r"RSSI: (-?\d+)", block)
+            if rssi_m and not dev["rssi"]:
+                dev["rssi"] = int(rssi_m.group(1))
     return list(devices.values()), method
 
 

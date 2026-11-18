@@ -167,6 +167,15 @@ def _act_audit(cfg, _seconds):
     return fn
 
 
+def _act_proximity(cfg, _seconds):
+    def fn(job):
+        from . import proximity
+
+        job["message"] = "listening for nearby radios (25s)..."
+        return proximity.scan(25)
+    return fn
+
+
 def _act_wpasec_sync(cfg, _seconds):
     def fn(job):
         from . import wpasec
@@ -178,7 +187,8 @@ def _act_wpasec_sync(cfg, _seconds):
 
 ACTIONS = {"capture": _act_capture, "wardrive": _act_wardrive,
            "sniff": _act_sniff, "sweep": _act_sweep,
-           "audit": _act_audit, "wpasec-sync": _act_wpasec_sync}
+           "audit": _act_audit, "wpasec-sync": _act_wpasec_sync,
+           "proximity": _act_proximity}
 
 DEFAULT_SECONDS = {"capture": "capture_seconds",
                    "wardrive": "wardrive_seconds",

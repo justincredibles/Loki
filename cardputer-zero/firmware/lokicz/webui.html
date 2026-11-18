@@ -144,6 +144,11 @@
       <button onclick="run('sniff','snfSecs')">START</button>
     </div>
     <div class="act">
+      <h3>◈ PROXIMITY RADAR</h3>
+      <p>The person radar: nearby BLE devices plotted by signal range. Radius is real; angle is a fixed per-device slot.</p>
+      <button onclick="run('proximity')">SCAN 25s</button>
+    </div>
+    <div class="act">
       <h3>◈ SUB-GHZ SWEEP</h3>
       <p>Listen on 433 + 915 MHz bands (needs the CC1101 cap fitted).</p>
       <button onclick="run('sweep')">SWEEP</button>
@@ -158,6 +163,9 @@
 
   <h2>AIR TRAFFIC — FLIGHT RADAR</h2>
   <div id="flights"><span class="dim">loading…</span></div>
+
+  <h2>PROXIMITY RADAR</h2>
+  <div id="prox"><span class="dim">run a scan from ACTIONS above</span></div>
 
   <h2>AUDIT REPORTS</h2>
   <div id="audits"><span class="dim">loading…</span></div>
@@ -235,9 +243,31 @@ async function run(action, secsId) {
       document.querySelector("#job .fill").style.animation = "none";
       document.querySelector("#job .fill").style.width =
         j.state === "done" ? "100%" : "0";
+      if (action === "proximity" && j.state === "done") renderProx(j.result);
       refreshStatus(); loadAudits(); loadCaptures();
     }
   }, 1200);
+}
+
+function renderProx(r) {
+  if (!r || !r.devices) { $("prox").innerHTML = `<span class="dim">no result</span>`; return; }
+  const C = 110, R = 100;
+  const dots = r.devices.map(d => {
+    const a = d.bearing * Math.PI / 180;
+    const x = C + Math.sin(a) * d.frac * R, y = C - Math.cos(a) * d.frac * R;
+    const col = d.rssi > -60 ? "#ffd257" : d.rssi > -80 ? "#40ff8a" : "#74a884";
+    return `<circle cx="${x.toFixed(0)}" cy="${y.toFixed(0)}" r="4" fill="${col}"><title>${esc(d.name)} ~${d.meters} m</title></circle>`;
+  }).join("");
+  const rings = [1, .66, .33].map(f =>
+    `<circle cx="${C}" cy="${C}" r="${(R * f).toFixed(0)}" fill="none" stroke="#166e3a"/>`).join("");
+  const rows = r.devices.map(d => `<tr><td>${esc(d.name)}</td><td class="dim">${esc(d.kind)}</td>` +
+    `<td>${d.rssi} dBm</td><td class="gold">~${d.meters} m</td><td class="dim">${esc(d.address)}</td></tr>`).join("");
+  $("prox").innerHTML =
+    `<div style="display:flex;gap:18px;flex-wrap:wrap"><svg width="220" height="220" style="background:#04120a;border:1px solid #166e3a">${rings}` +
+    `<line x1="${C - R}" y1="${C}" x2="${C + R}" y2="${C}" stroke="#0d2c17"/><line x1="${C}" y1="${C - R}" x2="${C}" y2="${C + R}" stroke="#0d2c17"/>${dots}` +
+    `<text x="${C - 3}" y="12" fill="#ffd257" font-size="11">N</text></svg>` +
+    `<div style="flex:1;min-width:280px"><div class="dim" style="margin-bottom:6px">${r.count} devices heard — range by signal, angle is a fixed slot per device</div>` +
+    `<table><tr><th>NAME</th><th>KIND</th><th>RSSI</th><th>RANGE</th><th>ADDR</th></tr>${rows}</table></div></div>`;
 }
 async function toggle(which) {
   await api(`/api/toggle/${which}`, {method: "POST"});

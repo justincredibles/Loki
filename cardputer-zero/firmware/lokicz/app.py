@@ -28,7 +28,8 @@ def _total_hashes() -> int:
 def _chips(cfg: dict, page: int) -> list:
     if page == 2:
         return [("1", "WPA-SEC"), ("2", "LAST AUDIT"),
-                ("3", "STOP"), ("4", "FLIGHTS"), ("9", "◂ BACK")]
+                ("3", "STOP"), ("4", "FLIGHTS"), ("5", "RADAR"),
+                ("9", "◂ BACK")]
     cap_tone = "text" if cfg.get("capture_enabled", True) else "off"
     return [("1", "STATUS"), ("2", "CAPTURE", cap_tone),
             ("3", "SUB-GHZ"), ("4", "WARDRIVE"), ("5", "SNIFF"),
@@ -199,6 +200,28 @@ def run() -> int:
                 else:
                     rows = [("text", "FLIGHT RADAR OFFLINE", "bad"),
                             ("text", r["reason"][:28], "dim")]
+            elif key == "5":
+                from . import proximity
+
+                with ui.Spinner("PROXIMITY",
+                                "listening for nearby radios...",
+                                expected=25):
+                    r = proximity.scan(25)
+                if r["devices"]:
+                    blips = [(d["bearing"], d["frac"],
+                              "gold" if d["rssi"] > -60 else
+                              "text" if d["rssi"] > -80 else "dim")
+                             for d in r["devices"]]
+                    prows = [("text", f"{r['count']} DEVICES", "dim")]
+                    for d in r["devices"][:5]:
+                        prows.append(("kv", d["name"][:11],
+                                      f"~{d['meters']}M", "text"))
+                    ui.radar_screen("PROXIMITY", blips, prows,
+                                    right="BLE")
+                    rows = prows
+                else:
+                    rows = [("text", "NOTHING NEARBY", "dim"),
+                            ("text", "no BLE heard in 25s", "dim")]
             elif key == "9":
                 page = 1
                 rows = _status_rows(cfg)
@@ -246,7 +269,7 @@ def run() -> int:
             page = 2
             rows = [("text", "PAGE 2 — SERVICES", "dim"),
                     ("text", "1 WPA-SEC · 2 LAST AUDIT", "text"),
-                    ("text", "3 STOP · 4 FLIGHT RADAR", "text"),
+                    ("text", "3 STOP · 4 FLIGHTS · 5 RADAR", "text"),
                     ("text", "9 back to page 1", "dim"),
                     ("kv", "WEB PORTAL",
                      f"{web.lan_ip()}:{web.PORT}", "gold")]
