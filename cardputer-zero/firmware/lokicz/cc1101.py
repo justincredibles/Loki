@@ -12,14 +12,15 @@ Plain-English tour:
   the SmartRC-CC1101 library (the same lineage as the CardputerZero
   org's SubG-Chat reference app).
 
-This module is receive-only: frequency setting, an RSSI sweep
-(the radio's "ears" — channel power across a band), an RSSI
-activity listen (spikes = somebody transmitting), a FIFO packet
-listen that collects packets carrying our sync word, and raw OOK
-capture — the chip in async-serial mode, its demodulated bit
-stream sampled off the GDO0 pin and saved as a Flipper .sub file.
-Transmission lands later, behind the arm-token gate like every
-other attack-class feature in Loki.
+Capabilities: frequency setting, an RSSI sweep (the radio's
+"ears" — channel power across a band), an RSSI activity listen
+(spikes = somebody transmitting), a FIFO packet listen that
+collects packets carrying our sync word, raw OOK capture — the
+chip in async-serial mode, its demodulated bit stream sampled
+off the GDO0 pin and saved as a Flipper .sub file — and OOK
+transmission: replaying those same .sub timings back out by
+driving GDO0 as the async data input. Protocol decoding of
+captures lives in subghz.py.
 """
 
 import subprocess
@@ -37,7 +38,8 @@ GDO0_GPIO = 15  # the CC1101's data pin on this cap — EXPERIMENTALLY
 
 # --- SPI / strobes -----------------------------------------------------------
 SPI_BUS, SPI_CS = 0, 1  # /dev/spidev0.1 — SPI0 CS1, shared with the LCD
-SRES, SRX, SIDLE, SFRX, SNOP = 0x30, 0x34, 0x36, 0x3A, 0x3D
+SRES, SRX, STX, SIDLE, SFRX, SNOP = 0x30, 0x34, 0x35, 0x36, 0x3A, 0x3D
+PATABLE = 0x3E
 
 # --- Registers ---------------------------------------------------------------
 FREQ2, FREQ1, FREQ0 = 0x0D, 0x0E, 0x0F
@@ -352,6 +354,93 @@ class CC1101:
                 "longest_pulse_us": max(pulses) if pulses else 0}
 
 
+    def transmit_ook(self, freq_mhz: float, runs: list[int],
+                     repeats: int = 3) -> dict:
+        """Replay signed µs runs as OOK, async-serial TX via GDO0.
+
+        The mirror image of capture_ook: same async mode, but
+        GDO0 becomes the data INPUT and this host drives it with
+        the recorded timing. In OOK mode the PA ramps between
+        PATABLE[0] (data 0 — must be 0x00, true silence) and
+        PATABLE[PA_POWER] (data 1); FREND0's PA_POWER field is
+        pointed at entry 1, loaded with a +10 dBm-class byte.
+
+        Timing honesty: edges are scheduled against a monotonic
+        clock (sleep for the bulk, spin for the last ~1.5 ms), so
+        pulse widths land within tens of µs — fine for the
+        100 µs+ pulses remotes use. Long silences inside a
+        capture are capped at 250 ms so a replay doesn't sit
+        dead-airing gaps the squelch gate created, and the whole
+        transmission is capped at ~15 s.
+        """
+        from gpiozero import OutputDevice
+
+        timeline: list[tuple[int, float]] = []
+        for run in runs:
+            level = 1 if run > 0 else 0
+            dur = min(abs(run), 250_000) / 1e6
+            if timeline and timeline[-1][0] == level:
+                timeline[-1] = (level, timeline[-1][1] + dur)
+            else:
+                timeline.append((level, dur))
+        while timeline and timeline[0][0] == 0:
+            timeline.pop(0)
+        while timeline and timeline[-1][0] == 0:
+            timeline.pop()
+        if not timeline:
+            return {"sent": False, "reason": "nothing but silence"}
+        frame_s = sum(d for _, d in timeline)
+        repeats = max(1, min(repeats, int(15.0 // frame_s) or 1))
+
+        self.set_frequency(freq_mhz)
+        self.write_reg(MDMCFG2, 0x73)   # OOK + sync/carrier sense
+        self.write_reg(PKTCTRL0, 0x32)  # async serial, infinite length
+        self.write_reg(IOCFG0, 0x0D)    # GDO0 = async serial data (in)
+        self.write_reg(FREND0, 0x11)    # PA_POWER=1 → PATABLE[1]
+        self._spi.xfer2([PATABLE | 0x40, 0x00, 0xC0, 0xC0, 0xC0,
+                         0xC0, 0xC0, 0xC0, 0xC0])
+
+        pin = OutputDevice(GDO0_GPIO)
+        try:
+            pin.off()
+            self.strobe(STX)
+            time.sleep(0.01)
+            sent_frames = 0
+            for _ in range(repeats):
+                t = time.perf_counter()
+                for level, dur in timeline:
+                    if level:
+                        pin.on()
+                    else:
+                        pin.off()
+                    t += dur
+                    while True:
+                        remain = t - time.perf_counter()
+                        if remain <= 0:
+                            break
+                        if remain > 0.0015:
+                            time.sleep(remain - 0.0015)
+                sent_frames += 1
+            pin.off()
+        finally:
+            pin.close()
+            self.strobe(SIDLE)
+        return {"sent": True, "frequency_mhz": freq_mhz,
+                "frames": sent_frames, "frame_seconds": round(frame_s, 3),
+                "runs": len(timeline)}
+
+    def replay_sub(self, path: str, repeats: int = 3) -> dict:
+        """Replay a recorded Flipper .sub file at its own frequency."""
+        from .subghz import parse_sub
+
+        freq_hz, runs = parse_sub(path)
+        if not freq_hz or not runs:
+            return {"sent": False, "reason": "empty or unreadable .sub"}
+        out = self.transmit_ook(freq_hz / 1e6, runs, repeats)
+        out["file"] = path
+        return out
+
+
 def listen_test() -> None:
     """First-ears test: sweep both sub-GHz bands, then dwell-listen."""
     with CC1101() as radio:
@@ -387,5 +476,10 @@ if __name__ == "__main__":
               f"pulses {stats['shortest_pulse_us']}-"
               f"{stats['longest_pulse_us']} us")
         print(f"saved: {stats['file']}")
+    elif len(sys.argv) > 2 and sys.argv[1] == "tx":
+        reps = int(sys.argv[3]) if len(sys.argv) > 3 else 3
+        with CC1101() as radio:
+            stats = radio.replay_sub(sys.argv[2], reps)
+        print(f"TX replay: {stats}")
     else:
         listen_test()
