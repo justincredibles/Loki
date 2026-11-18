@@ -108,6 +108,21 @@ def del_channel(cfg: dict, index: int) -> dict:
     return out
 
 
+def get_config(cfg: dict) -> dict:
+    return _call(cfg, ["config"], timeout=60)
+
+
+def set_config(cfg: dict, section: str, fields: dict) -> dict:
+    import json as _json
+
+    if not fields:
+        raise RuntimeError("no fields changed")
+    spec = {"section": str(section), "fields": fields}
+    out = _call(cfg, ["setconfig", _json.dumps(spec)], timeout=60)
+    _revive_daemon()
+    return out
+
+
 def set_name(cfg: dict, long_name: str, short_name: str) -> dict:
     import json as _json
 

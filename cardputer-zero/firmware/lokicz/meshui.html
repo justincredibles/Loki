@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LokiCZ — Mesh</title>
+<style>
+  :root {
+    --bg: #030a06; --panel: #071a0e; --panel2: #0a2413;
+    --frame: #166e3a; --emerald: #40ff8a; --gold: #e8b33c;
+    --gold-hi: #ffd257; --text: #d6ffe2; --dim: #74a884;
+    --red: #ff5252; --amber: #ffb042; --cyan: #60e4ff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: "DejaVu Sans Mono", ui-monospace, Menlo, monospace;
+    background-image: repeating-linear-gradient(
+      0deg, rgba(64,255,138,.025) 0 1px, transparent 1px 4px);
+  }
+  header {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 20px; border-bottom: 2px solid var(--gold);
+    background: linear-gradient(180deg, #0a2413, #050f08);
+  }
+  header img { width: 54px; height: 54px; }
+  header h1 { margin: 0; color: var(--gold-hi); font-size: 30px;
+              letter-spacing: 6px; }
+  header .sub { color: var(--dim); font-size: 12px; }
+  header .addr { margin-left: auto; text-align: right; color: var(--dim);
+                 font-size: 12px; }
+  header .addr b { color: var(--emerald); }
+  main { max-width: 1080px; margin: 0 auto; padding: 18px; }
+  h2 { color: var(--gold); font-size: 15px; letter-spacing: 3px;
+       border-bottom: 1px solid var(--frame); padding-bottom: 6px; }
+  .cards { display: grid; gap: 10px;
+           grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+  .card { background: var(--panel); border: 1px solid var(--frame);
+          padding: 10px 12px; position: relative; }
+  .card::before, .card::after { content: ""; position: absolute;
+    width: 10px; height: 10px; border: 2px solid var(--gold); }
+  .card::before { top: -2px; left: -2px; border-right: 0; border-bottom: 0; }
+  .card::after { bottom: -2px; right: -2px; border-left: 0; border-top: 0; }
+  .card .k { color: var(--dim); font-size: 11px; letter-spacing: 2px; }
+  .card .v { font-size: 19px; margin-top: 4px; }
+  .ok { color: var(--emerald); } .gold { color: var(--gold-hi); }
+  .warn { color: var(--amber); } .bad { color: var(--red); }
+  .dim { color: var(--dim); } .cyan { color: var(--cyan); }
+  .actions { display: grid; gap: 10px;
+             grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+  .act { background: var(--panel); border: 1px solid var(--frame);
+         padding: 12px; }
+  .act h3 { margin: 0 0 4px; color: var(--text); font-size: 14px;
+            letter-spacing: 1px; }
+  .capbar { float: right; width: 54px; height: 6px; border-radius: 3px;
+            margin-top: 3px; }
+  .capbar.cc1101 { background: #2640be; }
+  .capbar.lora { background: #db31a4; }
+  .capbar.both { background: linear-gradient(90deg, #2640be 50%,
+                   #db31a4 50%); }
+  .caplegend { color: var(--dim); font-size: 12px; margin: -6px 0 12px; }
+  .caplegend .sw { display: inline-block; width: 22px; height: 6px;
+                   border-radius: 3px; vertical-align: middle;
+                   margin: 0 4px 0 10px; }
+  .act p { margin: 0 0 10px; color: var(--dim); font-size: 12px;
+           min-height: 28px; }
+  button {
+    background: var(--panel2); color: var(--gold-hi);
+    border: 1px solid var(--gold); padding: 7px 14px; cursor: pointer;
+    font: inherit; font-size: 13px; letter-spacing: 1px;
+  }
+  button:hover { background: #123a1e; }
+  button:disabled { opacity: .45; cursor: wait; }
+  button.ghost { border-color: var(--frame); color: var(--dim); }
+  select {
+    background: #020604; color: var(--text); border: 1px solid var(--frame);
+    padding: 6px; font: inherit; font-size: 13px;
+  }
+  input[type=text] {
+    width: 62%; background: #020604; color: var(--text);
+    border: 1px solid var(--frame); padding: 6px; font: inherit;
+    font-size: 13px;
+  }
+  input[type=number] {
+    width: 70px; background: #020604; color: var(--text);
+    border: 1px solid var(--frame); padding: 6px; font: inherit;
+    font-size: 13px;
+  }
+  #job { display: none; margin: 16px 0; background: var(--panel);
+         border: 1px solid var(--gold); padding: 12px; }
+  #job .bar { height: 12px; border: 1px solid var(--frame);
+              margin-top: 8px; overflow: hidden; }
+  #job .fill { height: 100%; width: 40%; background: var(--gold);
+    animation: slide 1.2s ease-in-out infinite alternate; }
+  @keyframes slide { from { margin-left: 0; } to { margin-left: 60%; } }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 5px 8px;
+           border-bottom: 1px solid #0d2c17; }
+  th { color: var(--dim); font-weight: normal; letter-spacing: 1px; }
+  .host { background: var(--panel); border: 1px solid var(--frame);
+          margin: 10px 0; padding: 10px 12px; }
+  .host .ip { color: var(--gold-hi); font-size: 15px; }
+  .cve { display: inline-block; margin: 2px 3px 2px 0; padding: 2px 7px;
+         border: 1px solid var(--frame); background: #04120a;
+         text-decoration: none; color: var(--text); font-size: 12px; }
+  .cve:hover { border-color: var(--gold); }
+  .cve .score { font-weight: bold; margin-left: 5px; }
+  .tag { font-size: 10px; color: var(--amber); border: 1px solid var(--amber);
+         padding: 0 4px; margin-left: 5px; }
+  .audit-row { cursor: pointer; }
+  .audit-row:hover td { background: #0a2413; }
+  footer { color: var(--dim); font-size: 11px; text-align: center;
+           padding: 18px; }
+  pre { white-space: pre-wrap; word-break: break-word; font-size: 12px;
+        color: var(--dim); }
+  #flightmap { height: 340px; border: 1px solid var(--frame);
+               background: #06130a; margin-bottom: 10px; }
+  .plane-icon { background: transparent; border: none; }
+  .plane-icon svg { display: block; filter: drop-shadow(0 0 3px #000); }
+  .me-dot { width: 14px; height: 14px; border-radius: 50%;
+            background: var(--gold); border: 2px solid #fff2cf;
+            box-shadow: 0 0 10px var(--gold); }
+  .leaflet-container { font: inherit; }
+  .leaflet-popup-content-wrapper { background: #0a2413;
+    color: var(--text); border: 1px solid var(--gold); border-radius: 4px; }
+  .leaflet-popup-tip { background: #0a2413; }
+  .leaflet-popup-content { font-size: 12px; line-height: 1.5; }
+  .dark-tiles { filter: invert(0.92) hue-rotate(185deg) saturate(0.5)
+                brightness(0.92) contrast(0.95); }
+  details.cfg { border: 1px solid var(--frame); background: var(--panel);
+    padding: 8px 12px; margin: 8px 0; }
+  details.cfg summary { cursor: pointer; color: var(--gold-hi);
+    letter-spacing: 1px; }
+  table.cfg { width: 100%; border-collapse: collapse; }
+  table.cfg td { padding: 3px 6px; border-bottom: 1px solid #0d2b16;
+    vertical-align: middle; }
+  table.cfg td.fname { color: var(--dim); width: 34%; font-size: 12px; }
+  table.cfg input, table.cfg select { width: min(300px, 100%); }
+  .secttl { color: var(--gold-hi); letter-spacing: 2px;
+    margin: 22px 0 8px; font-size: 17px; }
+</style>
+</head>
+<body>
+<main>
+  <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+    <button onclick="location.href='/'">← BACK TO HOME</button>
+    <h1 style="margin:0">◈ MESH — MESHTASTIC / MESHCORE</h1>
+  </div>
+  <p class="dim">One LoRa radio, two stacks — never both at once. Everything mesh lives on this page: status, chat, channels, identity, node type, the full Meshtastic config, and the MeshCore repeater config.</p>
+
+  <div class="secttl">STATUS</div>
+  <div id="mesh-line" class="dim" style="margin-bottom:10px">…</div>
+  <div style="margin-bottom:6px">
+    <button onclick="meshMode('meshtastic')">MESHTASTIC</button>
+    <button onclick="meshMode('meshcore')">MESHCORE</button>
+    <button class="ghost" onclick="meshMode('off')">OFF</button>
+    <button class="ghost" onclick="window.open('http://' + location.hostname + ':8000', '_blank')">MESHCORE DASHBOARD</button>
+  </div>
+
+  <div id="job">
+    <div><b id="jobTitle" class="gold">WORKING</b>
+      <span id="jobMsg" class="dim"></span>
+      <span id="jobTime" class="dim" style="float:right"></span></div>
+    <div class="bar"><div class="fill"></div></div>
+    <pre id="jobResult"></pre>
+  </div>
+
+  <div class="secttl">CHAT — MESHTASTIC</div>
+  <div style="margin-bottom:10px">
+    <input type="text" id="mesh-text" maxlength="200" placeholder="mesh text — broadcasts on the primary channel" style="width:min(520px,70%)">
+    <button onclick="meshSend()">SEND</button>
+    <button onclick="runBody('mesh-listen', {})">LISTEN 30s</button>
+    <button class="ghost" onclick="runBody('mesh-nodes', {})">NODES</button>
+  </div>
+  <div id="mesh-out"></div>
+
+  <div class="secttl">CHANNELS</div>
+  <div id="mesh-channels" class="dim">…</div>
+  <div style="margin-top:10px">
+    <select id="ch-index"></select>
+    <input type="text" id="ch-name" maxlength="11" placeholder="channel name (max 11)" style="width:170px">
+    <input type="text" id="ch-psk" placeholder="PSK base64 — empty = no encryption" style="width:min(300px,50%)">
+    <button class="ghost" onclick="pskDefault()">DEFAULT KEY</button>
+    <button class="ghost" onclick="pskRandom()">RANDOM</button>
+    <button onclick="saveChannel()">SAVE CHANNEL</button>
+  </div>
+  <p class="dim" style="margin:6px 0 0;font-size:12px">Slot 0 is the primary channel — renaming it changes its frequency slot, and other nodes need the same name + key to reach you. Saving a channel reboots the node (~30 s).</p>
+
+  <div class="secttl">NODE IDENTITY</div>
+  <div id="mesh-id" class="dim" style="margin-bottom:8px">…</div>
+  <div>
+    <input type="text" id="id-long" maxlength="39" placeholder="long name — e.g. LokiCZ Base" style="width:min(300px,55%)">
+    <input type="text" id="id-short" maxlength="4" placeholder="SHORT" style="width:80px">
+    <button onclick="saveIdentity()">SAVE NAMES</button>
+  </div>
+  <p class="dim" style="margin:6px 0 0;font-size:12px">Short name is 1–4 characters (a Meshtastic rule). Saving reboots the node (~30 s).</p>
+
+  <div class="secttl">NODE TYPE</div>
+  <p class="dim" style="margin:0 0 8px">The Meshtastic device role. CLIENT hears and talks; ROUTER / REPEATER nodes repeat for others and sleep less; CLIENT_MUTE listens without repeating or announcing. MeshCore on this box is the openHop <i>repeater</i> build — its kind is chosen by the daemon, not a setting.</p>
+  <div>
+    <select id="cfg-role"></select>
+    <button onclick="saveRole()">SAVE NODE TYPE</button>
+  </div>
+
+  <div class="secttl">MESHTASTIC CONFIG — ALL OPTIONS</div>
+  <p class="dim" style="margin:0 0 8px">Every section of the node's local + module config, read live from meshtasticd. Scalar fields are editable; nested/repeated fields are shown read-only. Saving a section writes it and reboots the node (~30 s).</p>
+  <div id="mesh-config" class="dim">…</div>
+
+  <div class="secttl">MESHCORE CONFIG — OPENHOP REPEATER</div>
+  <p class="dim" style="margin:0 0 8px">The repeater's config file, editable here. Secrets are masked and never sent back. Saving keeps a backup (config.yaml.lokicz-bak) and restarts the repeater if it's running. The sx1262 block is the cap's wiring — change it only if the hardware changes.</p>
+  <div id="mc-config" class="dim">…</div>
+  <div style="margin-top:8px">
+    <button onclick="saveMcConfig()">SAVE MESHCORE CONFIG</button>
+  </div>
+
+  <div style="margin-top:26px">
+    <button onclick="location.href='/'">← BACK TO HOME</button>
+  </div>
+</main>
+<footer>◈ LokiCZ is an educational security-research tool for your own devices, your own lab, and networks and systems you own or are explicitly authorized to test. Unauthorized interception or testing of other people's systems may be illegal — the responsibility for lawful use rests with the operator.</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  return r.json();
+}
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"]/g,
+    c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+}
+let polling = null;
+async function runBody(action, body) {
+  const r = await api(`/api/run/${action}`,
+    {method: "POST", headers: {"Content-Type": "application/json"},
+     body: JSON.stringify(body)});
+  if (!r.job) { alert("could not start: " + JSON.stringify(r)); return; }
+  $("job").style.display = "block";
+  $("jobTitle").textContent = action.toUpperCase();
+  $("jobResult").textContent = "";
+  const t0 = Date.now();
+  clearInterval(polling);
+  polling = setInterval(async () => {
+    const j = await api(`/api/jobs/${r.job}`);
+    $("jobMsg").textContent = j.message || "";
+    $("jobTime").textContent =
+      Math.round((Date.now() - t0) / 1000) + "s";
+    if (j.state !== "running") {
+      clearInterval(polling);
+      $("jobTitle").textContent =
+        action.toUpperCase() + (j.state === "done" ? " — DONE" : " — FAILED");
+      $("jobResult").textContent = j.state === "done"
+        ? (jobSummary(action, j.result) ?? JSON.stringify(j.result, null, 1))
+        : (j.error || "unknown error");
+      document.querySelector("#job .fill").style.animation = "none";
+      document.querySelector("#job .fill").style.width =
+        j.state === "done" ? "100%" : "0";
+      if (j.state === "done" && j.avatar) {
+        $("jobResult").textContent +=
+          `\n+${j.avatar.xp_gained} XP` +
+          (j.avatar.level_up ? ` — LEVEL ${j.avatar.level_up}!` : "");
+      }
+      if (action === "mesh-listen" && j.state === "done") renderMeshMsgs(j.result);
+      if (action === "mesh-nodes" && j.state === "done") renderMeshNodes(j.result);
+      if (["mesh-send", "mesh-setch", "mesh-delch", "mesh-setname",
+           "mesh-setconfig", "meshcore-setconfig"].includes(action)
+          && j.state === "done") {
+        loadMesh(); loadChannels(); loadConfig(); loadMcConfig();
+      }
+    }
+  }, 1200);
+}
+function jobSummary(action, r) {
+  if (!r) return null;
+  if (action === "mesh-nodes")
+    return `${(r.nodes || []).length} nodes known — readable table under CHAT`;
+  if (action === "mesh-listen")
+    return `${(r.messages || []).length} text(s) heard in ${r.seconds || 30}s — table under CHAT`;
+  if (action === "mesh-send") return `sent to the mesh: “${r.text}”`;
+  if (action === "mesh-setch") return `channel ${r.saved_channel} saved — node rebooted to apply`;
+  if (action === "mesh-delch") return `channel ${r.disabled_channel} disabled — node rebooted to apply`;
+  if (action === "mesh-setname") return `node names saved — node rebooted to apply`;
+  if (action === "mesh-setconfig") return `${r.saved_config} saved (${(r.fields || []).join(", ")}) — node rebooted to apply`;
+  if (action === "meshcore-setconfig") return `MeshCore config saved: ${(r.applied || []).join(", ") || "nothing changed"} — ${r.note || ""}`;
+  return null;
+}
+function ago(ts) {
+  if (!ts) return "never";
+  const s = Math.max(0, Math.round(Date.now() / 1000 - ts));
+  if (s < 90) return s + "s ago";
+  if (s < 5400) return Math.round(s / 60) + "m ago";
+  if (s < 129600) return Math.round(s / 3600) + "h ago";
+  return Math.round(s / 86400) + "d ago";
+}
+async function loadMesh() {
+  try {
+    const m = await api("/api/mesh");
+    let s;
+    if (m.cap !== "lora") {
+      s = `mode ${m.mode} · CC1101 cap fitted — mesh dormant until the LoRa cap is in`;
+    } else if (m.mode === "meshtastic") {
+      const t = m.meshtastic || {};
+      s = `Meshtastic · daemon ${t.service ? "active" : "off"} · API ${t.api ? "up" : "down"} · radio ${t.radio ? "SX1262 OK" : "unproven"}`;
+      if (m.chat) {
+        window.myNum = m.chat.my_num;
+        s += ` · you are ${esc(m.chat.my_name)} · ${m.chat.nodes_known} nodes known`;
+        $("mesh-id").textContent = `current: ${m.chat.my_name} (${m.chat.my_short || "—"})`;
+        if (document.activeElement !== $("id-long")) $("id-long").value = m.chat.my_name;
+        if (document.activeElement !== $("id-short")) $("id-short").value = m.chat.my_short || "";
+      }
+      if (m.chat_error) s += ` · ${esc(m.chat_error)}`;
+    } else if (m.mode === "meshcore") {
+      s = `MeshCore (openHop repeater) · ${m.pymc_active ? "active" : m.pymc_installed ? "stopped" : "not installed"} · meshtasticd parked`;
+    } else {
+      s = "mesh off — both daemons parked";
+    }
+    $("mesh-line").textContent = s;
+  } catch (e) { /* portal busy */ }
+}
+async function meshMode(mode) {
+  const r = await api("/api/mesh/mode",
+    {method: "POST", headers: {"Content-Type": "application/json"},
+     body: JSON.stringify({mode})});
+  $("mesh-line").textContent = r.result || r.error || "";
+  loadMesh();
+}
+function meshSend() {
+  const text = $("mesh-text").value.trim();
+  if (!text) return;
+  $("mesh-text").value = "";
+  runBody("mesh-send", {text});
+}
+function renderMeshMsgs(r) {
+  const msgs = r.messages || [];
+  $("mesh-out").innerHTML = msgs.length
+    ? `<table><tr><th>FROM</th><th>TEXT</th><th>WHEN</th><th>SIGNAL</th></tr>` +
+      msgs.map(m => `<tr><td class="gold">${esc(m.from_name || "?")}</td><td class="cyan">${esc(m.text || "")}</td><td>${m.rx_time ? new Date(m.rx_time * 1000).toLocaleTimeString() : "—"}</td><td>${m.rssi != null ? m.rssi + " dBm" : "—"}</td></tr>`).join("") + `</table>`
+    : `<span class="dim">no mesh texts heard in ${r.seconds || 30}s — the mesh may just be quiet</span>`;
+}
+function renderMeshNodes(r) {
+  const nodes = (r.nodes || []).slice().sort((a, b) =>
+    (b.last_heard || 0) - (a.last_heard || 0));
+  if (!nodes.length) {
+    $("mesh-out").innerHTML = `<span class="dim">no nodes in the local database yet</span>`;
+    return;
+  }
+  const row = n => {
+    const you = window.myNum && n.num === window.myNum;
+    const loc = (n.lat != null && n.lon != null)
+      ? `<a href="https://www.openstreetmap.org/?mlat=${n.lat}&mlon=${n.lon}#map=12/${n.lat}/${n.lon}" target="_blank" style="color:var(--cyan)">${n.lat.toFixed(3)}, ${n.lon.toFixed(3)}</a>`
+      : "—";
+    return `<tr${you ? ' style="background:#123a1e"' : ""}>` +
+      `<td class="gold">${esc(n.name)}${n.short ? " (" + esc(n.short) + ")" : ""}${you ? " · YOU" : ""}</td>` +
+      `<td>${ago(n.last_heard)}</td>` +
+      `<td>${n.snr != null ? n.snr + " dB" : "—"}</td>` +
+      `<td>${n.hops != null ? n.hops : "—"}</td><td>${loc}</td></tr>`;
+  };
+  $("mesh-out").innerHTML =
+    `<table><tr><th>NODE</th><th>LAST HEARD</th><th>SNR</th><th>HOPS</th><th>POSITION</th></tr>` +
+    nodes.map(row).join("") + `</table>`;
+}
+</script>
+
+<script>
+let chData = [];
+function encLabel(psk) {
+  if (!psk) return "none — cleartext";
+  if (psk === "AQ==") return "default key (public)";
+  let n = 0;
+  try { n = atob(psk).length; } catch (e) { return "custom key"; }
+  if (n === 16) return "AES-128";
+  if (n === 32) return "AES-256";
+  return n + "-byte key";
+}
+async function loadChannels() {
+  try {
+    const r = await api("/api/mesh/channels");
+    if (r.error) { $("mesh-channels").textContent = r.error; return; }
+    chData = r.channels || [];
+    const rows = chData.map(c => {
+      const dis = c.role === "DISABLED";
+      const name = dis ? `<span class="dim">(empty slot)</span>`
+        : `<span class="gold">${esc(c.name || "(preset default)")}</span>`;
+      const acts = dis ? "—" :
+        `<button class="ghost" onclick="editChannel(${c.index})">EDIT</button>` +
+        (c.url ? ` <a href="${c.url}" target="_blank" style="color:var(--cyan)">SHARE LINK</a>` : "") +
+        (c.index !== 0 ? ` <button class="ghost" onclick="disableChannel(${c.index})">DISABLE</button>` : "");
+      return `<tr><td>${c.index}</td><td>${esc(c.role)}</td><td>${name}</td><td>${dis ? "—" : encLabel(c.psk)}</td><td>${acts}</td></tr>`;
+    }).join("");
+    $("mesh-channels").innerHTML =
+      `<div style="margin-bottom:6px">preset ${esc(r.preset || "?")} · region ${esc(r.region || "?")} · ${chData.filter(c => c.role !== "DISABLED").length} active</div>` +
+      `<table><tr><th>SLOT</th><th>ROLE</th><th>NAME</th><th>ENCRYPTION</th><th></th></tr>${rows}</table>`;
+    $("ch-index").innerHTML = chData.map(c =>
+      `<option value="${c.index}">Slot ${c.index} — ${esc(c.role)}${c.role !== "DISABLED" && c.name ? " — " + esc(c.name) : ""}</option>`).join("");
+  } catch (e) { /* portal busy */ }
+}
+function editChannel(i) {
+  const c = chData.find(x => x.index === i);
+  if (!c) return;
+  $("ch-index").value = String(i);
+  $("ch-name").value = c.name || "";
+  $("ch-psk").value = c.psk || "";
+  $("ch-name").scrollIntoView({behavior: "smooth", block: "center"});
+  $("ch-name").focus();
+}
+function disableChannel(i) {
+  if (!confirm(`Disable channel slot ${i}? The node reboots.`)) return;
+  runBody("mesh-delch", {index: i});
+}
+function pskDefault() { $("ch-psk").value = "AQ=="; }
+function pskRandom() {
+  const b = crypto.getRandomValues(new Uint8Array(32));
+  $("ch-psk").value = btoa(String.fromCharCode(...b));
+}
+function saveChannel() {
+  runBody("mesh-setch", {index: Number($("ch-index").value),
+    name: $("ch-name").value.trim(), psk: $("ch-psk").value.trim()});
+}
+function saveIdentity() {
+  const long = $("id-long").value.trim();
+  const short = $("id-short").value.trim();
+  if (!long) { alert("long name can't be empty"); return; }
+  if (short.length < 1 || short.length > 4) { alert("short name must be 1–4 characters"); return; }
+  runBody("mesh-setname", {long, short});
+}
+
+/* ---- full Meshtastic config editor ---- */
+let cfgSections = {};
+function fieldEditor(sec, f) {
+  const id = `cf-${sec}-${f.name}`;
+  const orig = esc(String(f.value ?? ""));
+  if (f.kind === "bool") {
+    return `<select id="${id}" data-orig="${f.value ? "true" : "false"}">` +
+      `<option value="true"${f.value ? " selected" : ""}>true</option>` +
+      `<option value="false"${!f.value ? " selected" : ""}>false</option></select>`;
+  }
+  if (f.kind === "enum") {
+    return `<select id="${id}" data-orig="${orig}">` +
+      f.values.map(v => `<option value="${esc(v)}"${v === f.value ? " selected" : ""}>${esc(v)}</option>`).join("") + `</select>`;
+  }
+  if (f.kind === "complex") {
+    const txt = f.value == null ? "—" : esc(JSON.stringify(f.value));
+    return `<span class="dim" style="font-size:11px">${txt.length > 90 ? txt.slice(0, 90) + "…" : txt}</span>`;
+  }
+  const type = (f.kind === "int" || f.kind === "float") ? "number" : "text";
+  const step = f.kind === "float" ? ` step="any"` : "";
+  return `<input type="${type}"${step} id="${id}" data-orig="${orig}" value="${orig}">`;
+}
+async function loadConfig() {
+  try {
+    const r = await api("/api/mesh/config");
+    if (r.error) { $("mesh-config").textContent = r.error; return; }
+    cfgSections = r.sections || {};
+    const names = Object.keys(cfgSections).sort((a, b) =>
+      (a.startsWith("mod:") ? 1 : 0) - (b.startsWith("mod:") ? 1 : 0)
+      || a.localeCompare(b));
+    $("mesh-config").innerHTML = names.map(sec => {
+      const fields = cfgSections[sec];
+      const rows = Object.values(fields).map(f =>
+        `<tr><td class="fname">${esc(f.name)}<br><span style="font-size:10px">${esc(f.kind)}</span></td><td>${fieldEditor(sec, f)}</td></tr>`).join("");
+      return `<details class="cfg"${sec === "device" ? " open" : ""}>` +
+        `<summary>${esc(sec.replace("mod:", "module · "))}</summary>` +
+        `<table class="cfg">${rows}</table>` +
+        `<div style="margin-top:6px"><button onclick="saveSection('${esc(sec)}')">SAVE ${esc(sec.toUpperCase())}</button></div></details>`;
+    }).join("");
+    const role = cfgSections.device && cfgSections.device.role;
+    if (role && role.kind === "enum") {
+      $("cfg-role").innerHTML = role.values.map(v =>
+        `<option value="${esc(v)}"${v === role.value ? " selected" : ""}>${esc(v)}</option>`).join("");
+    }
+  } catch (e) { /* portal busy */ }
+}
+function collectSection(sec) {
+  const fields = {};
+  for (const f of Object.values(cfgSections[sec] || {})) {
+    if (f.kind === "complex") continue;
+    const el = $(`cf-${sec}-${f.name}`);
+    if (el && el.value !== el.dataset.orig) fields[f.name] = el.value;
+  }
+  return fields;
+}
+function saveSection(sec) {
+  const fields = collectSection(sec);
+  if (!Object.keys(fields).length) { alert("no changes in this section"); return; }
+  runBody("mesh-setconfig", {section: sec, fields});
+}
+function saveRole() {
+  runBody("mesh-setconfig", {section: "device",
+    fields: {role: $("cfg-role").value}});
+}
+
+/* ---- MeshCore (openHop) config editor ---- */
+let mcFields = {};
+async function loadMcConfig() {
+  try {
+    const r = await api("/api/meshcore/config");
+    if (r.error) { $("mc-config").textContent = r.error; return; }
+    mcFields = r.fields || {};
+    const groups = {};
+    for (const path of Object.keys(mcFields).sort()) {
+      const top = path.includes(".") ? path.split(".")[0] : "general";
+      (groups[top] = groups[top] || []).push(path);
+    }
+    $("mc-config").innerHTML =
+      `<div style="margin-bottom:6px">repeater ${r.active ? "active" : r.installed ? "stopped" : "not installed"}</div>` +
+      Object.keys(groups).sort().map(g =>
+        `<details class="cfg"${g === "radio" || g === "repeater" ? " open" : ""}>` +
+        `<summary>${esc(g)}</summary><table class="cfg">` +
+        groups[g].map(p => {
+          const v = mcFields[p];
+          const masked = v === "__MASKED__";
+          const input = typeof v === "boolean"
+            ? `<select id="mc-${esc(p)}" data-orig="${v}"><option value="true"${v ? " selected" : ""}>true</option><option value="false"${!v ? " selected" : ""}>false</option></select>`
+            : `<input type="${typeof v === "number" ? "number" : "text"}" id="mc-${esc(p)}" data-orig="${esc(String(v))}" value="${esc(String(v))}"${masked ? " disabled" : ""}>`;
+          return `<tr><td class="fname">${esc(p)}</td><td>${input}${masked ? ' <span class="dim" style="font-size:11px">secret — masked, kept as-is</span>' : ""}</td></tr>`;
+        }).join("") + `</table></details>`).join("");
+  } catch (e) { /* portal busy */ }
+}
+function saveMcConfig() {
+  const fields = {};
+  for (const p of Object.keys(mcFields)) {
+    const el = $("mc-" + p);
+    if (el && !el.disabled && el.value !== el.dataset.orig)
+      fields[p] = el.value;
+  }
+  if (!Object.keys(fields).length) { alert("no MeshCore changes"); return; }
+  runBody("meshcore-setconfig", {fields});
+}
+
+loadMesh(); loadChannels(); loadConfig(); loadMcConfig();
+</script>
+</body>
+</html>

@@ -82,6 +82,98 @@ def apply_mode(mode: str, cap: str) -> str:
     return "mesh off — both daemons parked"
 
 
+CONFIG_PATH = "/etc/openhop_repeater/config.yaml"
+_SECRET_HINTS = ("secret", "password", "jwt", "private_key")
+MASK = "__MASKED__"
+
+
+def _flatten(obj, prefix: str = "") -> dict:
+    """Nested config dict -> {dotted.path: scalar} leaves."""
+    out = {}
+    for key, val in (obj or {}).items():
+        path = f"{prefix}.{key}" if prefix else str(key)
+        if isinstance(val, dict):
+            out.update(_flatten(val, path))
+        else:
+            out[path] = val
+    return out
+
+
+def read_config() -> dict:
+    """The openHop config as flat dotted fields. Secret-looking
+    values are masked — the portal never needs to see them, and
+    a save that leaves the mask in place keeps the real value."""
+    import yaml
+
+    try:
+        raw = open(CONFIG_PATH).read()
+    except OSError as exc:
+        return {"error": f"cannot read {CONFIG_PATH}: {exc}"}
+    data = yaml.safe_load(raw) or {}
+    fields = {}
+    for path, val in _flatten(data).items():
+        leaf = path.rsplit(".", 1)[-1].lower()
+        if any(h in leaf for h in _SECRET_HINTS):
+            fields[path] = MASK
+        else:
+            fields[path] = val
+    return {"fields": fields, "active": pymc_active(),
+            "installed": pymc_installed()}
+
+
+def write_config(changes: dict) -> dict:
+    """Apply dotted-path changes to the openHop YAML: validate,
+    back up to config.yaml.lokicz-bak, install, and restart the
+    repeater when it's running. Masked values are skipped (the
+    real secret stays)."""
+    import subprocess as sp
+
+    import yaml
+
+    data = yaml.safe_load(open(CONFIG_PATH).read()) or {}
+    applied = []
+    for path, raw in (changes or {}).items():
+        if raw == MASK:
+            continue
+        node = data
+        parts = path.split(".")
+        for part in parts[:-1]:
+            node = node.setdefault(part, {})
+            if not isinstance(node, dict):
+                raise RuntimeError(f"{path}: blocked by a non-map value")
+        leaf = parts[-1]
+        current = node.get(leaf)
+        if isinstance(current, bool):
+            node[leaf] = raw is True or raw == "true"
+        elif isinstance(current, int):
+            node[leaf] = int(raw)
+        elif isinstance(current, float):
+            node[leaf] = float(raw)
+        else:
+            node[leaf] = str(raw)
+        applied.append(path)
+    if not applied:
+        return {"applied": [], "note": "nothing changed"}
+    text = yaml.safe_dump(data, sort_keys=True)
+    yaml.safe_load(text)  # never install YAML we can't re-parse
+    tmp = "/tmp/openhop-config-new.yaml"
+    open(tmp, "w").write(text)
+    sp.run(f"sudo -n cp {CONFIG_PATH} {CONFIG_PATH}.lokicz-bak",
+           shell=True, capture_output=True, timeout=15)
+    r = sp.run(f"sudo -n cp {tmp} {CONFIG_PATH}", shell=True,
+               capture_output=True, text=True, timeout=15)
+    if r.returncode != 0:
+        raise RuntimeError("install failed: " + r.stderr.strip()[:160])
+    note = "saved (backup at config.yaml.lokicz-bak)"
+    if pymc_active():
+        sp.run(f"sudo -n systemctl restart {PYMC_SERVICE}",
+               shell=True, capture_output=True, timeout=30)
+        note += "; repeater restarted"
+    else:
+        note += "; applies when the repeater next starts"
+    return {"applied": sorted(applied), "note": note}
+
+
 def status() -> dict:
     from . import config, meshtastic
 

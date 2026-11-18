@@ -286,7 +286,8 @@ def award_for(action: str, result: dict) -> dict:
         return award(10 + (25 if found else 0),
                      {"nfc_tags": 1 if found else 0})
     if action in ("mesh-send", "mesh-listen", "mesh-nodes",
-                  "mesh-setch", "mesh-delch", "mesh-setname"):
+                  "mesh-setch", "mesh-delch", "mesh-setname",
+                  "mesh-setconfig", "meshcore-setconfig"):
         return award(5)
     if action == "wpasec-sync":
         return award(2 + 25 * result.get("cracked_new", 0),

@@ -152,6 +152,96 @@ def op_delch(iface, spec: dict) -> dict:
     return {"disabled_channel": idx, "note": "node reboots to apply"}
 
 
+def _field_dump(msg) -> dict:
+    """One config section as editor metadata: every scalar field
+    with its kind and (for enums) its value names. Nested or
+    repeated fields come back 'complex' — shown, not edited."""
+    from google.protobuf.descriptor import FieldDescriptor as FD
+
+    out = {}
+    for f in msg.DESCRIPTOR.fields:
+        entry = {"name": f.name}
+        if f.label == FD.LABEL_REPEATED or \
+                f.type == FD.TYPE_MESSAGE:
+            entry["kind"] = "complex"
+            try:
+                from google.protobuf.json_format import MessageToDict
+
+                entry["value"] = MessageToDict(
+                    msg, preserving_proto_field_name=True).get(f.name)
+            except Exception:
+                entry["value"] = None
+        elif f.type == FD.TYPE_BOOL:
+            entry.update(kind="bool", value=bool(getattr(msg, f.name)))
+        elif f.type == FD.TYPE_ENUM:
+            entry.update(kind="enum",
+                         value=f.enum_type.values_by_number[
+                             getattr(msg, f.name)].name,
+                         values=[v.name for v in
+                                 f.enum_type.values])
+        elif f.type == FD.TYPE_STRING:
+            entry.update(kind="string", value=getattr(msg, f.name))
+        elif f.type == FD.TYPE_BYTES:
+            import base64 as b64
+
+            entry.update(kind="bytes",
+                         value=b64.b64encode(
+                             getattr(msg, f.name)).decode())
+        elif f.type in (FD.TYPE_FLOAT, FD.TYPE_DOUBLE):
+            entry.update(kind="float", value=getattr(msg, f.name))
+        else:
+            entry.update(kind="int", value=int(getattr(msg, f.name)))
+        out[f.name] = entry
+    return out
+
+
+def op_config(iface) -> dict:
+    _wait_config(iface)
+    node = iface.localNode
+    sections = {}
+    for f in node.localConfig.DESCRIPTOR.fields:
+        sections[f.name] = _field_dump(getattr(node.localConfig,
+                                               f.name))
+    for f in node.moduleConfig.DESCRIPTOR.fields:
+        sections["mod:" + f.name] = _field_dump(
+            getattr(node.moduleConfig, f.name))
+    return {"sections": sections}
+
+
+def op_setconfig(iface, spec: dict) -> dict:
+    import base64 as b64
+
+    from google.protobuf.descriptor import FieldDescriptor as FD
+
+    _wait_config(iface)
+    node = iface.localNode
+    section = str(spec["section"])
+    if section.startswith("mod:"):
+        cfg = getattr(node.moduleConfig, section[4:])
+        write_name = section[4:]
+    else:
+        cfg = getattr(node.localConfig, section)
+        write_name = section
+    for name, raw in (spec.get("fields") or {}).items():
+        fd = cfg.DESCRIPTOR.fields_by_name[name]
+        if fd.type == FD.TYPE_BOOL:
+            setattr(cfg, name, raw is True or raw == "true")
+        elif fd.type == FD.TYPE_ENUM:
+            setattr(cfg, name, fd.enum_type.values_by_name[raw].number)
+        elif fd.type in (FD.TYPE_FLOAT, FD.TYPE_DOUBLE):
+            setattr(cfg, name, float(raw))
+        elif fd.type == FD.TYPE_STRING:
+            setattr(cfg, name, str(raw))
+        elif fd.type == FD.TYPE_BYTES:
+            setattr(cfg, name, b64.b64decode(raw) if raw else b"")
+        else:
+            setattr(cfg, name, int(raw))
+    node.writeConfig(write_name)
+    return {"saved_config": section,
+            "fields": sorted((spec.get("fields") or {}).keys()),
+            "note": "node reboots to apply"}
+
+
 def op_setname(iface, spec: dict) -> dict:
     _wait_config(iface)
     node = iface.localNode
@@ -240,6 +330,10 @@ def main() -> int:
                 result = op_delch(iface, json.loads(sys.argv[2]))
             elif op == "setname":
                 result = op_setname(iface, json.loads(sys.argv[2]))
+            elif op == "config":
+                result = op_config(iface)
+            elif op == "setconfig":
+                result = op_setconfig(iface, json.loads(sys.argv[2]))
             else:
                 result = op_info(iface)
         finally:

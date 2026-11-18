@@ -24,6 +24,7 @@ from pathlib import Path
 
 PORT = 8420
 UI_FILE = Path(__file__).with_name("webui.html")
+MESH_UI_FILE = Path(__file__).with_name("meshui.html")
 ICON_FILE = Path(__file__).resolve().parents[2] / "app" \
     / "packaging" / "icon.png"
 
@@ -331,6 +332,25 @@ def _act_mesh_delch(cfg, body):
     return fn
 
 
+def _act_mesh_setconfig(cfg, body):
+    def fn(job):
+        from . import meshchat
+
+        job["message"] = "writing config (node reboots)..."
+        return meshchat.set_config(cfg, str(body.get("section", "")),
+                                   body.get("fields") or {})
+    return fn
+
+
+def _act_meshcore_setconfig(cfg, body):
+    def fn(job):
+        from . import meshcore
+
+        job["message"] = "writing MeshCore config..."
+        return meshcore.write_config(body.get("fields") or {})
+    return fn
+
+
 def _act_mesh_setname(cfg, body):
     def fn(job):
         from . import meshchat
@@ -440,6 +460,20 @@ class Handler(BaseHTTPRequestHandler):
                 except Exception as exc:
                     out["chat_error"] = str(exc)
             self._json(200, out)
+        elif path == "/mesh":
+            self._send(200, MESH_UI_FILE.read_bytes(),
+                       "text/html; charset=utf-8")
+        elif path == "/api/mesh/config":
+            from . import meshchat
+
+            try:
+                self._json(200, meshchat.get_config(config.load()))
+            except Exception as exc:
+                self._json(200, {"error": str(exc)})
+        elif path == "/api/meshcore/config":
+            from . import meshcore
+
+            self._json(200, meshcore.read_config())
         elif path == "/api/mesh/channels":
             from . import meshchat
 
@@ -560,6 +594,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(202, {"job": job["id"]})
             if action == "mesh-setname":
                 job = _start(action, _act_mesh_setname(cfg, body))
+                return self._json(202, {"job": job["id"]})
+            if action == "mesh-setconfig":
+                job = _start(action, _act_mesh_setconfig(cfg, body))
+                return self._json(202, {"job": job["id"]})
+            if action == "meshcore-setconfig":
+                job = _start(action,
+                             _act_meshcore_setconfig(cfg, body))
                 return self._json(202, {"job": job["id"]})
             if action not in ACTIONS:
                 return self._json(404, {"error": "unknown action"})
