@@ -262,6 +262,11 @@ def award_for(action: str, result: dict) -> dict:
         alerts = len(result.get("alerts", []))
         return award(10 + 20 * alerts,
                      {"eviltwin_checks": 1, "eviltwin_alerts": alerts})
+    if action == "deauth":
+        hot = result.get("level") in ("elevated", "flood")
+        return award(15 + (40 if hot else 0),
+                     {"deauth_watches": 1,
+                      "deauth_floods": 1 if hot else 0})
     if action == "flights":
         if not result.get("ok"):
             return {"xp_gained": 0, "level_up": None,

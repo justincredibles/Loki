@@ -407,6 +407,15 @@ def _act_eviltwin(cfg, _seconds):
     return fn
 
 
+def _act_deauth(cfg, _seconds):
+    def fn(job):
+        from . import deauth
+
+        job["message"] = "listening for deauth floods (60s)..."
+        return deauth.watch(60, cfg["capture_iface"])
+    return fn
+
+
 def _act_ook(cfg, seconds):
     def fn(job):
         import time as _time
@@ -548,6 +557,7 @@ ACTIONS = {"capture": _act_capture, "wardrive": _act_wardrive,
            "gps": _act_gps,
            "ook": _act_ook, "replay": _act_replay,
            "nfc": _act_nfc, "eviltwin": _act_eviltwin,
+           "deauth": _act_deauth,
            "mesh-listen": _act_mesh_listen,
            "mesh-nodes": _act_mesh_nodes}
 

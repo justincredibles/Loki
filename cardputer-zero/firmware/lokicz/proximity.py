@@ -73,7 +73,30 @@ def scan(seconds: int = 25) -> dict:
         })
     out.sort(key=lambda d: d["rssi"], reverse=True)
     return {"devices": out, "count": len(out), "method": method,
-            "seconds": seconds}
+            "seconds": seconds,
+            "spam_suspects": spam_suspects(out)}
+
+
+# BLE spam (the Flipper trick) floods phones with pairing
+# popups by advertising the same product name from many
+# rapidly-rotating addresses. One name from >=4 distinct
+# addresses in a single scan is that signature — a real
+# household rarely fields four of the same gadget at once.
+_BAIT = ("airpod", "beats", "apple tv", "appletv",
+         "galaxy buds", "galaxy watch", "pixel buds",
+         "swift pair", "fast pair")
+
+
+def spam_suspects(devices: list[dict]) -> list[dict]:
+    by_name: dict[str, set] = {}
+    for dev in devices:
+        low = (dev.get("name") or "").lower()
+        if any(b in low for b in _BAIT):
+            by_name.setdefault(dev["name"], set()).add(
+                dev["address"])
+    return [{"name": name, "addresses": len(addrs)}
+            for name, addrs in by_name.items()
+            if len(addrs) >= 4]
 
 
 if __name__ == "__main__":
