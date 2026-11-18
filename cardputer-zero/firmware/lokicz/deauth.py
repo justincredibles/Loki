@@ -79,7 +79,13 @@ def watch(seconds: int = 60, iface: str = "wlan1") -> dict:
                 parts = line.strip().split("|")
                 if len(parts) < 2 or not parts[1]:
                     continue
-                kinds[parts[0]] += 1
+                # tshark prints the subtype as '0x000c';
+                # normalize to the decimal string the
+                # result lookup below expects.
+                try:
+                    kinds[str(int(parts[0], 0))] += 1
+                except ValueError:
+                    continue
                 counts[parts[1].upper()] += 1
 
         reader = threading.Thread(target=_reader, daemon=True)

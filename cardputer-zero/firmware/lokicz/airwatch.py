@@ -36,8 +36,11 @@ KARMA_SSIDS = 8          # one BSSID advertising this many
 
 
 def _ssid_text(raw: str) -> str:
-    """tshark fields mode emits SSIDs as hex bytes."""
-    if raw and len(raw) % 2 == 0:
+    """tshark fields mode emits SSIDs as hex bytes, and
+    the literal '<MISSING>' when a frame has no SSID."""
+    if not raw or raw == "<MISSING>":
+        return ""
+    if len(raw) % 2 == 0:
         try:
             dec = bytes.fromhex(raw).decode("utf-8")
             if dec.isprintable():
@@ -45,6 +48,15 @@ def _ssid_text(raw: str) -> str:
         except (ValueError, UnicodeDecodeError):
             pass
     return raw
+
+
+def _subtype_num(raw) -> int:
+    """tshark prints this field as '0x0008'; accept that
+    and the plain '8' the unit tests use."""
+    try:
+        return int(str(raw), 0)
+    except (TypeError, ValueError):
+        return -1
 
 
 def analyze(frames: list[tuple]) -> dict:
@@ -56,20 +68,21 @@ def analyze(frames: list[tuple]) -> dict:
     bssid_ssids: dict[str, set] = defaultdict(set)
     kinds: Counter = Counter()
     deauth_counts: Counter = Counter()
-    for subtype, sa, ssid in frames:
+    for subtype_raw, sa, ssid in frames:
+        subtype = _subtype_num(subtype_raw)
         sa = (sa or "").upper()
         if not sa:
             continue
-        if subtype == "8":
+        if subtype == 8:
             beacons += 1
             beacon_aps.add(sa)
             if ssid:
                 ssid_bssids[ssid].add(sa)
                 bssid_ssids[sa].add(ssid)
-        elif subtype == "5":
+        elif subtype == 5:
             if ssid:
                 bssid_ssids[sa].add(ssid)
-        elif subtype in ("12", "10"):
+        elif subtype in (12, 10):
             kinds[subtype] += 1
             deauth_counts[sa] += 1
 
@@ -89,8 +102,8 @@ def analyze(frames: list[tuple]) -> dict:
         deauth_counts.most_common(1)[0][1] if deauth_counts
         else 0)
     return {"beacons": beacons, "beacon_aps": len(beacon_aps),
-            "deauth": kinds.get("12", 0),
-            "disassoc": kinds.get("10", 0),
+            "deauth": kinds.get(12, 0),
+            "disassoc": kinds.get(10, 0),
             "deauth_level": level, "deauth_verdict": verdict,
             "beacon_flood": flood, "karma_suspects": karma}
 
