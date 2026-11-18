@@ -18,6 +18,7 @@ DEFAULTS = {
     "capture_seconds": 90,      # default capture run length
     "wardrive_seconds": 300,    # default wardriving session length
     "sniff_seconds": 120,       # default surveillance-sniff length
+    "mesh_mode": "meshtastic",  # LoRa cap owner: meshtastic | meshcore | off
 }
 
 
