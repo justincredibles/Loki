@@ -1,0 +1,141 @@
+{
+  "documented_not_implemented": [
+    {
+      "detail": "flock-you / OUI-SPY firmware-dump research: Flock cameras emit wildcard probe requests ~8x/sec from QCA9377/Liteon OUIs with a specific IE skeleton (Qualcomm LOWI scanning). This is the strongest current Flock tell, but it needs monitor-mode frame capture — the dongle path, not managed scans. Queued behind the capture work.",
+      "label": "Flock wildcard probe-request fingerprint",
+      "source": "OUI-SPY Vol. 2 (hacking.fubsypoly.com), Swiz Security probe-request write-up"
+    },
+    {
+      "detail": "DJI favours the Wi-Fi form of Remote ID; decoding it needs monitor-mode beacon capture on the dongle. Same future path as above.",
+      "label": "OpenDroneID over Wi-Fi (vendor IE FA:0B:BC / NAN)",
+      "source": "FlipDeFlock v0.88 notes; ASTM F3411"
+    }
+  ],
+  "note": "Passive-detection signatures from public research only. Every entry names its source and an honest confidence tier: a match is a lead graded by tier, never a verdict. Name/SSID patterns are the weakest tier on purpose — a famous field demo of a commercial detector flagged a Bowflex treadmill as a camera (ALPR Maps, 'Signal Reality Check').",
+  "signatures": [
+    {
+      "confidence": "high",
+      "id": "odid-ble",
+      "kind": "ble_service_data",
+      "label": "Drone Remote ID broadcast (OpenDroneID)",
+      "source": "ASTM F3411 Remote ID: BLE service data UUID 0xFFFA, app code 0x0D. Corroborated by GhostESP aerial detection docs, FlipDeFlock v0.88, AryaOS dronecot-ble, Sparrow-WiFi DroneID.",
+      "value": "fffa"
+    },
+    {
+      "confidence": "medium",
+      "id": "dji-ble",
+      "kind": "ble_service",
+      "label": "DJI drone link (BLE)",
+      "source": "GhostESP aerial detection docs: DJI advertisements carry service UUID 0xFFE0.",
+      "value": "ffe0"
+    },
+    {
+      "confidence": "medium",
+      "id": "drone-oui-dji",
+      "kind": "oui",
+      "label": "Possible drone — DJI OUI",
+      "source": "FlipDeFlock v0.88 drone_ouis table (SZ DJI Technology + DJI Baiwang), resolved against the IEEE MA-L registry. Fallback heuristic only — an OUI says who made the radio, not that an aircraft is present. FlipDeFlock deliberately excludes DJI F8:40:68 (Ronin gimbals) and 20:1F:55 (Osmo handhelds); so do we.",
+      "value": [
+        "60:60:1F",
+        "34:D2:62",
+        "48:1C:B9",
+        "E4:7A:2C",
+        "58:B8:58",
+        "04:A8:5A",
+        "8C:58:23",
+        "0C:9A:E6",
+        "88:29:85",
+        "4C:43:F6",
+        "9C:5A:8A",
+        "EC:72:F7",
+        "34:91:F0"
+      ]
+    },
+    {
+      "confidence": "medium",
+      "id": "drone-oui-skydio",
+      "kind": "oui",
+      "label": "Possible drone — Skydio OUI",
+      "source": "FlipDeFlock v0.88 drone_ouis (Skydio — the only one of the five US police-drone vendors holding an IEEE block).",
+      "value": [
+        "38:1D:14"
+      ]
+    },
+    {
+      "confidence": "medium",
+      "id": "drone-oui-parrot",
+      "kind": "oui",
+      "label": "Possible drone — Parrot OUI",
+      "source": "FlipDeFlock v0.88 drone_ouis (Parrot SA).",
+      "value": [
+        "00:12:1C",
+        "00:26:7E",
+        "90:03:B7",
+        "90:3A:E6",
+        "A0:14:3D"
+      ]
+    },
+    {
+      "confidence": "medium",
+      "id": "drone-oui-public-safety",
+      "kind": "oui",
+      "label": "Possible drone — public-safety airframe OUI",
+      "source": "FlipDeFlock v0.88 drone_ouis: Teal B0:30:C8, AeroVironment 00:1A:F9, Shield AI 14:DD:48, Freefly EC:71:5E, Zipline 74:B8:0F.",
+      "value": [
+        "B0:30:C8",
+        "00:1A:F9",
+        "14:DD:48",
+        "EC:71:5E",
+        "74:B8:0F"
+      ]
+    },
+    {
+      "confidence": "low",
+      "id": "drone-ssid",
+      "kind": "wifi_ssid_prefix",
+      "label": "Possible drone — drone SSID pattern",
+      "source": "DEF CON 34 PHV Remote ID talk signature table (SSID prefix scored 0.30, the weakest drone clue) + GhostESP drone-SSID matching. Anyone can name a network anything.",
+      "value": [
+        "DJI-",
+        "MAVIC",
+        "MINI2-"
+      ]
+    },
+    {
+      "confidence": "low",
+      "id": "flock-ssid",
+      "kind": "wifi_ssid_prefix",
+      "label": "Watchlist — Flock-style SSID pattern",
+      "source": "Flock-You-Android RF surveillance detection doc (SSID patterns ^flock ^falcon ^sparrow ^condor). Treat as a curiosity flag only: ALPR Maps' reality check found no durable Flock radio signature — the cameras' working radio is LTE, and installer interfaces are inconsistent and often disabled after commissioning.",
+      "value": [
+        "FLOCK",
+        "FALCON",
+        "SPARROW",
+        "CONDOR"
+      ]
+    },
+    {
+      "confidence": "low",
+      "id": "flock-ble-name",
+      "kind": "ble_name_prefix",
+      "label": "Watchlist — Flock-style BLE name",
+      "source": "Flock-You-Android doc (BLE name ^flock) + flock-you project history. The historical Flock BLE beacon has stopped appearing in at least one region (Swiz Security write-up) — absence proves nothing, presence is a weak lead.",
+      "value": [
+        "FLOCK"
+      ]
+    },
+    {
+      "confidence": "low",
+      "id": "flock-oui",
+      "kind": "oui",
+      "label": "Watchlist — Flock-associated modem OUI",
+      "source": "Flock-You-Android doc lists these Quectel LTE-modem OUIs for Flock units. Quectel modules ship in countless unrelated devices — weakest entry in this file, kept for completeness.",
+      "value": [
+        "50:29:4D",
+        "86:25:19"
+      ]
+    }
+  ],
+  "updated": "2026-11-17",
+  "version": 1
+}

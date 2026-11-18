@@ -40,7 +40,8 @@ def _status_lines(cfg: dict) -> list[str]:
 def _screen(lines: list[str], cfg: dict) -> str:
     """Draw a screen with the menu footer; return the key pressed."""
     ui.show_text(lines + ["", "1 Status  2 Capture  3 Sub-GHz",
-                          "4 Wardrive  5 Stop lokicz"])
+                          "4 Wardrive  5 Sniff  6 Mesh",
+                          "7 Stop lokicz"])
     return ui.read_key()
 
 
@@ -83,7 +84,29 @@ def run() -> int:
                      f"networks: {stats['networks']}",
                      "GPS: " + ("had fix" if stats["gps_fix"]
                                 else "no fix (needs LoRa cap)")]
-        elif key in ("5", "q", "esc"):
+        elif key == "5":
+            from . import sniffer
+
+            ui.show_text(["Sniffing (passive)...",
+                          f"{cfg['sniff_seconds']}s — Wi-Fi + BLE"])
+            stats = sniffer.run_sniff(cfg["sniff_seconds"])
+            lines = ["Sniff done",
+                     f"hits: {len(stats['hits'])} "
+                     f"(Wi-Fi {stats['wifi_obs']} / BLE {stats['ble_obs']})"]
+            for hit in stats["hits"][:3]:
+                lines.append(f"[{hit['confidence']}] {hit['label']}")
+        elif key == "6":
+            from . import meshtastic
+
+            s = meshtastic.status()
+            lines = ["Meshtastic",
+                     "daemon: " + ("installed" if s["installed"]
+                                   else "NOT installed"),
+                     "service: " + ("active" if s["service"]
+                                    else "stopped (cap profile)"),
+                     "radio: " + ("SX1262 proven" if s["radio"]
+                                  else "not proven")]
+        elif key in ("7", "q", "esc"):
             ui.show_text(["lokicz stopped.", "",
                           "sudo systemctl start lokicz", "to bring it back"])
             return 0
