@@ -200,8 +200,43 @@ def status_payload() -> dict:
                  "radio_proven": m["meshtastic"]["radio"],
                  "pymc_active": m["pymc_active"]},
         "last_audit": audit.latest_summary(),
+        "battery": _battery_status(),
         "web": {"ip": lan_ip(), "port": PORT},
     }
+
+
+def _battery_status() -> dict:
+    """The BQ27220 fuel gauge, for the portal status cards."""
+    batt = Path("/sys/class/power_supply/bq27220-0")
+    try:
+        return {
+            "pct": int((batt / "capacity").read_text().strip()),
+            "status": (batt / "status").read_text().strip(),
+            "voltage_mv":
+                int((batt / "voltage_now").read_text().strip()) // 1000,
+        }
+    except (OSError, ValueError):
+        return {"pct": None, "status": "unknown", "voltage_mv": None}
+
+
+def _screenshot_png() -> bytes:
+    """The LCD's current frame as a PNG, decoded from the
+    framebuffer — what the Loki UI last drew. (When the stock
+    desktop owns the panel it isn't in this buffer.)"""
+    import io
+
+    import numpy as np
+    from PIL import Image
+
+    raw = Path("/dev/fb_lcd").read_bytes()[:320 * 170 * 2]
+    a = np.frombuffer(raw, dtype="<u2").reshape(170, 320)
+    r = ((a >> 11) & 31).astype("uint8") * 255 // 31
+    g = ((a >> 5) & 63).astype("uint8") * 255 // 63
+    b = (a & 31).astype("uint8") * 255 // 31
+    img = Image.fromarray(np.dstack([r, g, b]).astype("uint8"))
+    buf = io.BytesIO()
+    img.save(buf, "PNG")
+    return buf.getvalue()
 
 
 # --- Jobs ---------------------------------------------------------------
@@ -752,6 +787,11 @@ class Handler(BaseHTTPRequestHandler):
                 avatar.load()["gear"],
                 mood=mood if mood == "excited" else "idle"),
                 "image/png")
+        elif path == "/api/screenshot.png":
+            try:
+                self._send(200, _screenshot_png(), "image/png")
+            except Exception as exc:
+                self._json(500, {"error": f"screenshot failed: {exc}"})
         else:
             self._json(404, {"error": "not found"})
 

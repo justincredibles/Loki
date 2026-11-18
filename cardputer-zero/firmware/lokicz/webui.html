@@ -175,6 +175,7 @@
     <div class="sub">CARDPUTER ZERO · POCKET SECURITY MULTI-TOOL</div>
   </div>
   <div class="addr" id="addr">connecting…</div>
+  <button onclick="window.open('/api/screenshot.png', '_blank')" title="grab the Cardputer's screen as a PNG">SCREENSHOT</button>
 </header>
 <main>
   <h2>STATUS</h2>
@@ -361,6 +362,12 @@ async function refreshStatus() {
     : `<span class="dim">none yet</span>`;
   $("statusCards").innerHTML = [
     ["CAP", `<span class="gold">${esc(s.cap.toUpperCase())}</span>`],
+    ["BATTERY", s.battery && s.battery.pct != null
+      ? `<span class="${s.battery.pct > 30 ? "" : "gold"}">${s.battery.pct}%</span>` +
+        (s.battery.status === "Charging" || s.battery.status === "Full"
+          ? ` <span class="gold">CHG</span>` : "") +
+        (s.battery.voltage_mv ? ` <span class="dim">${(s.battery.voltage_mv / 1000).toFixed(2)}V</span>` : "")
+      : `<span class="dim">—</span>`],
     ["CAPTURE", cap], ["HASHES CAUGHT", `<span class="gold">${s.hashes}</span>`],
     ["WPA-SEC", wp], ["MESH", mesh], ["LAST AUDIT", la],
   ].map(([k, v]) => `<div class="card"><div class="k">${k}</div><div class="v">${v}</div></div>`).join("");
