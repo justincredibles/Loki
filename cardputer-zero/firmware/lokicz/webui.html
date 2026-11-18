@@ -220,27 +220,6 @@
       <button onclick="run('trackers')">WATCH 90s</button>
     </div>
     <div class="act">
-      <h3><span class="capbar lora"></span>◈ MESH — MESHTASTIC / MESHCORE</h3>
-      <p>One LoRa radio, two stacks — never both at once. Meshtastic
-         brings status, nodes and text chat; MeshCore runs as an
-         openHop repeater (it relays other nodes — messaging lives
-         in companion apps, stats in its dashboard).</p>
-      <div id="mesh-line" class="dim" style="font-size:12px;margin-bottom:8px">…</div>
-      <button onclick="meshMode('meshtastic')">MESHTASTIC</button>
-      <button onclick="meshMode('meshcore')">MESHCORE</button>
-      <button class="ghost" onclick="meshMode('off')">OFF</button>
-      <div style="margin-top:8px">
-        <input type="text" id="mesh-text" maxlength="200" placeholder="mesh text — broadcasts on the primary channel">
-        <button onclick="meshSend()">SEND</button>
-      </div>
-      <div style="margin-top:8px">
-        <button onclick="run('mesh-listen')">LISTEN 30s</button>
-        <button class="ghost" onclick="run('mesh-nodes')">NODES</button>
-        <button class="ghost" onclick="window.open('http://' + location.hostname + ':8000', '_blank')">MESHCORE DASHBOARD</button>
-      </div>
-      <div id="mesh-out" style="margin-top:8px"></div>
-    </div>
-    <div class="act">
       <h3><span class="capbar cc1101"></span>◈ RADIO LAB — SUB-GHZ + NFC</h3>
       <p>CC1101 cap workbench: sweep the bands, capture a fob at
          433.92 MHz and decode it (EV1527-family remotes, Manchester
@@ -258,6 +237,23 @@
       <button class="ghost" onclick="toggle('wpasec')">TOGGLE ON/OFF</button>
     </div>
   </div>
+
+  <h2><span class="capbar lora" style="float:none;display:inline-block;margin:0 8px 2px 0"></span>MESHTASTIC / MESHCORE</h2>
+  <p class="dim" style="margin:-6px 0 10px">One LoRa radio, two stacks — never both at once. Meshtastic brings status, nodes and text chat; MeshCore runs as an openHop repeater (it relays other nodes — messaging lives in companion apps, stats in its dashboard).</p>
+  <div id="mesh-line" class="dim" style="margin-bottom:10px">…</div>
+  <div style="margin-bottom:10px">
+    <button onclick="meshMode('meshtastic')">MESHTASTIC</button>
+    <button onclick="meshMode('meshcore')">MESHCORE</button>
+    <button class="ghost" onclick="meshMode('off')">OFF</button>
+    <button class="ghost" onclick="window.open('http://' + location.hostname + ':8000', '_blank')">MESHCORE DASHBOARD</button>
+  </div>
+  <div style="margin-bottom:10px">
+    <input type="text" id="mesh-text" maxlength="200" placeholder="mesh text — broadcasts on the primary channel" style="width:min(520px,70%)">
+    <button onclick="meshSend()">SEND</button>
+    <button onclick="run('mesh-listen')">LISTEN 30s</button>
+    <button class="ghost" onclick="run('mesh-nodes')">NODES</button>
+  </div>
+  <div id="mesh-out"></div>
 
   <h2>AIR TRAFFIC — FLIGHT RADAR</h2>
   <div id="flightmap"></div>
