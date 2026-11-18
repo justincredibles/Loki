@@ -362,7 +362,7 @@ async function runBody(action, body) {
       $("jobTitle").textContent =
         action.toUpperCase() + (j.state === "done" ? " — DONE" : " — FAILED");
       $("jobResult").textContent = j.state === "done"
-        ? JSON.stringify(j.result, null, 1)
+        ? (jobSummary(action, j.result) ?? JSON.stringify(j.result, null, 1))
         : (j.error || "unknown error");
       document.querySelector("#job .fill").style.animation = "none";
       document.querySelector("#job .fill").style.width =
@@ -397,7 +397,7 @@ async function loadMesh() {
     } else if (m.mode === "meshtastic") {
       const t = m.meshtastic || {};
       s = `Meshtastic · daemon ${t.service ? "active" : "off"} · API ${t.api ? "up" : "down"} · radio ${t.radio ? "SX1262 OK" : "unproven"}`;
-      if (m.chat) s += ` · you are ${esc(m.chat.my_name)} · ${m.chat.nodes_known} nodes known`;
+      if (m.chat) { window.myNum = m.chat.my_num; s += ` · you are ${esc(m.chat.my_name)} · ${m.chat.nodes_known} nodes known`; }
       if (m.chat_error) s += ` · ${esc(m.chat_error)}`;
     } else if (m.mode === "meshcore") {
       s = `MeshCore (openHop repeater) · ${m.pymc_active ? "active" : m.pymc_installed ? "stopped" : "not installed"} · meshtasticd parked`;
@@ -420,19 +420,53 @@ function meshSend() {
   $("mesh-text").value = "";
   runBody("mesh-send", {text});
 }
+function jobSummary(action, r) {
+  if (!r) return null;
+  if (action === "mesh-nodes")
+    return `${(r.nodes || []).length} nodes known — readable table in the MESH panel below`;
+  if (action === "mesh-listen")
+    return `${(r.messages || []).length} text(s) heard in ${r.seconds || 30}s — table in the MESH panel below`;
+  if (action === "mesh-send") return `sent to the mesh: “${r.text}”`;
+  return null;
+}
+function ago(ts) {
+  if (!ts) return "never";
+  const s = Math.max(0, Math.round(Date.now() / 1000 - ts));
+  if (s < 90) return s + "s ago";
+  if (s < 5400) return Math.round(s / 60) + "m ago";
+  if (s < 129600) return Math.round(s / 3600) + "h ago";
+  return Math.round(s / 86400) + "d ago";
+}
 function renderMeshMsgs(r) {
   const msgs = r.messages || [];
   $("mesh-out").innerHTML = msgs.length
-    ? `<table><tr><th>FROM</th><th>TEXT</th></tr>` +
-      msgs.map(m => `<tr><td class="gold">${esc(m.from_name || "?")}</td><td class="cyan">${esc(m.text || "")}</td></tr>`).join("") + `</table>`
+    ? `<table><tr><th>FROM</th><th>TEXT</th><th>WHEN</th><th>SIGNAL</th></tr>` +
+      msgs.map(m => `<tr><td class="gold">${esc(m.from_name || "?")}</td><td class="cyan">${esc(m.text || "")}</td><td>${m.rx_time ? new Date(m.rx_time * 1000).toLocaleTimeString() : "—"}</td><td>${m.rssi != null ? m.rssi + " dBm" : "—"}</td></tr>`).join("") + `</table>`
     : `<span class="dim">no mesh texts heard in ${r.seconds || 30}s — the mesh may just be quiet</span>`;
+  $("mesh-out").scrollIntoView({behavior: "smooth", block: "nearest"});
 }
 function renderMeshNodes(r) {
-  const nodes = r.nodes || [];
-  $("mesh-out").innerHTML = nodes.length
-    ? `<table><tr><th>NODE</th><th>LAST HEARD</th><th>SNR</th><th>HOPS</th></tr>` +
-      nodes.map(n => `<tr><td class="gold">${esc(n.name)}${n.short ? " (" + esc(n.short) + ")" : ""}</td><td>${n.last_heard ? new Date(n.last_heard * 1000).toLocaleTimeString() : "—"}</td><td>${n.snr != null ? n.snr : "—"}</td><td>${n.hops != null ? n.hops : "—"}</td></tr>`).join("") + `</table>`
-    : `<span class="dim">no nodes in the local database yet</span>`;
+  const nodes = (r.nodes || []).slice().sort((a, b) =>
+    (b.last_heard || 0) - (a.last_heard || 0));
+  if (!nodes.length) {
+    $("mesh-out").innerHTML = `<span class="dim">no nodes in the local database yet</span>`;
+    return;
+  }
+  const row = n => {
+    const you = window.myNum && n.num === window.myNum;
+    const loc = (n.lat != null && n.lon != null)
+      ? `<a href="https://www.openstreetmap.org/?mlat=${n.lat}&mlon=${n.lon}#map=12/${n.lat}/${n.lon}" target="_blank" style="color:var(--cyan)">${n.lat.toFixed(3)}, ${n.lon.toFixed(3)}</a>`
+      : "—";
+    return `<tr${you ? ' style="background:#123a1e"' : ""}>` +
+      `<td class="gold">${esc(n.name)}${n.short ? " (" + esc(n.short) + ")" : ""}${you ? " · YOU" : ""}</td>` +
+      `<td>${ago(n.last_heard)}</td>` +
+      `<td>${n.snr != null ? n.snr + " dB" : "—"}</td>` +
+      `<td>${n.hops != null ? n.hops : "—"}</td><td>${loc}</td></tr>`;
+  };
+  $("mesh-out").innerHTML =
+    `<table><tr><th>NODE</th><th>LAST HEARD</th><th>SNR</th><th>HOPS</th><th>POSITION</th></tr>` +
+    nodes.map(row).join("") + `</table>`;
+  $("mesh-out").scrollIntoView({behavior: "smooth", block: "nearest"});
 }
 
 function renderProx(r) {
