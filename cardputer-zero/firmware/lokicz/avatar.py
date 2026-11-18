@@ -267,6 +267,11 @@ def award_for(action: str, result: dict) -> dict:
         return award(15 + (40 if hot else 0),
                      {"deauth_watches": 1,
                       "deauth_floods": 1 if hot else 0})
+    if action == "airwatch":
+        suspects = len(result.get("beacon_flood", [])) \
+            + len(result.get("karma_suspects", []))
+        return award(15 + 30 * suspects,
+                     {"airwatches": 1, "airwatch_suspects": suspects})
     if action == "flights":
         if not result.get("ok"):
             return {"xp_gained": 0, "level_up": None,

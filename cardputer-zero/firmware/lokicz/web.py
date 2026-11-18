@@ -416,6 +416,15 @@ def _act_deauth(cfg, _seconds):
     return fn
 
 
+def _act_airwatch(cfg, _seconds):
+    def fn(job):
+        from . import airwatch
+
+        job["message"] = "grading the airwaves (60s)..."
+        return airwatch.watch(60, cfg["capture_iface"])
+    return fn
+
+
 def _act_ook(cfg, seconds):
     def fn(job):
         import time as _time
@@ -557,7 +566,7 @@ ACTIONS = {"capture": _act_capture, "wardrive": _act_wardrive,
            "gps": _act_gps,
            "ook": _act_ook, "replay": _act_replay,
            "nfc": _act_nfc, "eviltwin": _act_eviltwin,
-           "deauth": _act_deauth,
+           "deauth": _act_deauth, "airwatch": _act_airwatch,
            "mesh-listen": _act_mesh_listen,
            "mesh-nodes": _act_mesh_nodes}
 

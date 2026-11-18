@@ -271,6 +271,11 @@
       <button onclick="run('deauth')">LISTEN 60s</button>
     </div>
     <div class="act">
+      <h3><span class="dongletag">USB DONGLE</span>◈ AIRWAVE WATCH</h3>
+      <p>One listen that grades the whole neighborhood: beacon floods (Bruce-style spam), karma lures (one box impersonating many networks), and deauth traffic.</p>
+      <button onclick="run('airwatch')">LISTEN 60s</button>
+    </div>
+    <div class="act">
       <h3><span class="capbar both"></span>◈ TRACKER WATCH</h3>
       <p>Listen 90 s for AirTag / SmartTag / Tile beacons and grade them against the on-device history — persistence is the tell.</p>
       <button onclick="run('trackers')">WATCH 90s</button>
@@ -452,7 +457,8 @@ function pollJob(id, action, t0) {
    box no longer dies with the page. */
 const MY_ACTIONS = ["capture", "audit", "wardrive", "sniff",
   "proximity", "gps", "watchdog", "probes", "trackers", "sweep",
-  "ook", "replay", "nfc", "wpasec-sync", "eviltwin", "deauth"];
+  "ook", "replay", "nfc", "wpasec-sync", "eviltwin", "deauth",
+  "airwatch"];
 async function resumeJob() {
   try {
     const r = await api("/api/jobs");
@@ -541,6 +547,22 @@ function jobSummary(action, r) {
     if ((r.top_sources || []).length)
       s += " · loudest: " + r.top_sources.map(t =>
         `${t.mac.slice(-8)} ×${t.count}`).join(", ");
+    return s;
+  }
+  if (action === "airwatch") {
+    let s = `${r.beacon_aps} access point(s) beaconing · ` +
+      `deauth: ${r.deauth_level}`;
+    if ((r.beacon_flood || []).length)
+      s += " · ⚠ BEACON FLOOD suspect: " + r.beacon_flood.map(f =>
+        `"${f.ssid}" from ${f.bssids} BSSIDs`).join(", ");
+    if ((r.karma_suspects || []).length)
+      s += " · ⚠ KARMA suspect: " + r.karma_suspects.map(k =>
+        `${k.bssid.slice(-8)} impersonating ${k.ssids} networks ` +
+        `(${k.sample.slice(0, 3).join(", ")}…)`).join(", ");
+    if (!(r.beacon_flood || []).length &&
+        !(r.karma_suspects || []).length &&
+        r.deauth_level === "quiet")
+      s += " — all quiet, no funny business";
     return s;
   }
   if (action === "eviltwin") {
