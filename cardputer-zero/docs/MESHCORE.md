@@ -59,14 +59,33 @@ SX1262Radio(
     use_dio2_rf=True,           # DIO2 as RF switch
     frequency=915_000_000,      # US plan (exact MeshCore channel
                                 # params from pyMC's US preset)
-    # reset_pin: the cap has NO reset line — whether -1 is accepted
-    # is the one open question for cap day; worst case a tiny patch
-    # to skip the reset pulse (power-on reset covers us).
+    reset_pin=-1,               # the cap has NO reset line —
+                                # ANSWERED 2026-11-17: -1 is
+                                # accepted, POR covers us, no patch
+    txen_pin=-1, rxen_pin=-1,   # no TXEN/RXEN on this cap either
 )
 ```
 
 plus `cap-lora-init.sh` (already written for meshtasticd) driving
 the PI4IOE expander's P0 — the other half of the RF switch.
+
+Two venv dependencies the base pymc-core install does NOT pull,
+both required (found the hard way on cap day, 2026-11-17):
+
+- `python-periphery` — pyMC's GPIO manager refuses to start
+  without it (or gpiod): `GPIOImportError` at radio construction.
+- `spidev` — LoRaRF's SX126x module imports it at module level;
+  without it the SPI handle is silently `None` and `begin()`
+  dies at `setSpi` with `'NoneType' object has no attribute
+  'open'`.
+
+**Radio proof (2026-11-17, LoRa cap fitted, antenna on):** with
+meshtasticd stopped and `cap-lora-init.sh` run, the probe above
+returned `begin() → True`, status `initialized: True,
+hardware_ready: True` at 915 MHz / 22 dBm / SF7 / BW125 / CR5,
+and a live **noise floor of −99 dBm** — the receiver genuinely
+hears. meshtasticd was restarted afterwards; the one-radio rule
+held throughout.
 
 ## lokicz design
 
@@ -76,12 +95,15 @@ the PI4IOE expander's P0 — the other half of the RF switch.
   daemon first. Meshtastic keeps its existing supervisor.
 - Radio bring-up is deliberately **not** attempted until the LoRa
   cap is fitted (with its antenna — an unloaded PA can be damaged
-  by TX). Until then: research ✓, supervisor ✓, pymc_core import
-  smoke-tested on the device ✓, radio ✗ (needs the cap).
+  by TX). Status 2026-11-17: research ✓, supervisor ✓, pymc_core
+  import ✓, **radio ✓ proven on the fitted cap** (see above).
+  Still outstanding: standing up the `pymc-repeater` service
+  itself and verifying against a known MeshCore node (or the
+  companion app).
 
 ## Verdict
 
-**Route exists — pyMC.** MeshCore mode is a cap-swap-day task:
-fit cap + antenna, add the cap platform entry to pymc_core's
-SX1262 wrapper, set `mesh_mode: meshcore`, apply, and verify
-against a known MeshCore node (or the companion app).
+**Route exists — pyMC, and the radio layer is proven.** What
+remains is service-level: install the pyMC repeater daemon,
+set `mesh_mode: meshcore`, apply, and verify against a known
+MeshCore node (or the companion app).

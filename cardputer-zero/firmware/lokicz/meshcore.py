@@ -10,9 +10,15 @@ This module is the supervisor half, mirroring meshtastic.py:
   SX1262: "meshtastic", "meshcore", or "off". ONE radio, ONE
   owner — apply_mode() stops the other daemon first, always.
 - status() reports what's actually true: pyMC repeater service
-  state, meshtasticd state, and the configured mode. Radio-level
-  proof for MeshCore lands when the LoRa cap is fitted; until
-  then this stays an honest software picture.
+  state, meshtasticd state, and the configured mode.
+
+Radio-level proof LANDED 2026-11-17 (LoRa cap fitted): pyMC's
+SX1262Radio initialized the cap's radio at 915 MHz with
+reset_pin=-1 accepted (no reset line on this cap) and read a
+live −99 dBm noise floor. The venv needs two extra packages
+beyond pymc-core: python-periphery (GPIO) and spidev (LoRaRF's
+SPI). The repeater *service* is still not stood up — that's the
+remaining step, and apply_mode() says so honestly.
 """
 
 import subprocess
@@ -51,8 +57,9 @@ def apply_mode(mode: str, cap: str) -> str:
         meshtastic.apply_profile("none")  # stops + disables meshtasticd
         if not pymc_installed():
             return ("mode set to meshcore + meshtasticd parked, but the "
-                    "pyMC repeater is not installed yet — its install "
-                    "lands with the LoRa cap (docs/MESHCORE.md)")
+                    "pyMC repeater service is not installed yet (the "
+                    "pyMC radio layer itself is proven on this cap — "
+                    "docs/MESHCORE.md)")
         _run(f"sudo -n systemctl enable --now {PYMC_SERVICE}")
         return "MeshCore (pyMC repeater) enabled; meshtasticd parked"
     if mode == "meshtastic":
