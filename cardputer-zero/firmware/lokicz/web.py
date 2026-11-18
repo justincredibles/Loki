@@ -212,6 +212,14 @@ def _new_job(action: str) -> dict:
            "message": "starting...", "started": time.time(),
            "result": None, "error": None}
     _jobs[job["id"]] = job
+    # Prune finished history so the dict (and the /api/jobs list)
+    # stays small; never drop a running job.
+    if len(_jobs) > 20:
+        for jid in sorted(_jobs):
+            if len(_jobs) <= 20:
+                break
+            if _jobs[jid]["state"] != "running":
+                del _jobs[jid]
     return job
 
 
@@ -219,6 +227,7 @@ def _run_job(job: dict, fn) -> None:
     if not _op_lock.acquire(blocking=False):
         job["state"] = "error"
         job["error"] = "another operation is already running"
+        job["ended"] = time.time()
         return
     try:
         job["result"] = fn(job)
@@ -235,6 +244,7 @@ def _run_job(job: dict, fn) -> None:
         job["state"] = "error"
         job["error"] = f"{type(exc).__name__}: {exc}"
     finally:
+        job["ended"] = time.time()
         _op_lock.release()
 
 
@@ -646,6 +656,14 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, {"error": str(exc)})
         elif path == "/api/status":
             self._json(200, status_payload())
+        elif path == "/api/jobs":
+            # Recent jobs, newest first — a freshly loaded page
+            # uses this to reattach to whatever is running (or
+            # just finished) instead of losing the status box.
+            recent = sorted(_jobs.values(),
+                            key=lambda j: j["started"],
+                            reverse=True)[:5]
+            self._json(200, {"jobs": recent})
         elif path.startswith("/api/jobs/"):
             try:
                 job = _jobs.get(int(path.rsplit("/", 1)[1]))

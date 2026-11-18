@@ -373,43 +373,85 @@ async function runBody(action, body) {
     {method: "POST", headers: {"Content-Type": "application/json"},
      body: JSON.stringify(body)});
   if (!r.job) { alert("could not start: " + JSON.stringify(r)); return; }
+  pollJob(r.job, action, Date.now());
+}
+function showJobBox(action) {
   $("job").style.display = "block";
   $("jobTitle").textContent = action.toUpperCase();
   $("jobResult").textContent = "";
-  const t0 = Date.now();
+  const fill = document.querySelector("#job .fill");
+  fill.style.animation = "";
+  fill.style.width = "";
+}
+function finishJob(action, j) {
+  $("jobTitle").textContent =
+    action.toUpperCase() + (j.state === "done" ? " — DONE" : " — FAILED");
+  $("jobResult").textContent = j.state === "done"
+    ? (jobSummary(action, j.result) ?? JSON.stringify(j.result, null, 1))
+    : (j.error || "unknown error");
+  document.querySelector("#job .fill").style.animation = "none";
+  document.querySelector("#job .fill").style.width =
+    j.state === "done" ? "100%" : "0";
+  if (action === "proximity" && j.state === "done") renderProx(j.result);
+  if (action === "probes" && j.state === "done") renderProbes(j.result);
+  if (j.state === "done" && j.avatar) {
+    $("jobResult").textContent +=
+      `\n+${j.avatar.xp_gained} XP` +
+      (j.avatar.level_up ? ` — LEVEL ${j.avatar.level_up}!` : "") +
+      (j.avatar.achievements && j.avatar.achievements.length
+        ? ` — ACHIEVEMENT: ${j.avatar.achievements.join(", ")}` : "");
+    const avImg = document.getElementById("av-img");
+    avImg.src = "/api/avatar.png?mood=excited&t=" + Date.now();
+    setTimeout(() => {
+      avImg.src = "/api/avatar.png?t=" + Date.now();
+    }, 3500);
+  }
+  refreshStatus(); loadAudits(); loadCaptures(); loadTrackers(); loadAvatar(); loadFiles();
+}
+function pollJob(id, action, t0) {
+  showJobBox(action);
   clearInterval(polling);
-  polling = setInterval(async () => {
-    const j = await api(`/api/jobs/${r.job}`);
+  const tick = async () => {
+    let j;
+    try { j = await api(`/api/jobs/${id}`); } catch (e) { return; }
+    if (!j || !j.state) { clearInterval(polling); return; }
     $("jobMsg").textContent = j.message || "";
     $("jobTime").textContent =
       Math.round((Date.now() - t0) / 1000) + "s";
     if (j.state !== "running") {
       clearInterval(polling);
-      $("jobTitle").textContent =
-        action.toUpperCase() + (j.state === "done" ? " — DONE" : " — FAILED");
-      $("jobResult").textContent = j.state === "done"
-        ? (jobSummary(action, j.result) ?? JSON.stringify(j.result, null, 1))
-        : (j.error || "unknown error");
-      document.querySelector("#job .fill").style.animation = "none";
-      document.querySelector("#job .fill").style.width =
-        j.state === "done" ? "100%" : "0";
-      if (action === "proximity" && j.state === "done") renderProx(j.result);
-      if (action === "probes" && j.state === "done") renderProbes(j.result);
-      if (j.state === "done" && j.avatar) {
-        $("jobResult").textContent +=
-          `\n+${j.avatar.xp_gained} XP` +
-          (j.avatar.level_up ? ` — LEVEL ${j.avatar.level_up}!` : "") +
-          (j.avatar.achievements && j.avatar.achievements.length
-            ? ` — ACHIEVEMENT: ${j.avatar.achievements.join(", ")}` : "");
-        const avImg = document.getElementById("av-img");
-        avImg.src = "/api/avatar.png?mood=excited&t=" + Date.now();
-        setTimeout(() => {
-          avImg.src = "/api/avatar.png?t=" + Date.now();
-        }, 3500);
-      }
-      refreshStatus(); loadAudits(); loadCaptures(); loadTrackers(); loadAvatar(); loadFiles();
+      finishJob(action, j);
     }
-  }, 1200);
+  };
+  tick();
+  polling = setInterval(tick, 1200);
+}
+/* After a page reload, reattach to whatever job is running —
+   and if one finished in the last 10 minutes, show its result
+   instead of a blank page. Jobs live server-side; the status
+   box no longer dies with the page. */
+const MY_ACTIONS = ["capture", "audit", "wardrive", "sniff",
+  "proximity", "gps", "watchdog", "probes", "trackers", "sweep",
+  "ook", "replay", "nfc", "wpasec-sync"];
+async function resumeJob() {
+  try {
+    const r = await api("/api/jobs");
+    const jobs = r.jobs || [];
+    const running = jobs.find(j => j.state === "running");
+    if (running) {
+      pollJob(running.id, running.action, running.started * 1000);
+      return;
+    }
+    const last = jobs[0];
+    if (last && MY_ACTIONS.includes(last.action) && last.ended
+        && Date.now() / 1000 - last.ended < 600) {
+      showJobBox(last.action);
+      $("jobMsg").textContent = last.message || "";
+      $("jobTime").textContent =
+        Math.round(last.ended - last.started) + "s";
+      finishJob(last.action, last);
+    }
+  } catch (e) { /* portal busy */ }
 }
 async function loadMesh() {
   try {
@@ -738,7 +780,7 @@ async function doUpdate() {
   setTimeout(() => clearInterval(iv), 120000);
 }
 
-refreshStatus(); loadAudits(); loadCaptures(); loadFlights(); loadTrackers(); loadWatchdog(); loadTracks(); loadAvatar(); loadFiles(); loadUpdate(); loadMesh();
+refreshStatus(); loadAudits(); loadCaptures(); loadFlights(); loadTrackers(); loadWatchdog(); loadTracks(); loadAvatar(); loadFiles(); loadUpdate(); loadMesh(); resumeJob();
 setInterval(refreshStatus, 10000);
 setInterval(loadFlights, 60000);
 </script>
