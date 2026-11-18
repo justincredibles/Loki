@@ -12,13 +12,14 @@ Plain-English tour:
   the SmartRC-CC1101 library (the same lineage as the CardputerZero
   org's SubG-Chat reference app).
 
-This module is receive-only for now: frequency setting, an RSSI
-sweep (the radio's "ears" — channel power across a band), an RSSI
-activity listen (spikes = somebody transmitting), and a FIFO packet
-listen that collects packets carrying our sync word. Raw
-promiscuous OOK capture needs the chip's async-serial mode sampled
-on GDO0 — a later step. Transmission lands later still, behind the
-arm-token gate like every other attack-class feature in Loki.
+This module is receive-only: frequency setting, an RSSI sweep
+(the radio's "ears" — channel power across a band), an RSSI
+activity listen (spikes = somebody transmitting), a FIFO packet
+listen that collects packets carrying our sync word, and raw OOK
+capture — the chip in async-serial mode, its demodulated bit
+stream sampled off the GDO0 pin and saved as a Flipper .sub file.
+Transmission lands later, behind the arm-token gate like every
+other attack-class feature in Loki.
 """
 
 import subprocess
@@ -27,6 +28,7 @@ import time
 # --- Power -----------------------------------------------------------------
 EXT_5V_NODE = "/sys/class/leds/ext_5v_out/brightness"
 POWER_EN_GPIO = 26
+GDO0_GPIO = 14  # the CC1101's data/flag pin on this cap
 
 # --- SPI / strobes -----------------------------------------------------------
 SPI_BUS, SPI_CS = 0, 1  # /dev/spidev0.1 — SPI0 CS1, shared with the LCD
@@ -226,6 +228,84 @@ class CC1101:
         return bytes(data)
 
 
+    def capture_ook(self, freq_mhz: float, seconds: float,
+                    out_path: str) -> dict:
+        """Raw OOK capture: async-serial demodulated bits off GDO0.
+
+        The chip is reconfigured for ASK/OOK async serial mode
+        (MDMCFG2 mod-format 111, PKTCTRL0 async+infinite length,
+        GDO0 = serial data out). A tight polling loop timestamps
+        every edge on GPIO14; the run-length result is written as a
+        Flipper Sub-GHz RAW (.sub) file — the lingua franca for
+        sharing raw remote-control captures.
+        """
+        from gpiozero import DigitalInputDevice
+
+        self.set_frequency(freq_mhz)
+        self.write_reg(MDMCFG2, 0x73)   # OOK + 30/32 sync + carrier sense
+        self.write_reg(PKTCTRL0, 0x32)  # async serial, infinite length
+        self.write_reg(IOCFG0, 0x0D)    # GDO0 = async serial data
+        self.strobe(SFRX)
+        self.strobe(SRX)
+        time.sleep(0.02)
+
+        pin = DigitalInputDevice(GDO0_GPIO, pull_up=False)
+        try:
+            edges: list[tuple[int, int]] = []
+            level = pin.value
+            start = time.perf_counter_ns()
+            deadline = start + int(seconds * 1e9)
+            while True:
+                now = time.perf_counter_ns()
+                if now >= deadline:
+                    break
+                v = pin.value
+                if v != level:
+                    edges.append((now, v))
+                    level = v
+        finally:
+            pin.close()
+            self.strobe(SIDLE)
+
+        # Edges -> run durations in µs (signed: + = signal, - = gap,
+        # the Flipper RAW convention), merging sub-60µs glitches.
+        runs: list[int] = []
+        prev_t, prev_level = start, edges[0][1] ^ 1 if edges else 0
+        timeline = [(start, prev_level)] + edges + [(deadline, level)]
+        for (t0, lv), (t1, _n) in zip(timeline, timeline[1:]):
+            dur = int((t1 - t0) / 1000)
+            if dur <= 0:
+                continue
+            signed = dur if lv else -dur
+            if runs and (runs[-1] > 0) == (signed > 0):
+                runs[-1] += signed
+            elif runs and abs(signed) < 60:
+                runs[-1] += signed  # swallow a glitch into the last run
+            else:
+                runs.append(signed)
+
+        from pathlib import Path
+
+        path = Path(out_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        lines = ["Filetype: Flipper SubGhz RAW File", "Version: 1",
+                 f"Frequency: {int(freq_mhz * 1_000_000)}",
+                 "Preset: FuriHalSubGhzPresetOok650Async",
+                 "Protocol: RAW"]
+        for i in range(0, len(runs), 50):
+            lines.append("RAW_Data: " + " ".join(
+                str(r) for r in runs[i:i + 50]))
+        path.write_text("\n".join(lines) + "\n")
+
+        bursts = sum(1 for a, b in zip(runs, runs[1:])
+                     if a < -10_000 and b > 0)
+        pulses = [r for r in runs if r > 0]
+        return {"file": str(path), "transitions": len(edges),
+                "runs": len(runs), "bursts": bursts,
+                "shortest_pulse_us": min(pulses) if pulses else 0,
+                "longest_pulse_us": max(pulses) if pulses else 0}
+
+
 def listen_test() -> None:
     """First-ears test: sweep both sub-GHz bands, then dwell-listen."""
     with CC1101() as radio:
@@ -244,4 +324,22 @@ def listen_test() -> None:
 
 
 if __name__ == "__main__":
-    listen_test()
+    import sys
+    from pathlib import Path
+
+    if len(sys.argv) > 1 and sys.argv[1] == "ook":
+        freq = float(sys.argv[2]) if len(sys.argv) > 2 else 433.92
+        secs = float(sys.argv[3]) if len(sys.argv) > 3 else 6.0
+        stamp = time.strftime("%Y%m%d-%H%M%S")
+        out = (Path.home() / "lokicz-subghz" /
+               f"ook-{freq:.2f}MHz-{stamp}.sub")
+        with CC1101() as radio:
+            stats = radio.capture_ook(freq, secs, str(out))
+        print(f"OOK capture {freq} MHz, {secs:.0f}s: "
+              f"{stats['transitions']} transitions, "
+              f"{stats['runs']} runs, ~{stats['bursts']} bursts, "
+              f"pulses {stats['shortest_pulse_us']}-"
+              f"{stats['longest_pulse_us']} us")
+        print(f"saved: {stats['file']}")
+    else:
+        listen_test()
