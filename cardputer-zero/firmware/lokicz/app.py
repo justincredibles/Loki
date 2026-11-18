@@ -39,8 +39,8 @@ def _status_lines(cfg: dict) -> list[str]:
 
 def _screen(lines: list[str], cfg: dict) -> str:
     """Draw a screen with the menu footer; return the key pressed."""
-    ui.show_text(lines + ["", "1 Status  2 Capture",
-                          "3 Sub-GHz sweep  4 Stop lokicz"])
+    ui.show_text(lines + ["", "1 Status  2 Capture  3 Sub-GHz",
+                          "4 Wardrive  5 Stop lokicz"])
     return ui.read_key()
 
 
@@ -73,7 +73,17 @@ def run() -> int:
                     out.append(f"{start:.0f}-{stop:.0f} MHz floor "
                                f"{floor:.0f} peak {peak_r:.0f}@{peak_f:.0f}")
             lines = ["Sub-GHz sweep done"] + out
-        elif key in ("4", "q", "esc"):
+        elif key == "4":
+            from . import wardrive
+
+            ui.show_text(["Wardriving...",
+                          f"{cfg['wardrive_seconds']}s — scanning"])
+            stats = wardrive.run_wardrive(cfg["wardrive_seconds"])
+            lines = ["Wardrive done",
+                     f"networks: {stats['networks']}",
+                     "GPS: " + ("had fix" if stats["gps_fix"]
+                                else "no fix (needs LoRa cap)")]
+        elif key in ("5", "q", "esc"):
             ui.show_text(["lokicz stopped.", "",
                           "sudo systemctl start lokicz", "to bring it back"])
             return 0

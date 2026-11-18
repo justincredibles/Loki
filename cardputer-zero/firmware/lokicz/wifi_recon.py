@@ -48,6 +48,64 @@ def list_access_points(interface: str = BUILTIN_INTERFACE) -> list[str]:
     return []
 
 
+def _channel(freq_mhz: int) -> int:
+    if 2412 <= freq_mhz <= 2472:
+        return (freq_mhz - 2407) // 5
+    if freq_mhz == 2484:
+        return 14
+    if 5000 < freq_mhz < 5900:
+        return (freq_mhz - 5000) // 5
+    return 0
+
+
+def scan_aps(interface: str = BUILTIN_INTERFACE) -> list[dict]:
+    """Structured AP records from a managed-mode scan.
+
+    Each record: {bssid, ssid, freq_mhz, channel, signal_dbm, auth}
+    where auth is a WiGLE-style string like "[WPA2-PSK][ESS]" or
+    "[ESS]" for an open network. Parsing is best-effort — `iw` output
+    is a text format, not an API — but every field here is one the
+    wardriving logger and the UI genuinely need.
+    """
+    aps: list[dict] = []
+    current: dict | None = None
+    in_rsn = in_wpa = False
+    for line in list_access_points(interface):
+        stripped = line.strip()
+        if line.startswith("BSS "):
+            if current:
+                aps.append(current)
+            current = {"bssid": stripped.split()[1].split("(")[0],
+                       "ssid": "", "freq_mhz": 0, "channel": 0,
+                       "signal_dbm": 0.0, "auth": "[ESS]"}
+            in_rsn = in_wpa = False
+            continue
+        if current is None:
+            continue
+        if stripped.startswith("freq:"):
+            current["freq_mhz"] = int(float(stripped.split()[1]))
+            current["channel"] = _channel(current["freq_mhz"])
+        elif stripped.startswith("signal:"):
+            current["signal_dbm"] = float(stripped.split()[1])
+        elif stripped.startswith("SSID:"):
+            current["ssid"] = stripped[5:].strip()
+        elif stripped.startswith("RSN:"):
+            in_rsn, in_wpa = True, False
+        elif stripped.startswith("WPA:"):
+            in_wpa, in_rsn = True, False
+        elif "Authentication suites:" in stripped:
+            suites = stripped.split(":", 1)[1]
+            if "SAE" in suites:
+                current["auth"] = "[WPA3-SAE][ESS]"
+            elif "PSK" in suites:
+                current["auth"] = "[WPA2-PSK][ESS]" if in_rsn else "[WPA-PSK][ESS]"
+            elif "802.1X" in suites:
+                current["auth"] = "[WPA2-EAP][ESS]" if in_rsn else "[WPA-EAP][ESS]"
+    if current:
+        aps.append(current)
+    return aps
+
+
 def capture_available(capture_interface: str | None) -> bool:
     """True only if a capture-capable interface has been configured
     (i.e. a USB dongle). The built-in radio never qualifies."""
@@ -55,12 +113,14 @@ def capture_available(capture_interface: str | None) -> bool:
 
 
 def start_handshake_capture(interface: str) -> None:
-    """TODO: drive hcxdumptool/bettercap on the configured USB dongle
-    interface. Refuse the built-in radio explicitly so nobody mistakes
-    a silent no-op for a working capture."""
+    """Handshake capture lives in lokicz.capture (hcxdumptool on the
+    dongle). This guard stays so nobody mistakes the built-in radio
+    for a capture device."""
     if not capture_available(interface):
         raise RuntimeError(
             "Handshake capture needs a monitor-mode USB Wi-Fi adapter; "
             "the built-in CYW43439 cannot do it (no nexmon patch exists)."
         )
-    raise NotImplementedError("capture driver not ported yet")
+    from .capture import run_capture
+
+    run_capture(iface=interface)

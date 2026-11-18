@@ -16,6 +16,7 @@ DEFAULTS = {
     "cap": "cc1101",            # fitted cap profile: cc1101 | lora | none
     "capture_iface": "wlan1",   # USB dongle used for monitor capture
     "capture_seconds": 90,      # default capture run length
+    "wardrive_seconds": 300,    # default wardriving session length
 }
 
 
