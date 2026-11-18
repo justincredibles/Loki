@@ -4,12 +4,17 @@ Plain-English tour:
 - The built-in CYW43439 radio can only *watch* (managed mode). All
   capturing happens on the USB dongle (an RTL8822BU, interface
   wlan1), which can run in monitor mode.
-- We create a throwaway monitor interface (`lokimon`) on the
-  dongle's PHY, hand it to hcxdumptool for a timed run, then delete
-  it — the dongle's normal interface is never touched.
-- hcxdumptool writes a pcapng; hcxpcapngtool then counts what was
-  caught: PMKIDs and EAPOL handshakes (each becomes one line in a
-  hashcat .hc22000 file — the count IS the score).
+- hcxdumptool insists on owning its interface outright: on this
+  driver a separate monitor vif starves ("failed to arm interface",
+  0 packets), while handing it wlan1 itself captured ~1,900 packets
+  in 15 s. So: NetworkManager releases the dongle, hcxdumptool
+  takes it (it sets monitor mode, channel plan and a virtual MAC
+  itself), and afterwards we put the interface back to managed
+  mode and hand it back to NetworkManager.
+- hcxdumptool writes a pcapng; hcxpcapngtool then scores it. The
+  score that matters is the .hc22000 line count — one line per
+  crackable PMKID/handshake. Raw EAPOL/PMKID counts are reported
+  too, including the useless ones, because honesty beats confetti.
 
 Safety posture (Loki design rule: attack-class actions are gated):
 the default profile runs with --disable_deauthentication, so the
@@ -26,7 +31,6 @@ import subprocess
 import time
 from pathlib import Path
 
-MON_NAME = "lokimon"
 CAPTURE_DIR = Path.home() / "lokicz-captures"
 
 
@@ -35,32 +39,18 @@ def _run(cmd: str, timeout: int = 30) -> subprocess.CompletedProcess:
                           text=True, timeout=timeout)
 
 
-def _sudo(cmd: str, timeout: int = 30) -> subprocess.CompletedProcess:
-    return _run(f"sudo -n {cmd}", timeout=timeout)
+def _release(iface: str) -> None:
+    """Take the dongle away from NetworkManager for the run."""
+    _run(f"nmcli device set {iface} managed no")
+    time.sleep(1)
 
 
-def phy_of(iface: str) -> str:
-    """'wlan1' -> 'phy2' (the radio the interface belongs to)."""
-    out = _run(f"iw dev {iface} info").stdout
-    m = re.search(r"wiphy\s+(\d+)", out)
-    if not m:
-        raise RuntimeError(f"cannot find PHY for {iface} — is it plugged in?")
-    return f"phy{m.group(1)}"
-
-
-def ensure_monitor(iface: str) -> str:
-    """Create (or recycle) the monitor interface on iface's radio."""
-    _sudo(f"iw dev {MON_NAME} del")  # stale one from a crashed run
-    phy = phy_of(iface)
-    r = _sudo(f"iw phy {phy} interface add {MON_NAME} type monitor")
-    if r.returncode != 0:
-        raise RuntimeError(f"monitor interface failed: {r.stderr.strip()}")
-    _sudo(f"ip link set {MON_NAME} up")
-    return MON_NAME
-
-
-def drop_monitor() -> None:
-    _sudo(f"iw dev {MON_NAME} del")
+def _restore(iface: str) -> None:
+    """Put the interface back exactly as a normal Wi-Fi device."""
+    _run(f"sudo -n ip link set {iface} down")
+    _run(f"sudo -n iw dev {iface} set type managed")
+    _run(f"sudo -n ip link set {iface} up")
+    _run(f"nmcli device set {iface} managed yes")
 
 
 def run_capture(seconds: int = 90, iface: str = "wlan1") -> dict:
@@ -68,35 +58,37 @@ def run_capture(seconds: int = 90, iface: str = "wlan1") -> dict:
     CAPTURE_DIR.mkdir(parents=True, exist_ok=True)
     stamp = time.strftime("%Y%m%d-%H%M%S")
     pcapng = CAPTURE_DIR / f"capture-{stamp}.pcapng"
-    mon = ensure_monitor(iface)
+    _release(iface)
     try:
         # SIGINT lets hcxdumptool close the pcapng cleanly.
         proc = subprocess.Popen(
-            ["sudo", "-n", "hcxdumptool", "-i", mon, "-w", str(pcapng),
+            ["sudo", "-n", "hcxdumptool", "-i", iface, "-w", str(pcapng),
              "--disable_deauthentication"],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
         )
         try:
-            proc.wait(timeout=seconds)
+            out, _ = proc.communicate(timeout=seconds)
         except subprocess.TimeoutExpired:
             proc.send_signal(2)  # SIGINT
-            proc.wait(timeout=15)
+            out, _ = proc.communicate(timeout=15)
     finally:
-        drop_monitor()
+        _restore(iface)
 
     stats = {"pcapng": str(pcapng), "seconds": seconds,
              "bytes": pcapng.stat().st_size if pcapng.exists() else 0,
-             "hashes": 0, "pmkid": 0, "eapol": 0}
+             "hashes": 0, "pmkid": 0, "eapol": 0,
+             "tool_tail": "\n".join((out or "").splitlines()[-3:])}
     if stats["bytes"]:
         hashfile = pcapng.with_suffix(".hc22000")
         r = _run(f"hcxpcapngtool -o {hashfile} {pcapng}", timeout=120)
         if hashfile.exists():
             stats["hashes"] = len(hashfile.read_text().splitlines())
-        for label, key in (("PMKID(s)", "pmkid"), ("EAPOL", "eapol")):
-            m = re.search(rf"{re.escape(label)}[^\d]*?(\d+)\s*$",
-                          r.stdout, re.M)
-            if m:
-                stats[key] = int(m.group(1))
+        m = re.search(r"EAPOL messages \(total\)\.*:\s*(\d+)", r.stdout)
+        if m:
+            stats["eapol"] = int(m.group(1))
+        m = re.search(r"PMKID \(best\)\.*:\s*(\d+)", r.stdout)
+        if m:
+            stats["pmkid"] = int(m.group(1))
     return stats
 
 
@@ -117,7 +109,7 @@ def main() -> int:
     lines = [
         "Loki capture — done",
         f"hashes caught: {stats['hashes']}",
-        f"  PMKID: {stats['pmkid']}  EAPOL: {stats['eapol']}",
+        f"  PMKID best: {stats['pmkid']}  EAPOL: {stats['eapol']}",
         f"pcap: {stats['bytes'] // 1024} KB",
     ]
     print("\n".join(lines))
