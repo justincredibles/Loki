@@ -1,12 +1,13 @@
 """The on-device menu app — lokicz you can drive from the keyboard.
 
 Screens wear the Asgard theme (ui.py): a status board with labeled
-readouts, the menu as a 3x3 grid of key chips, big gold result
-numbers, and an animated progress screen for long operations. The
-46-key board makes navigation simple: every chip is a digit, you
-press the digit. Pressing "Stop" exits the app (under systemd it
-stays stopped until started again — `sudo systemctl start lokicz`
-brings it back).
+readouts, the menu as a 3x3 grid of key chips across two pages,
+big gold result numbers, and an animated progress screen for long
+operations. Page 1 is the daily kit (recon, capture, caps, mesh,
+and the Bjorn-style network AUDIT); page 2 holds WPA-SEC, the last
+audit's results, and Stop. Pressing Stop exits the app (under
+systemd it stays stopped until started again —
+`sudo systemctl start lokicz` brings it back).
 """
 
 import glob
@@ -24,12 +25,15 @@ def _total_hashes() -> int:
     return total
 
 
-def _chips(cfg: dict) -> list:
+def _chips(cfg: dict, page: int) -> list:
+    if page == 2:
+        return [("1", "WPA-SEC"), ("2", "LAST AUDIT"),
+                ("3", "STOP"), ("9", "◂ BACK")]
     cap_tone = "text" if cfg.get("capture_enabled", True) else "off"
     return [("1", "STATUS"), ("2", "CAPTURE", cap_tone),
             ("3", "SUB-GHZ"), ("4", "WARDRIVE"), ("5", "SNIFF"),
-            ("6", "MESH"), ("7", "STOP"), ("8", "CAP TGL"),
-            ("9", "WPA-SEC")]
+            ("6", "MESH"), ("7", "AUDIT"), ("8", "CAP TGL"),
+            ("9", "MORE ▸")]
 
 
 def _status_rows(cfg: dict) -> list:
@@ -70,13 +74,49 @@ def _wpasec_rows(cfg: dict) -> list:
     ]
 
 
+def _audit_rows(stats: dict) -> list:
+    tone = "bad" if stats["crit"] else "warn" if stats["high"] \
+        else "ok"
+    rows = [("big", f"{stats['cves']} CVES", tone),
+            ("kv", "HOSTS SCANNED",
+             f"{stats['scanned']}/{stats['hosts']}", "text"),
+            ("kv", "CRIT / HIGH",
+             f"{stats['crit']} / {stats['high']}", tone)]
+    if stats["top"]:
+        rows.append(("kv", "WORST",
+                     f"{stats['top']['id'][4:]} @ "
+                     f"{stats['top']['score']}", "bad"))
+    return rows
+
+
+def _last_audit_rows() -> list:
+    from . import audit
+
+    s = audit.latest_summary()
+    if not s:
+        return [("text", "NO AUDITS YET", "dim"),
+                ("text", "page 1 → 7 AUDIT to run one", "dim")]
+    # WHEN + big + 2 kv (the fresh-run screen fits one row more).
+    return [("kv", "WHEN", s["when"], "dim")] + _audit_rows(s)[:3]
+
+
 def _screen(rows: list, cfg: dict, title: str = "LOKI",
-            chips: bool = True) -> str:
-    """Draw a screen (menu chips as the footer); return the key."""
+            page: int = 0) -> str:
+    """Draw a screen; page 0 = no chips, 1/2 = that menu page."""
     ui.show_screen(title, rows,
-                   chips=_chips(cfg) if chips else None,
+                   chips=_chips(cfg, page) if page else None,
                    right="CAP " + cfg["cap"].upper())
     return ui.read_key()
+
+
+def _stop() -> int:
+    ui.show_screen("LOKI", [
+        ("gap", 14),
+        ("big", "GODSPEED", "gold"),
+        ("text", "lokicz stopped — restart with", "dim"),
+        ("text", "sudo systemctl start lokicz", "text"),
+    ], right="")
+    return 0
 
 
 def run() -> int:
@@ -88,9 +128,10 @@ def run() -> int:
     rows = _status_rows(cfg)
     title = "LOKI"
     screen = "main"
+    page = 1
     while True:
         key = _screen(rows, cfg, title=title,
-                      chips=(screen == "main"))
+                      page=page if screen == "main" else 0)
         title = "LOKI"
         if screen == "wpasec":
             # WPA-SEC screen has its own keys; anything else goes back.
@@ -122,6 +163,23 @@ def run() -> int:
                 screen = "main"
                 rows = _status_rows(cfg)
             continue
+        if key in ("q", "esc"):
+            return _stop()
+        if page == 2:
+            if key == "1":
+                screen = "wpasec"
+                title = "WPA-SEC"
+                rows = _wpasec_rows(cfg)
+            elif key == "2":
+                title = "LAST AUDIT"
+                rows = _last_audit_rows()
+            elif key == "3":
+                return _stop()
+            elif key == "9":
+                page = 1
+                rows = _status_rows(cfg)
+            continue
+        # --- page 1 ---
         if key == "1":
             rows = _status_rows(cfg)
         elif key == "2":
@@ -159,9 +217,10 @@ def run() -> int:
             config.save(cfg)
             rows = _status_rows(cfg)
         elif key == "9":
-            screen = "wpasec"
-            title = "WPA-SEC"
-            rows = _wpasec_rows(cfg)
+            page = 2
+            rows = [("text", "PAGE 2 — SERVICES", "dim"),
+                    ("text", "1 WPA-SEC · 2 LAST AUDIT", "text"),
+                    ("text", "3 STOP · 9 back to page 1", "text")]
         elif key == "3":
             from .cc1101 import CC1101
 
@@ -225,14 +284,15 @@ def run() -> int:
                  "text"),
             ]
             title = "MESH"
-        elif key in ("7", "q", "esc"):
-            ui.show_screen("LOKI", [
-                ("gap", 14),
-                ("big", "GODSPEED", "gold"),
-                ("text", "lokicz stopped — restart with", "dim"),
-                ("text", "sudo systemctl start lokicz", "text"),
-            ], right="")
-            return 0
+        elif key == "7":
+            from . import audit
+
+            with ui.Spinner("AUDIT", "starting...") as spinner:
+                stats = audit.run_audit(
+                    cfg, progress=lambda m: setattr(spinner,
+                                                    "message", m))
+            rows = _audit_rows(stats)
+            title = "AUDIT"
         # any other key: just redraw the current screen
 
 

@@ -29,6 +29,13 @@ DEFAULTS = {
     # LOKICZ_WPASEC_KEY environment variable) before it can sync.
     "wpasec_enabled": False,
     "wpasec_key": "",
+    # Network audit (Bjorn-style): the subnet to audit; "" means
+    # "the /24 (or so) this device is sitting on". nvd_api_key is
+    # optional — without one the NVD allows ~5 requests per 30 s
+    # and lokicz paces itself; a free key from nvd.nist.gov lifts
+    # that to 50 per 30 s.
+    "audit_subnet": "",
+    "nvd_api_key": "",
 }
 
 
