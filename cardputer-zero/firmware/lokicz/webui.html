@@ -433,7 +433,9 @@ async function loadWatchdog() {
     `<span class="dim">${c.gone_hosts} gone</span>` +
     `<span class="${c.new_ports ? "warn" : "dim"}">+${c.new_ports} new ports</span>` +
     `<span class="${c.new_cves ? "warn" : "dim"}">+${c.new_cves} new CVEs</span>` +
-    `<span class="ok">${c.fixed_cves} fixed</span></div>` + hosts + cves;
+    `<span class="ok">${c.fixed_cves} fixed</span>` +
+    (c.unseen_cves ? `<span class="dim">${c.unseen_cves} not re-detected</span>` : "") +
+    `</div>` + hosts + cves;
 }
 
 async function loadTracks() {

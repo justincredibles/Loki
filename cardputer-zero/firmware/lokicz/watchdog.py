@@ -78,7 +78,7 @@ def diff_reports(old: dict, new: dict) -> dict:
 
     old_cves, new_cves = _cve_index(old), _cve_index(new)
     cve_changes = []
-    fixed = 0
+    fixed = unseen = 0
     scores = {}
     for host in new["hosts"]:
         for port in host["ports"]:
@@ -89,17 +89,29 @@ def diff_reports(old: dict, new: dict) -> dict:
             cve_changes.append({"host_key": key[0], "port": key[1],
                                 "id": cid, "score": scores.get(cid)})
     for key, ids in old_cves.items():
-        fixed += len(ids - new_cves.get(key, set()))
+        gone = ids - new_cves.get(key, set())
+        if key in new_cves or key in {
+                (_host_key(h), p["port"])
+                for h in new["hosts"] for p in h["ports"]}:
+            # The port itself was re-scanned and the CVE is gone:
+            # that's a fix (or a version change). 
+            fixed += len(gone)
+        else:
+            # The port wasn't re-detected at all — nmap variance
+            # on a busy LAN says nothing about patching. Counted
+            # separately, never as 'fixed'.
+            unseen += len(gone)
     cve_changes.sort(key=lambda c: c["score"] or 0, reverse=True)
 
     return {"new_hosts": new_host_list, "gone_hosts": gone_list,
             "new_ports": port_changes, "new_cves": cve_changes,
-            "fixed_cves": fixed,
+            "fixed_cves": fixed, "unseen_cves": unseen,
             "counts": {"new_hosts": len(new_host_list),
                        "gone_hosts": len(gone_list),
                        "new_ports": len(port_changes),
                        "new_cves": len(cve_changes),
-                       "fixed_cves": fixed}}
+                       "fixed_cves": fixed,
+                       "unseen_cves": unseen}}
 
 
 def _report_files() -> list[Path]:
