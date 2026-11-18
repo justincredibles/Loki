@@ -1,0 +1,13 @@
+#!/bin/sh
+# Give the desktop user access to the devices lokicz drives.
+set -e
+for user in cardputer pi; do
+    if id -u "$user" >/dev/null 2>&1; then
+        for grp in video input gpio spi dialout; do
+            if getent group "$grp" >/dev/null; then
+                usermod -aG "$grp" "$user" || true
+            fi
+        done
+    fi
+done
+exit 0
