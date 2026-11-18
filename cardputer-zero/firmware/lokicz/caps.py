@@ -38,8 +38,13 @@ CC1101 = CapProfile(
         # Confirmed on our hardware 2026-11-17 after enabling power:
         "CC1101 answers on spidev0.1: PARTNUM 0x00, VERSION 0x14,"
         " MARCSTATE 0x01 (idle) — a genuine, live chip.",
-        # From the official M5Stack docs (were TODO-VERIFY, now closed):
-        "GDO0 = GPIO14, RF_SW0 = GPIO15 (remux from UART to GPIO to use).",
+        # GDO0 pin — CORRECTED by experiment 2026-11-17: published
+        # tables say GPIO14, but with GDO0 set to the crystal-clock
+        # output only GPIO15 toggled (2,168 edges/s of polling;
+        # 14/22/23 sat still). The pin idles as the mini-UART's
+        # RXD1; claiming it as a GPIO input is correct while this
+        # cap is fitted. GPIO14's role on this cap is unconfirmed.
+        "GDO0 = GPIO15 (proven by the clock-output test, 2026-11-17).",
         "RF_SW1 is NOT a host pin: it is the CC1101's GDO2, set over SPI"
         " via IOCFG2. Bands (SW0/SW1): 0/0=315, 0/1=433, 1/1=868/915 MHz.",
         "NFC chip select is a GPIO22 device-tree overlay (not kernel CS1).",
@@ -64,6 +69,51 @@ LORA = CapProfile(
 NONE = CapProfile(name="none", description="No cap fitted")
 
 PROFILES = {p.name: p for p in (CC1101, LORA, NONE)}
+
+
+import subprocess
+from pathlib import Path
+
+BOOT_CONFIG = Path("/boot/firmware/config.txt")
+NFC_OVERLAY = "dtoverlay=spi0-spidev2-gpio22-overlay"
+
+
+def sync_boot_overlay(cap: str) -> str:
+    """Keep the NFC chip-select overlay in step with the fitted cap.
+
+    The NFC overlay claims GPIO22 as an SPI chip-select. On the
+    LoRa cap that same pin is the SX1262's BUSY line — with the
+    overlay loaded, meshtasticd's GPIO request fails and the
+    daemon aborts (proven live 2026-11-17, at the first LoRa
+    bring-up). So: LoRa fitted → the overlay line is parked as
+    '<line>.disabled' in config.txt; CC1101 fitted → restored.
+    Takes effect at the next boot. Returns what it did.
+    """
+    try:
+        lines = BOOT_CONFIG.read_text().splitlines()
+    except OSError:
+        return "boot config unreadable — overlay not synced"
+    parked = NFC_OVERLAY + ".disabled"
+    changed = False
+    out = []
+    for ln in lines:
+        if cap == "lora" and ln == NFC_OVERLAY:
+            out.append(parked)
+            changed = True
+        elif cap != "lora" and ln == parked:
+            out.append(NFC_OVERLAY)
+            changed = True
+        else:
+            out.append(ln)
+    if not changed:
+        return "boot overlay already matches the cap profile"
+    r = subprocess.run("sudo -n tee /boot/firmware/config.txt >/dev/null",
+                       shell=True, input="\n".join(out) + "\n",
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        return "boot overlay edit FAILED (sudo refused?)"
+    return (f"boot overlay {'parked' if cap == 'lora' else 'restored'} "
+            f"for the {cap} cap — applies at next boot")
 
 
 def detect_cap(configured: str | None = None) -> CapProfile:

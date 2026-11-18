@@ -63,13 +63,16 @@ def apply_profile(cap: str) -> str:
     (correctly) refuses to run without the LoRa cap's I2C expander,
     and a boot-time restart loop helps nobody. Returns what it did.
     """
+    from . import caps
+
+    overlay = caps.sync_boot_overlay(cap)
     if cap == "lora":
         _run("sudo -n systemctl enable --now meshtasticd")
-        return "meshtasticd enabled + started (LoRa profile)"
+        return f"meshtasticd enabled + started (LoRa profile); {overlay}"
     _run("sudo -n systemctl stop meshtasticd")
     _run("sudo -n systemctl disable meshtasticd")
     _run("sudo -n systemctl reset-failed meshtasticd")
-    return "meshtasticd stopped + disabled (non-LoRa profile)"
+    return f"meshtasticd stopped + disabled (non-LoRa profile); {overlay}"
 
 
 def main() -> int:
