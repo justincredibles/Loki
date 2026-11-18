@@ -254,16 +254,33 @@ class CC1101:
         self.strobe(SRX)
         time.sleep(0.02)
 
+        # Squelch first: an OOK demodulator with no signal outputs
+        # pure slicer noise, so we measure the noise floor and gate
+        # the recording on RSSI (floor + 10 dB), polled every ~4 ms
+        # alongside the pin. Only gated-open stretches reach the file.
+        floor_samples = []
+        t_end = time.time() + 0.5
+        while time.time() < t_end:
+            floor_samples.append(self.rssi_dbm())
+            time.sleep(0.01)
+        floor = sorted(floor_samples)[len(floor_samples) // 2]
+        threshold = floor + 10.0
+
         pin = DigitalInputDevice(GDO0_GPIO, pull_up=False)
         try:
             edges: list[tuple[int, int]] = []
+            gate: list[tuple[int, bool]] = []
             level = pin.value
             start = time.perf_counter_ns()
             deadline = start + int(seconds * 1e9)
+            next_poll = start
             while True:
                 now = time.perf_counter_ns()
                 if now >= deadline:
                     break
+                if now >= next_poll:
+                    gate.append((now, self.rssi_dbm() >= threshold))
+                    next_poll = now + 4_000_000
                 v = pin.value
                 if v != level:
                     edges.append((now, v))
@@ -272,11 +289,30 @@ class CC1101:
             pin.close()
             self.strobe(SIDLE)
 
-        # Edges -> run durations in µs (signed: + = signal, - = gap,
-        # the Flipper RAW convention), merging sub-60µs glitches.
+        # Gate state at time t (5 ms hangover so a burst's tail
+        # isn't clipped), then edges -> run durations in µs
+        # (signed: + = signal, - = gap, the Flipper RAW convention),
+        # merging sub-60µs glitches and collapsing gated-off time
+        # into plain gaps.
+        def gate_open(t_ns: int) -> bool:
+            state = False
+            for gt, gv in gate:
+                if gt > t_ns + 5_000_000:
+                    break
+                if gt <= t_ns:
+                    state = gv
+                elif gv:
+                    state = True
+            return state
+
         runs: list[int] = []
-        prev_t, prev_level = start, edges[0][1] ^ 1 if edges else 0
-        timeline = [(start, prev_level)] + edges + [(deadline, level)]
+        timeline = [(start, 0)]
+        for t_ns, lv in edges:
+            if gate_open(t_ns):
+                timeline.append((t_ns, lv))
+            elif timeline[-1][1] != 0:
+                timeline.append((t_ns, 0))
+        timeline.append((deadline, 0))
         for (t0, lv), (t1, _n) in zip(timeline, timeline[1:]):
             dur = int((t1 - t0) / 1000)
             if dur <= 0:
@@ -307,6 +343,7 @@ class CC1101:
         pulses = [r for r in runs if r > 0]
         return {"file": str(path), "transitions": len(edges),
                 "runs": len(runs), "bursts": bursts,
+                "floor_dbm": floor, "threshold_dbm": threshold,
                 "shortest_pulse_us": min(pulses) if pulses else 0,
                 "longest_pulse_us": max(pulses) if pulses else 0}
 
