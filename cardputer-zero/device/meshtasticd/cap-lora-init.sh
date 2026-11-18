@@ -10,6 +10,16 @@
 #     module's 115200 baud wakes it without touching its state.
 set -eu
 
+# The cap is dead until the Zero's EXT 5V rail and the cap's
+# POWER_EN (GPIO26) are on — the same two-step power gate the
+# CC1101 cap needs. Proven on hardware 2026-11-17: with the gate
+# off, the expander below never answers and this script fails;
+# zeroradio's own image evidently held the gate on already, so
+# their version of this script never had to.
+echo 1 > /sys/class/leds/ext_5v_out/brightness 2>/dev/null || true
+pinctrl set 26 op dh 2>/dev/null || true
+sleep 1
+
 BUS=1
 ADDR=0x43
 GNSS=/dev/ttyS0
