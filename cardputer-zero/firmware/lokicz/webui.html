@@ -72,6 +72,11 @@
   button:hover { background: #123a1e; }
   button:disabled { opacity: .45; cursor: wait; }
   button.ghost { border-color: var(--frame); color: var(--dim); }
+  input[type=text] {
+    width: 62%; background: #020604; color: var(--text);
+    border: 1px solid var(--frame); padding: 6px; font: inherit;
+    font-size: 13px;
+  }
   input[type=number] {
     width: 70px; background: #020604; color: var(--text);
     border: 1px solid var(--frame); padding: 6px; font: inherit;
@@ -215,6 +220,27 @@
       <button onclick="run('trackers')">WATCH 90s</button>
     </div>
     <div class="act">
+      <h3><span class="capbar lora"></span>◈ MESH — MESHTASTIC / MESHCORE</h3>
+      <p>One LoRa radio, two stacks — never both at once. Meshtastic
+         brings status, nodes and text chat; MeshCore runs as an
+         openHop repeater (it relays other nodes — messaging lives
+         in companion apps, stats in its dashboard).</p>
+      <div id="mesh-line" class="dim" style="font-size:12px;margin-bottom:8px">…</div>
+      <button onclick="meshMode('meshtastic')">MESHTASTIC</button>
+      <button onclick="meshMode('meshcore')">MESHCORE</button>
+      <button class="ghost" onclick="meshMode('off')">OFF</button>
+      <div style="margin-top:8px">
+        <input type="text" id="mesh-text" maxlength="200" placeholder="mesh text — broadcasts on the primary channel">
+        <button onclick="meshSend()">SEND</button>
+      </div>
+      <div style="margin-top:8px">
+        <button onclick="run('mesh-listen')">LISTEN 30s</button>
+        <button class="ghost" onclick="run('mesh-nodes')">NODES</button>
+        <button class="ghost" onclick="window.open('http://' + location.hostname + ':8000', '_blank')">MESHCORE DASHBOARD</button>
+      </div>
+      <div id="mesh-out" style="margin-top:8px"></div>
+    </div>
+    <div class="act">
       <h3><span class="capbar cc1101"></span>◈ RADIO LAB — SUB-GHZ + NFC</h3>
       <p>CC1101 cap workbench: sweep the bands, capture a fob at
          433.92 MHz and decode it (EV1527-family remotes, Manchester
@@ -314,6 +340,9 @@ async function refreshStatus() {
 let polling = null;
 async function run(action, secsId) {
   const body = secsId ? {seconds: Number($(secsId).value)} : {};
+  runBody(action, body);
+}
+async function runBody(action, body) {
   const r = await api(`/api/run/${action}`,
     {method: "POST", headers: {"Content-Type": "application/json"},
      body: JSON.stringify(body)});
@@ -340,6 +369,9 @@ async function run(action, secsId) {
         j.state === "done" ? "100%" : "0";
       if (action === "proximity" && j.state === "done") renderProx(j.result);
       if (action === "probes" && j.state === "done") renderProbes(j.result);
+      if (action === "mesh-listen" && j.state === "done") renderMeshMsgs(j.result);
+      if (action === "mesh-nodes" && j.state === "done") renderMeshNodes(j.result);
+      if (action === "mesh-send" && j.state === "done") loadMesh();
       if (j.state === "done" && j.avatar) {
         $("jobResult").textContent +=
           `\n+${j.avatar.xp_gained} XP` +
@@ -355,6 +387,52 @@ async function run(action, secsId) {
       refreshStatus(); loadAudits(); loadCaptures(); loadTrackers(); loadAvatar(); loadFiles();
     }
   }, 1200);
+}
+async function loadMesh() {
+  try {
+    const m = await api("/api/mesh");
+    let s;
+    if (m.cap !== "lora") {
+      s = `mode ${m.mode} · CC1101 cap fitted — mesh dormant until the LoRa cap is in`;
+    } else if (m.mode === "meshtastic") {
+      const t = m.meshtastic || {};
+      s = `Meshtastic · daemon ${t.service ? "active" : "off"} · API ${t.api ? "up" : "down"} · radio ${t.radio ? "SX1262 OK" : "unproven"}`;
+      if (m.chat) s += ` · you are ${esc(m.chat.my_name)} · ${m.chat.nodes_known} nodes known`;
+      if (m.chat_error) s += ` · ${esc(m.chat_error)}`;
+    } else if (m.mode === "meshcore") {
+      s = `MeshCore (openHop repeater) · ${m.pymc_active ? "active" : m.pymc_installed ? "stopped" : "not installed"} · meshtasticd parked`;
+    } else {
+      s = "mesh off — both daemons parked";
+    }
+    $("mesh-line").textContent = s;
+  } catch (e) { /* portal busy */ }
+}
+async function meshMode(mode) {
+  const r = await api("/api/mesh/mode",
+    {method: "POST", headers: {"Content-Type": "application/json"},
+     body: JSON.stringify({mode})});
+  $("mesh-line").textContent = r.result || r.error || "";
+  loadMesh();
+}
+function meshSend() {
+  const text = $("mesh-text").value.trim();
+  if (!text) return;
+  $("mesh-text").value = "";
+  runBody("mesh-send", {text});
+}
+function renderMeshMsgs(r) {
+  const msgs = r.messages || [];
+  $("mesh-out").innerHTML = msgs.length
+    ? `<table><tr><th>FROM</th><th>TEXT</th></tr>` +
+      msgs.map(m => `<tr><td class="gold">${esc(m.from_name || "?")}</td><td class="cyan">${esc(m.text || "")}</td></tr>`).join("") + `</table>`
+    : `<span class="dim">no mesh texts heard in ${r.seconds || 30}s — the mesh may just be quiet</span>`;
+}
+function renderMeshNodes(r) {
+  const nodes = r.nodes || [];
+  $("mesh-out").innerHTML = nodes.length
+    ? `<table><tr><th>NODE</th><th>LAST HEARD</th><th>SNR</th><th>HOPS</th></tr>` +
+      nodes.map(n => `<tr><td class="gold">${esc(n.name)}${n.short ? " (" + esc(n.short) + ")" : ""}</td><td>${n.last_heard ? new Date(n.last_heard * 1000).toLocaleTimeString() : "—"}</td><td>${n.snr != null ? n.snr : "—"}</td><td>${n.hops != null ? n.hops : "—"}</td></tr>`).join("") + `</table>`
+    : `<span class="dim">no nodes in the local database yet</span>`;
 }
 
 function renderProx(r) {
@@ -657,7 +735,7 @@ async function doUpdate() {
   setTimeout(() => clearInterval(iv), 120000);
 }
 
-refreshStatus(); loadAudits(); loadCaptures(); loadFlights(); loadTrackers(); loadWatchdog(); loadTracks(); loadAvatar(); loadFiles(); loadUpdate();
+refreshStatus(); loadAudits(); loadCaptures(); loadFlights(); loadTrackers(); loadWatchdog(); loadTracks(); loadAvatar(); loadFiles(); loadUpdate(); loadMesh();
 setInterval(refreshStatus, 10000);
 setInterval(loadFlights, 60000);
 </script>

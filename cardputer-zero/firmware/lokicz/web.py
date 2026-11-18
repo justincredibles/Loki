@@ -283,6 +283,34 @@ def _act_replay(cfg, _seconds):
     return fn
 
 
+def _act_mesh_listen(cfg, seconds):
+    def fn(job):
+        from . import meshchat
+
+        secs = seconds or 30
+        job["message"] = f"listening for mesh texts ({secs}s)..."
+        return meshchat.listen(cfg, secs)
+    return fn
+
+
+def _act_mesh_nodes(cfg, _seconds):
+    def fn(job):
+        from . import meshchat
+
+        job["message"] = "asking meshtasticd for the node list..."
+        return meshchat.nodes(cfg)
+    return fn
+
+
+def _act_mesh_send(cfg, text):
+    def fn(job):
+        from . import meshchat
+
+        job["message"] = "sending mesh text..."
+        return meshchat.send(cfg, text)
+    return fn
+
+
 def _act_nfc(cfg, _seconds):
     def fn(job):
         from . import nfc
@@ -310,7 +338,8 @@ ACTIONS = {"capture": _act_capture, "wardrive": _act_wardrive,
            "watchdog": _act_watchdog,
            "gps": _act_gps,
            "ook": _act_ook, "replay": _act_replay,
-           "nfc": _act_nfc}
+           "nfc": _act_nfc, "mesh-listen": _act_mesh_listen,
+           "mesh-nodes": _act_mesh_nodes}
 
 DEFAULT_SECONDS = {"capture": "capture_seconds",
                    "wardrive": "wardrive_seconds",
@@ -369,6 +398,18 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, gpslog.list_tracks())
         elif path == "/icon.png" and ICON_FILE.exists():
             self._send(200, ICON_FILE.read_bytes(), "image/png")
+        elif path == "/api/mesh":
+            from . import meshchat, meshcore
+
+            cfg = config.load()
+            out = {"cap": cfg.get("cap"), **meshcore.status(),
+                   "chat": None}
+            if out["meshtastic"].get("api"):
+                try:
+                    out["chat"] = meshchat.info(cfg)
+                except Exception as exc:
+                    out["chat_error"] = str(exc)
+            self._json(200, out)
         elif path == "/api/status":
             self._json(200, status_payload())
         elif path.startswith("/api/jobs/"):
@@ -469,15 +510,31 @@ class Handler(BaseHTTPRequestHandler):
         cfg = config.load()
         if path.startswith("/api/run/"):
             action = path.rsplit("/", 1)[1]
+            body = self._body()
+            if action == "mesh-send":  # takes {text}, not {seconds}
+                job = _start(action, _act_mesh_send(
+                    cfg, str(body.get("text", ""))))
+                return self._json(202, {"job": job["id"]})
             if action not in ACTIONS:
                 return self._json(404, {"error": "unknown action"})
-            body = self._body()
             seconds = body.get("seconds")
             if action in DEFAULT_SECONDS:
                 seconds = int(seconds or cfg[DEFAULT_SECONDS[action]])
                 seconds = max(10, min(seconds, 1800))
             job = _start(action, ACTIONS[action](cfg, seconds))
             return self._json(202, {"job": job["id"]})
+        if path == "/api/mesh/mode":
+            from . import meshcore
+
+            body = self._body()
+            mode = str(body.get("mode", ""))
+            if mode not in ("meshtastic", "meshcore", "off"):
+                return self._json(400, {"error": "bad mode"})
+            cfg["mesh_mode"] = mode
+            config.save(cfg)
+            return self._json(200, {"mode": mode, "result":
+                                    meshcore.apply_mode(mode,
+                                                        cfg["cap"])})
         if path == "/api/toggle/capture":
             cfg["capture_enabled"] = not cfg.get("capture_enabled",
                                                  True)
