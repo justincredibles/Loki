@@ -143,6 +143,26 @@ def nodes(cfg: dict) -> dict:
     return _call(cfg, ["nodes"], timeout=40)
 
 
+MESHLOG = Path.home() / "lokicz-meshlog" / "messages.jsonl"
+
+
+def _log_outgoing(text: str) -> None:
+    """Append our own send to the chat history — the listener
+    skips our node's packets, so the history would otherwise
+    only ever show one side of the conversation."""
+    import time as _time
+
+    try:
+        MESHLOG.parent.mkdir(parents=True, exist_ok=True)
+        with open(MESHLOG, "a") as fh:
+            fh.write(json.dumps({
+                "ts": int(_time.time()), "from_name": "You",
+                "out": True, "to": 4294967295, "dm": False,
+                "channel": 0, "text": text}) + "\n")
+    except OSError:
+        pass
+
+
 def send(cfg: dict, text: str) -> dict:
     text = (text or "").strip()
     if not text:
@@ -150,7 +170,9 @@ def send(cfg: dict, text: str) -> dict:
     if len(text) > 200:
         raise RuntimeError("message too long (200 chars max — a "
                            "mesh packet is ~237 bytes)")
-    return _call(cfg, ["send", text], timeout=40)
+    out = _call(cfg, ["send", text], timeout=40)
+    _log_outgoing(text)
+    return out
 
 
 def listen(cfg: dict, seconds: int) -> dict:

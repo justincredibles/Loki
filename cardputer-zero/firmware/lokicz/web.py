@@ -463,6 +463,51 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/mesh":
             self._send(200, MESH_UI_FILE.read_bytes(),
                        "text/html; charset=utf-8")
+        elif path == "/api/mesh/messages":
+            import json as _json
+            import time as _time
+            from pathlib import Path as _Path
+
+            q = urllib.parse.parse_qs(
+                urllib.parse.urlparse(self.path).query)
+            try:
+                limit = max(1, min(int(q.get("limit", ["200"])[0]),
+                                   1000))
+            except ValueError:
+                limit = 200
+            chan = q.get("channel", ["0"])[0]
+            log_dir = _Path.home() / "lokicz-meshlog"
+            msgs = []
+            try:
+                lines = (log_dir / "messages.jsonl") \
+                    .read_text().splitlines()[-4000:]
+                for line in lines:
+                    try:
+                        msgs.append(_json.loads(line))
+                    except ValueError:
+                        continue
+            except OSError:
+                pass
+            total = len(msgs)
+            if chan == "dm":
+                msgs = [m for m in msgs if m.get("dm")]
+            elif chan != "all":
+                try:
+                    want = int(chan)
+                    msgs = [m for m in msgs
+                            if not m.get("dm")
+                            and (m.get("channel") or 0) == want]
+                except ValueError:
+                    pass
+            try:
+                age = _time.time() - (log_dir / "heartbeat") \
+                    .stat().st_mtime
+                collecting = age < 90
+            except OSError:
+                collecting = False
+            self._json(200, {"messages": msgs[-limit:],
+                             "total": total,
+                             "collecting": collecting})
         elif path == "/api/mesh/config":
             from . import meshchat
 

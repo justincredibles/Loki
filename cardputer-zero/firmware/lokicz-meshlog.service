@@ -1,0 +1,13 @@
+[Unit]
+Description=lokicz mesh message logger — Meshtastic chat history
+After=network.target
+
+[Service]
+User=cardputer
+WorkingDirectory=/home/cardputer/loki/cardputer-zero/firmware
+ExecStart=/home/cardputer/meshtastic-cli/bin/python -m lokicz.mesh_log
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

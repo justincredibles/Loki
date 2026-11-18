@@ -179,6 +179,17 @@
   <div id="mesh-nodes-box"><span class="dim">…</span></div>
 
   <div class="secttl">CHAT — MESHTASTIC</div>
+  <p class="dim" style="margin:0 0 8px">Meshtastic itself keeps no history — a listener on the Cardputer records texts as they arrive, so this log reaches back to when the listener started, not before. It collects whenever Meshtastic mode is on.</p>
+  <div id="chat-box" class="nodesbox" style="max-height:380px"><span class="dim">…</span></div>
+  <div style="margin:8px 0">
+    <select id="chat-filter" onchange="loadMessages()">
+      <option value="0">Primary channel</option>
+      <option value="all">All channels</option>
+      <option value="dm">Direct messages</option>
+    </select>
+    <button class="ghost" onclick="loadMessages()">REFRESH CHAT</button>
+    <span id="chat-meta" class="dim" style="margin-left:8px"></span>
+  </div>
   <div style="margin-bottom:10px">
     <input type="text" id="mesh-text" maxlength="200" placeholder="mesh text — broadcasts on the primary channel" style="width:min(520px,70%)">
     <button onclick="meshSend()">SEND</button>
@@ -278,6 +289,7 @@ async function runBody(action, body) {
            "mesh-setconfig", "meshcore-setconfig"].includes(action)
           && j.state === "done") {
         loadMesh(); loadChannels(); loadConfig(); loadMcConfig();
+        loadMessages();
       }
     }
   }, 1200);
@@ -342,6 +354,32 @@ function meshSend() {
   if (!text) return;
   $("mesh-text").value = "";
   runBody("mesh-send", {text});
+}
+async function loadMessages() {
+  try {
+    const chan = $("chat-filter").value;
+    const r = await api(`/api/mesh/messages?limit=300&channel=${chan}`);
+    const box = $("chat-box");
+    const nearBottom = box.scrollTop + box.clientHeight
+      >= box.scrollHeight - 60;
+    const msgs = r.messages || [];
+    box.innerHTML = msgs.length ? msgs.map(m => {
+      const t = new Date((m.ts || 0) * 1000).toLocaleTimeString(
+        [], {hour: "2-digit", minute: "2-digit"});
+      const who = m.out
+        ? `<span class="gold">You</span>`
+        : `<span class="cyan">${esc(m.from_name || "?")}</span>`;
+      const tag = m.dm ? ` <span class="dim">(DM)</span>`
+        : (chan === "all" && (m.channel || 0) !== 0
+           ? ` <span class="dim">(ch ${m.channel})</span>` : "");
+      return `<div style="padding:2px 0;border-bottom:1px solid #0d2b16">` +
+        `<span class="dim">${t}</span> ${who}${tag}: ${esc(m.text || "")}</div>`;
+    }).join("") : `<span class="dim">nothing logged here yet — texts appear as they're heard</span>`;
+    if (nearBottom) box.scrollTop = box.scrollHeight;
+    $("chat-meta").textContent = r.collecting
+      ? `listener collecting · ${r.total} message(s) stored · auto-refreshes`
+      : `listener not collecting right now (mesh off / MeshCore mode / daemon down) · ${r.total} stored`;
+  } catch (e) { /* portal busy */ }
 }
 function renderMeshMsgs(r) {
   const msgs = r.messages || [];
@@ -544,7 +582,8 @@ function saveMcConfig() {
 
 (async () => {
   const m = await loadMesh();
-  loadChannels(); loadConfig(); loadMcConfig();
+  loadChannels(); loadConfig(); loadMcConfig(); loadMessages();
+  setInterval(loadMessages, 15000);
   if (m && m.chat) runBody("mesh-nodes", {});  // auto-scan on open
 })();
 </script>
