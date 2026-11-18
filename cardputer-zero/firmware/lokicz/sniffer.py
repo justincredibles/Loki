@@ -79,7 +79,11 @@ def scan_ble(seconds: int) -> tuple[list[dict], str]:
     except OSError:
         pass
     try:
-        ctl = subprocess.run(["timeout", str(seconds), "bluetoothctl",
+        # bluetoothctl needs its own --timeout to stay alive: a bare
+        # one-shot `scan on` exits instantly and kills discovery
+        # before any advertisement lands (verified on hardware —
+        # 0 devices without it, 10 in 20 s with it).
+        ctl = subprocess.run(["bluetoothctl", "--timeout", str(seconds),
                               "scan", "on"], capture_output=True,
                              text=True, timeout=seconds + 15)
         out = ctl.stdout or ""
