@@ -268,6 +268,63 @@ def _mini_helm(draw, cx: int, base_y: int) -> None:
                   (cx - 2, base_y)], fill=EMERALD)
 
 
+_BATT_DIR = Path("/sys/class/power_supply/bq27220-0")
+_batt_cache = (0.0, None, False)
+
+
+def _battery():
+    """(percent, on_external_power) from the BQ27220 fuel
+    gauge, cached ~10 s so animation frames don't hammer
+    sysfs. (None, False) when the gauge is unreadable."""
+    global _batt_cache
+    now = time.time()
+    if now - _batt_cache[0] < 10:
+        return _batt_cache[1], _batt_cache[2]
+    pct, ext = None, False
+    try:
+        pct = int((_BATT_DIR / "capacity").read_text().strip())
+        status = (_BATT_DIR / "status").read_text().strip()
+        ext = status in ("Charging", "Full")
+    except (OSError, ValueError):
+        pass
+    _batt_cache = (now, pct, ext)
+    return pct, ext
+
+
+def _status_cluster(draw, right: str) -> None:
+    """The header's right side: [right label] [clock] [battery].
+    Every screen wears it — drawn by _frame."""
+    f = _font("mono", 10)
+    x = SCREEN_W - 10
+    pct, ext = _battery()
+    if pct is not None:
+        tone = EMERALD if pct > 30 else \
+            (GOLD if pct > 15 else (255, 92, 82))
+        label = f"{pct}%"
+        tw = draw.textlength(label, font=f)
+        draw.text((x - tw, 12), label, font=f, fill=tone)
+        x -= int(tw) + 3
+        ix = x - 16
+        draw.rectangle([ix, 13, ix + 14, 21], outline=FRAME)
+        draw.rectangle([ix + 15, 16, ix + 16, 18], fill=FRAME)
+        fillw = int(12 * max(0, min(100, pct)) / 100)
+        if fillw:
+            draw.rectangle([ix + 2, 15, ix + 1 + fillw, 19],
+                           fill=tone)
+        if ext:  # gold bolt over the cell = on external power
+            draw.polygon([(ix + 9, 14), (ix + 5, 18), (ix + 7, 18),
+                          (ix + 6, 21), (ix + 11, 16), (ix + 8, 16)],
+                         fill=GOLD_HI)
+        x = ix - 7
+    clock = time.strftime("%H:%M")
+    tw = draw.textlength(clock, font=f)
+    draw.text((x - tw, 12), clock, font=f, fill=TEXT)
+    x -= int(tw)
+    if right:
+        tw = draw.textlength(right, font=f)
+        draw.text((x - 8 - tw, 12), right, font=f, fill=DIM)
+
+
 def _frame(draw, title: str, right: str = "") -> None:
     """Emerald border, gold corner brackets, header band."""
     draw.rectangle([1, 1, SCREEN_W - 2, SCREEN_H - 2], outline=FRAME)
@@ -278,10 +335,7 @@ def _frame(draw, title: str, right: str = "") -> None:
         draw.line([(x, y), (x, y + dy * 13)], fill=GOLD, width=2)
     _mini_helm(draw, 21, 26)
     draw.text((40, 8), title, font=_font("mono", 15), fill=GOLD_HI)
-    if right:
-        f = _font("mono", 10)
-        tw = draw.textlength(right, font=f)
-        draw.text((SCREEN_W - 10 - tw, 12), right, font=f, fill=DIM)
+    _status_cluster(draw, right)
     draw.line([(8, 30), (SCREEN_W - 8, 30)], fill=GOLD_DARK)
     draw.line([(8, 32), (SCREEN_W - 8, 32)], fill=FRAME)
 

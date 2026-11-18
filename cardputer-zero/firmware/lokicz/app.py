@@ -209,11 +209,16 @@ def _last_audit_rows() -> list:
 
 def _screen(rows: list, cfg: dict, title: str = "LOKI",
             page: int = 0, cap: str | None = None) -> str:
-    """Draw a screen; page 0 = no chips, 1/2 = that menu page."""
-    ui.show_screen(title, rows,
-                   chips=_chips(cfg, page) if page else None,
-                   right="CAP " + cfg["cap"].upper(), cap=cap)
-    return ui.read_key()
+    """Draw a screen; page 0 = no chips, 1/2 = that menu page.
+    Redraws every 20 s while waiting so the header clock and
+    battery stay live on an idle screen."""
+    while True:
+        ui.show_screen(title, rows,
+                       chips=_chips(cfg, page) if page else None,
+                       right="CAP " + cfg["cap"].upper(), cap=cap)
+        key = ui.read_key_timeout(20)
+        if key is not None:
+            return key
 
 
 # The home carousel (Justin's layout): label + dispatch target
