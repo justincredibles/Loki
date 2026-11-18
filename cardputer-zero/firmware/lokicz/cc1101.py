@@ -28,7 +28,12 @@ import time
 # --- Power -----------------------------------------------------------------
 EXT_5V_NODE = "/sys/class/leds/ext_5v_out/brightness"
 POWER_EN_GPIO = 26
-GDO0_GPIO = 14  # the CC1101's data/flag pin on this cap
+GDO0_GPIO = 15  # the CC1101's data pin on this cap — EXPERIMENTALLY
+# confirmed 2026-11-17: with GDO0 set to the crystal-clock output,
+# GPIO15 toggled (2,168 edges/s of polling) while GPIO14/22/23 sat
+# still. (Published pin tables said 14; the hardware says 15. The
+# pin idles as the mini-UART's RXD1 — claiming it as a GPIO input
+# is correct while this cap is fitted.)
 
 # --- SPI / strobes -----------------------------------------------------------
 SPI_BUS, SPI_CS = 0, 1  # /dev/spidev0.1 — SPI0 CS1, shared with the LCD
