@@ -34,7 +34,7 @@ UPDATE_LOG = Path("/tmp/lokicz-update.log")
 
 
 def _download_dirs() -> dict:
-    from . import gpslog, probes, sniffer, wardrive
+    from . import audit, capture, gpslog, probes, sniffer, wardrive
 
     return {"captures": capture.CAPTURE_DIR,
             "audits": audit.AUDIT_DIR,
