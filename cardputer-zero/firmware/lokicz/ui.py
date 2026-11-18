@@ -332,6 +332,54 @@ def show_screen(title: str, rows: list, chips=None, right: str = ""):
     _push(img)
 
 
+def radar_screen(title: str, blips: list, rows: list,
+                 right: str = "") -> str:
+    """A radar scope: blips at (bearing_deg, frac_of_range, tone)
+    around home center, data rows down the right side. Returns
+    the key pressed (any key goes back)."""
+    import math
+
+    img, draw = _base()
+    _frame(draw, title, right)
+    cx, cy, r = 84, 102, 58
+    for frac in (1.0, 0.66, 0.33):
+        rr = r * frac
+        draw.ellipse([cx - rr, cy - rr, cx + rr, cy + rr],
+                     outline=FRAME if frac == 1.0 else GOLD_DARK)
+    draw.line([(cx - r, cy), (cx + r, cy)], fill=GOLD_DARK)
+    draw.line([(cx, cy - r), (cx, cy + r)], fill=GOLD_DARK)
+    draw.text((cx - 3, cy - r - 12), "N", font=_font("mono", 10),
+              fill=GOLD_HI)
+    draw.ellipse([cx - 2, cy - 2, cx + 2, cy + 2], outline=GOLD_HI)
+    for bearing, frac, tone in blips:
+        a = math.radians(bearing)
+        d = r * min(max(frac, 0.0), 1.0)
+        x = cx + math.sin(a) * d
+        y = cy - math.cos(a) * d
+        c = TONES.get(tone, TEXT)
+        draw.ellipse([x - 3, y - 3, x + 3, y + 3], fill=c)
+    y = 40
+    f = _font("mono", 11)
+    for row in rows:
+        if row[0] == "kv":
+            _, label, value, *rest = row
+            tone = rest[0] if rest else "text"
+            draw.text((152, y), label, font=f, fill=DIM)
+            tw = draw.textlength(value, font=f)
+            draw.text((SCREEN_W - 10 - tw, y), value, font=f,
+                      fill=TONES.get(tone, TEXT))
+            y += 16
+        elif row[0] == "text":
+            tone = row[2] if len(row) > 2 else "text"
+            draw.text((152, y), row[1], font=f,
+                      fill=TONES.get(tone, TEXT))
+            y += 16
+        elif row[0] == "gap":
+            y += row[1] if len(row) > 1 else 8
+    _push(img)
+    return read_key()
+
+
 def show_text(lines: list[str]) -> None:
     """Legacy plain-text screen, now wearing the theme."""
     show_screen("LOKI", [("text", line) for line in lines])

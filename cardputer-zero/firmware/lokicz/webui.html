@@ -156,6 +156,9 @@
     </div>
   </div>
 
+  <h2>AIR TRAFFIC — FLIGHT RADAR</h2>
+  <div id="flights"><span class="dim">loading…</span></div>
+
   <h2>AUDIT REPORTS</h2>
   <div id="audits"><span class="dim">loading…</span></div>
   <div id="report"></div>
@@ -298,8 +301,29 @@ async function loadCaptures() {
   $("captures").innerHTML = files + `<h3 class="gold">CRACKED BY WPA-SEC</h3>` + cracked;
 }
 
-refreshStatus(); loadAudits(); loadCaptures();
+async function loadFlights() {
+  const r = await api("/api/flights");
+  if (!r.ok) {
+    $("flights").innerHTML = `<span class="dim">unavailable — ${esc(r.reason)}</span>`;
+    return;
+  }
+  if (!r.aircraft.length) {
+    $("flights").innerHTML = `<span class="dim">clear skies — nothing within ${r.radius_nm} nm</span>`;
+    return;
+  }
+  $("flights").innerHTML =
+    `<div class="dim" style="margin-bottom:6px">${r.total} aircraft within ${r.radius_nm} nm of home</div>` +
+    `<table><tr><th>CALLSIGN</th><th>TYPE</th><th>ALT</th><th>SPD</th><th>DIST</th><th>BRG</th></tr>` +
+    r.aircraft.map(a => `<tr><td class="gold">${esc(a.callsign)}</td>` +
+      `<td>${esc(a.type)}</td>` +
+      `<td>${a.on_ground ? "GND" : a.alt_ft + " ft"}</td>` +
+      `<td>${a.speed_kt ?? "—"} kt</td><td>${a.dist_nm} nm</td>` +
+      `<td>${a.bearing}°</td></tr>`).join("") + `</table>`;
+}
+
+refreshStatus(); loadAudits(); loadCaptures(); loadFlights();
 setInterval(refreshStatus, 10000);
+setInterval(loadFlights, 60000);
 </script>
 </body>
 </html>

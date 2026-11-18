@@ -28,7 +28,7 @@ def _total_hashes() -> int:
 def _chips(cfg: dict, page: int) -> list:
     if page == 2:
         return [("1", "WPA-SEC"), ("2", "LAST AUDIT"),
-                ("3", "STOP"), ("9", "◂ BACK")]
+                ("3", "STOP"), ("4", "FLIGHTS"), ("9", "◂ BACK")]
     cap_tone = "text" if cfg.get("capture_enabled", True) else "off"
     return [("1", "STATUS"), ("2", "CAPTURE", cap_tone),
             ("3", "SUB-GHZ"), ("4", "WARDRIVE"), ("5", "SNIFF"),
@@ -175,6 +175,30 @@ def run() -> int:
                 rows = _last_audit_rows()
             elif key == "3":
                 return _stop()
+            elif key == "4":
+                from . import flights
+
+                with ui.Spinner("FLIGHT RADAR", "asking the sky..."):
+                    r = flights.nearest(cfg)
+                if r["ok"]:
+                    blips = [(a["bearing"],
+                              a["dist_nm"] / r["radius_nm"],
+                              "gold" if not a["on_ground"] else "dim")
+                             for a in r["aircraft"]]
+                    frows = [("text",
+                              f"{r['total']} AIRCRAFT", "dim")]
+                    for a in r["aircraft"][:5]:
+                        alt = "GND" if a["on_ground"] else \
+                            f"{(a['alt_ft'] or 0) // 1000}K FT"
+                        frows.append(("kv", a["callsign"][:9],
+                                      f"{a['dist_nm']}NM {alt}",
+                                      "text"))
+                    ui.radar_screen("FLIGHT RADAR", blips, frows,
+                                    right="ADS-B")
+                    rows = frows
+                else:
+                    rows = [("text", "FLIGHT RADAR OFFLINE", "bad"),
+                            ("text", r["reason"][:28], "dim")]
             elif key == "9":
                 page = 1
                 rows = _status_rows(cfg)
@@ -222,7 +246,8 @@ def run() -> int:
             page = 2
             rows = [("text", "PAGE 2 — SERVICES", "dim"),
                     ("text", "1 WPA-SEC · 2 LAST AUDIT", "text"),
-                    ("text", "3 STOP · 9 back to page 1", "text"),
+                    ("text", "3 STOP · 4 FLIGHT RADAR", "text"),
+                    ("text", "9 back to page 1", "dim"),
                     ("kv", "WEB PORTAL",
                      f"{web.lan_ip()}:{web.PORT}", "gold")]
         elif key == "3":

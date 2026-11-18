@@ -212,12 +212,14 @@ class Handler(BaseHTTPRequestHandler):
             return {}
 
     def do_GET(self):
-        from . import audit, capture, wpasec
+        from . import audit, capture, config, flights, wpasec
 
         path = urllib.parse.urlparse(self.path).path
         if path == "/":
             self._send(200, UI_FILE.read_bytes(),
                        "text/html; charset=utf-8")
+        elif path == "/api/flights":
+            self._json(200, flights.nearest(config.load()))
         elif path == "/icon.png" and ICON_FILE.exists():
             self._send(200, ICON_FILE.read_bytes(), "image/png")
         elif path == "/api/status":
