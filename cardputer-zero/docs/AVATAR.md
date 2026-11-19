@@ -104,13 +104,25 @@ The avatar screen IS the home screen, 320×170:
 - Renderer: cartoon sprite art (`lokicz/sprites/` — a smug idle
   sprite and an arms-up celebration sprite, generated 2026-11-17
   in the Bjorn/SquachWatch mascot style Justin picked) composited
-  by `ui.draw_loki`; the armor tier tints an aura disc behind him
-  and the wardrobe names the rest until per-tier sprite art
-  exists. The home screen animates him (gentle bob, sayings
-  rotate on a timer); level-ups and achievements cut to the
-  celebration sprite on the LCD and flash it in the portal. The
-  original flat-shape renderer remains as the fallback when the
-  sprite files are absent. The portal gets the same character as
+  by `ui.draw_loki`. Since 0.38 the wardrobe is real art, not
+  labels: `lokicz/avatar_render.py` layers the equipped gear
+  onto the sprite itself — armor palette-swaps his clothes
+  (leather / chainmail / plate / royal), horns swap or stretch
+  (longhorn is a smooth warp of the art's own horns; crown and
+  winged are drawn layers), the helm gem recolors or becomes a
+  gold stud, and cape + scepter draw behind / beside him.
+  Expressions are sprites too: `excited` for celebrations, plus
+  `sleepy` and `sneaky`, which are pixel edits of the base
+  sprite made by `tools/make_expressions.py` (new character art
+  can't be generated on demand — the image pipeline declines
+  this character — so the face is edited in place). The home
+  screen picks the mood by the clock: sleepy 23:00–06:59, a
+  sneaky side-glance one minute in ten, otherwise smug; the
+  portal shows sneaky while a job runs and flashes excited on
+  level-ups. Any renderer failure falls back to the plain
+  sprite (with the older aura disc), and the original
+  flat-shape renderer remains as the fallback when the sprite
+  files are absent. The portal gets the same character as
   a rendered PNG + a wardrobe panel (equip unlocked gear) +
   achievements grid + XP progress bar.
 - LCD: a LOKI character screen (portrait, level + title, XP bar,

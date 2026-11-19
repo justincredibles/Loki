@@ -578,6 +578,37 @@ def draw_loki(img, draw, box, gear: dict, mood: str = "idle",
     cx = x0 + w // 2
     spr = _sprite("excited" if mood == "excited" else "base")
     if spr is not None:
+        # Layered render (avatar_render): the wardrobe is
+        # composited onto the art itself — armor palette-swaps
+        # his clothes, horns / gem / cape / scepter are real
+        # layers, and moods pick the expression sprite. Any
+        # failure falls back to the plain sprite + aura below,
+        # so the home screen can never break on art.
+        try:
+            from . import avatar_render
+
+            frame_full = avatar_render.render(
+                gear, mood if mood in ("excited", "sleepy",
+                                       "sneaky") else "base")
+        except Exception:
+            frame_full = None
+        if frame_full is not None:
+            scale = min(w / frame_full.width,
+                        h / frame_full.height)
+            sw = max(1, int(frame_full.width * scale))
+            sh = max(1, int(frame_full.height * scale))
+            key = ("layered", mood,
+                   tuple(sorted(gear.items())), sw, sh)
+            frame = _SPRITES.get(key)
+            if frame is None:
+                from PIL import Image
+
+                frame = frame_full if (sw, sh) == frame_full.size \
+                    else frame_full.resize((sw, sh), Image.LANCZOS)
+                _SPRITES[key] = frame
+            img.paste(frame, (cx - sw // 2, y0 + h - sh + bob),
+                      frame)
+            return
         tier = gear.get("armor", "street")
         if _AURA.get(tier):
             r = min(w, h) // 2 - 1
@@ -728,7 +759,17 @@ def _home_img(item_label: str, level: int, title: str,
     img, draw = _base()
     _frame(draw, "LOKI", right=title.upper())
     draw.rectangle([6, 36, 112, 138], outline=FRAME, fill=PANEL)
-    draw_loki(img, draw, (8, 38, 102, 98), equipped, bob=bob)
+    # His expression follows the clock: sleepy overnight, a
+    # sneaky side-glance for one minute in ten, otherwise smug.
+    _now = time.localtime()
+    if _now.tm_hour >= 23 or _now.tm_hour < 7:
+        mood = "sleepy"
+    elif _now.tm_min % 10 == 7:
+        mood = "sneaky"
+    else:
+        mood = "idle"
+    draw_loki(img, draw, (8, 38, 102, 98), equipped, mood=mood,
+              bob=bob)
     draw.rectangle([120, 36, 162, 74], outline=GOLD_DARK, fill=PANEL)
     f_lv = _font("mono", 8)
     lv = "LEVEL"
@@ -803,7 +844,14 @@ def celebrate(lines: list[str]) -> None:
     img, draw = _base()
     _frame(draw, "LOKI", right="")
     draw.rectangle([6, 36, 128, 164], outline=GOLD_DARK, fill=PANEL)
-    draw_loki(img, draw, (8, 38, 118, 124), {}, mood="excited")
+    gear = {}
+    try:
+        from . import avatar as _avatar_mod
+
+        gear = _avatar_mod.load().get("gear", {})
+    except Exception:
+        pass
+    draw_loki(img, draw, (8, 38, 118, 124), gear, mood="excited")
     f_big = _font("mono-bold", 15)
     f_txt = _font("mono", 11)
     y = 52

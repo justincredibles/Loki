@@ -816,7 +816,8 @@ class Handler(BaseHTTPRequestHandler):
             mood = qs.get("mood", ["idle"])[0]
             self._send(200, ui.render_avatar_png(
                 avatar.load()["gear"],
-                mood=mood if mood == "excited" else "idle"),
+                mood=mood if mood in ("excited", "sleepy",
+                                      "sneaky") else "idle"),
                 "image/png")
         elif path == "/api/screenshot.png":
             try:

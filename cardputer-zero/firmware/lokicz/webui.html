@@ -432,6 +432,9 @@ function showJobBox(action) {
   $("job").style.display = "block";
   $("jobTitle").textContent = action.toUpperCase();
   $("jobResult").textContent = "";
+  // While a job runs, Loki gets his scheming face.
+  const avImg = document.getElementById("av-img");
+  if (avImg) avImg.src = "/api/avatar.png?mood=sneaky&t=" + Date.now();
   const fill = document.querySelector("#job .fill");
   fill.style.animation = "";
   fill.style.width = "";
@@ -472,6 +475,9 @@ function finishJob(action, j) {
     setTimeout(() => {
       avImg.src = "/api/avatar.png?t=" + Date.now();
     }, 3500);
+  } else {
+    const avImg = document.getElementById("av-img");
+    if (avImg) avImg.src = "/api/avatar.png?t=" + Date.now();
   }
   refreshStatus(); loadAudits(); loadCaptures(); loadTrackers(); loadAvatar(); loadFiles();
 }
