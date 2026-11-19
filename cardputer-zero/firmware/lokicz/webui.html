@@ -103,6 +103,27 @@
   #job .fill { height: 100%; width: 40%; background: var(--gold);
     animation: slide 1.2s ease-in-out infinite alternate; }
   @keyframes slide { from { margin-left: 0; } to { margin-left: 60%; } }
+  /* Pinned job status: pops down at the top of the screen and
+     stays put while the page scrolls. The job box itself lives
+     above the avatar, far from the action buttons on a phone —
+     this bar mirrors it so the status is always in reach.
+     Tap the bar to jump to the full result box; ✕ dismisses. */
+  #jobbar { position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    display: flex; align-items: center; gap: 10px;
+    padding: calc(9px + env(safe-area-inset-top)) 14px 9px;
+    background: linear-gradient(180deg, #0a2413, #050f08);
+    border-bottom: 2px solid var(--gold);
+    transform: translateY(-110%); transition: transform .25s ease;
+    cursor: pointer; }
+  #jobbar.show { transform: none; }
+  #jobbar .jb-main { flex: 1; min-width: 0; font-size: 13px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #jbTime { margin-left: 10px; }
+  #jobbar .jb-bar { position: absolute; left: 0; right: 0; bottom: 0;
+    height: 3px; overflow: hidden; }
+  #jobbar .jb-fill { height: 100%; width: 40%; background: var(--gold);
+    animation: slide 1.2s ease-in-out infinite alternate; }
+  #jbClose { flex: none; padding: 2px 9px; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th, td { text-align: left; padding: 5px 8px;
            border-bottom: 1px solid #0d2c17; }
@@ -168,6 +189,13 @@
 </style>
 </head>
 <body>
+<div id="jobbar">
+  <div class="jb-main"><b id="jbTitle" class="gold">WORKING</b>
+    <span id="jbMsg" class="dim"></span>
+    <span id="jbTime" class="dim"></span></div>
+  <button id="jbClose" class="ghost" title="dismiss">✕</button>
+  <div class="jb-bar"><div class="jb-fill"></div></div>
+</div>
 <header>
   <img src="/icon.png" alt="Loki helm">
   <div>
@@ -407,6 +435,14 @@ function showJobBox(action) {
   const fill = document.querySelector("#job .fill");
   fill.style.animation = "";
   fill.style.width = "";
+  // Mirror into the pinned top bar (see #jobbar in the CSS).
+  $("jobbar").classList.add("show");
+  $("jbTitle").textContent = action.toUpperCase();
+  $("jbMsg").textContent = "";
+  $("jbTime").textContent = "";
+  const jbf = document.querySelector("#jobbar .jb-fill");
+  jbf.style.animation = "";
+  jbf.style.width = "";
 }
 function finishJob(action, j) {
   $("jobTitle").textContent =
@@ -417,6 +453,12 @@ function finishJob(action, j) {
   document.querySelector("#job .fill").style.animation = "none";
   document.querySelector("#job .fill").style.width =
     j.state === "done" ? "100%" : "0";
+  $("jbTitle").textContent = $("jobTitle").textContent;
+  $("jbMsg").textContent =
+    ($("jobResult").textContent || "").split("\n")[0];
+  const jbf = document.querySelector("#jobbar .jb-fill");
+  jbf.style.animation = "none";
+  jbf.style.width = j.state === "done" ? "100%" : "0";
   if (action === "proximity" && j.state === "done") renderProx(j.result);
   if (action === "probes" && j.state === "done") renderProbes(j.result);
   if (j.state === "done" && j.avatar) {
@@ -433,6 +475,15 @@ function finishJob(action, j) {
   }
   refreshStatus(); loadAudits(); loadCaptures(); loadTrackers(); loadAvatar(); loadFiles();
 }
+/* Pinned-bar taps: the bar jumps to the full result box;
+   the ✕ dismisses the bar (the box keeps the result). */
+$("jobbar").addEventListener("click", () => {
+  $("job").scrollIntoView({behavior: "smooth", block: "start"});
+});
+$("jbClose").addEventListener("click", (e) => {
+  e.stopPropagation();
+  $("jobbar").classList.remove("show");
+});
 function pollJob(id, action, t0) {
   showJobBox(action);
   clearInterval(polling);
@@ -443,6 +494,8 @@ function pollJob(id, action, t0) {
     $("jobMsg").textContent = j.message || "";
     $("jobTime").textContent =
       Math.round((Date.now() - t0) / 1000) + "s";
+    $("jbMsg").textContent = j.message || "";
+    $("jbTime").textContent = $("jobTime").textContent;
     if (j.state !== "running") {
       clearInterval(polling);
       finishJob(action, j);
