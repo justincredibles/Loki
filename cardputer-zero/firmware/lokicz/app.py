@@ -404,39 +404,49 @@ def run() -> int:
                          "dim")]
                 radio_result = True
                 continue
-            if key == "1":
-                from .cc1101 import CC1101
+            try:
+                if key == "1":
+                    from .cc1101 import CC1101
 
-                with ui.Spinner("SUB-GHZ", "listening on both bands"):
-                    with CC1101() as radio:
-                        out = []
-                        for start, stop in ((430.0, 437.0),
-                                            (902.0, 928.0)):
-                            sweep = radio.sweep(start, stop, 0.5,
-                                                dwell_s=0.05)
-                            floor = sorted(r for _, r in sweep)[
-                                len(sweep) // 2]
-                            peak_f, peak_r = max(
-                                sweep, key=lambda t: t[1])
-                            out.append((f"{start:.0f}-{stop:.0f} MHZ",
-                                        f"FLR {floor:.0f} · "
-                                        f"PK {peak_r:.0f}@{peak_f:.0f}"))
-                rows = [("text", "BAND SWEEP COMPLETE", "ok")] + [
-                    ("kv", band, val, "text") for band, val in out]
-                _award("sweep", {})
+                    with ui.Spinner("SUB-GHZ",
+                                    "listening on both bands"):
+                        with CC1101() as radio:
+                            out = []
+                            for start, stop in ((430.0, 437.0),
+                                                (902.0, 928.0)):
+                                sweep = radio.sweep(start, stop, 0.5,
+                                                    dwell_s=0.05)
+                                floor = sorted(r for _, r in sweep)[
+                                    len(sweep) // 2]
+                                peak_f, peak_r = max(
+                                    sweep, key=lambda t: t[1])
+                                out.append(
+                                    (f"{start:.0f}-{stop:.0f} MHZ",
+                                     f"FLR {floor:.0f} · "
+                                     f"PK {peak_r:.0f}@{peak_f:.0f}"))
+                    rows = [("text", "BAND SWEEP COMPLETE", "ok")] + [
+                        ("kv", band, val, "text") for band, val in out]
+                    _award("sweep", {})
+                    radio_result = True
+                elif key in ("2", "3", "4"):
+                    freq = {"2": 433.92, "3": 315.0, "4": 915.0}[key]
+                    rows = _ook_capture(freq)
+                    radio_result = True
+                elif key == "5":
+                    rows = _replay_rows()
+                    radio_result = True
+                elif key == "6":
+                    rows = _nfc_rows()
+                    radio_result = True
+                else:
+                    rows = _radio_rows(cfg)
+            except Exception as exc:
+                # A radio hiccup must never kill the menu (the
+                # pre-0.32 'GPIO busy' crash bounced straight home).
+                rows = [("text", "RADIO ERROR", "warn"),
+                        ("text", f"{type(exc).__name__}: {exc}"[:60],
+                         "dim")]
                 radio_result = True
-            elif key in ("2", "3", "4"):
-                freq = {"2": 433.92, "3": 315.0, "4": 915.0}[key]
-                rows = _ook_capture(freq)
-                radio_result = True
-            elif key == "5":
-                rows = _replay_rows()
-                radio_result = True
-            elif key == "6":
-                rows = _nfc_rows()
-                radio_result = True
-            else:
-                rows = _radio_rows(cfg)
             continue
         if key == "0" and screen == "main":
             screen = "home"

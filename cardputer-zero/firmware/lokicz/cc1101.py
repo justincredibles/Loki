@@ -90,6 +90,58 @@ BASE_CONFIG = {
 }
 
 
+class _Line:
+    """One GPIO line, driven through lgpio directly — and FREED on
+    close(). Every radio user in this package goes through here.
+
+    Why not gpiozero: its lgpio backend's close() never frees the
+    line — it re-claims it as an input and leaves the claim parked
+    with the process until exit (see gpiozero/pins/lgpio.py). The
+    cap is shared between two long-lived processes (the on-device
+    menu and the web portal), so the first process to touch the
+    radio starved the other with 'GPIO busy' — the release-0.32
+    bug: a portal sweep left POWER_EN claimed, and the Radio Lab
+    then crashed the moment it tried to open the radio. lgpio's
+    gpio_free() is the reliable release, so close() calls it.
+    """
+
+    def __init__(self, gpio: int, output: bool = True) -> None:
+        import lgpio
+
+        self._lg = lgpio
+        self._gpio = gpio
+        self._h = lgpio.gpiochip_open(0)
+        try:
+            if output:
+                lgpio.gpio_claim_output(self._h, gpio, 0)
+            else:
+                lgpio.gpio_claim_input(self._h, gpio,
+                                       lgpio.SET_PULL_NONE)
+        except Exception:
+            lgpio.gpiochip_close(self._h)
+            self._h = None
+            raise
+
+    def on(self) -> None:
+        self._lg.gpio_write(self._h, self._gpio, 1)
+
+    def off(self) -> None:
+        self._lg.gpio_write(self._h, self._gpio, 0)
+
+    @property
+    def value(self) -> int:
+        return self._lg.gpio_read(self._h, self._gpio)
+
+    def close(self) -> None:
+        if self._h is None:
+            return
+        try:
+            self._lg.gpio_free(self._h, self._gpio)
+        finally:
+            self._lg.gpiochip_close(self._h)
+            self._h = None
+
+
 def _rail_on() -> None:
     """Switch the Zero's EXT 5V rail on (root write; sudo fallback)."""
     try:
@@ -114,10 +166,9 @@ class CC1101:
     # -- lifecycle ---------------------------------------------------------
     def __enter__(self) -> "CC1101":
         import spidev
-        from gpiozero import OutputDevice
 
         _rail_on()
-        self._pwr = OutputDevice(POWER_EN_GPIO)
+        self._pwr = _Line(POWER_EN_GPIO)
         self._pwr.on()
         time.sleep(0.05)
 
@@ -246,8 +297,6 @@ class CC1101:
         Flipper Sub-GHz RAW (.sub) file — the lingua franca for
         sharing raw remote-control captures.
         """
-        from gpiozero import DigitalInputDevice
-
         self.set_frequency(freq_mhz)
         self.write_reg(MDMCFG2, 0x73)   # OOK + 30/32 sync + carrier sense
         self.write_reg(PKTCTRL0, 0x32)  # async serial, infinite length
@@ -272,7 +321,7 @@ class CC1101:
         floor = sorted(floor_samples)[len(floor_samples) // 2]
         threshold = floor + 8.0
 
-        pin = DigitalInputDevice(GDO0_GPIO, pull_up=False)
+        pin = _Line(GDO0_GPIO, output=False)
         try:
             edges: list[tuple[int, int]] = []
             gate: list[tuple[int, bool]] = []
@@ -373,8 +422,6 @@ class CC1101:
         dead-airing gaps the squelch gate created, and the whole
         transmission is capped at ~15 s.
         """
-        from gpiozero import OutputDevice
-
         timeline: list[tuple[int, float]] = []
         for run in runs:
             level = 1 if run > 0 else 0
@@ -400,7 +447,7 @@ class CC1101:
         self._spi.xfer2([PATABLE | 0x40, 0x00, 0xC0, 0xC0, 0xC0,
                          0xC0, 0xC0, 0xC0, 0xC0])
 
-        pin = OutputDevice(GDO0_GPIO)
+        pin = _Line(GDO0_GPIO)
         try:
             pin.off()
             self.strobe(STX)

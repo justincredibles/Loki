@@ -155,15 +155,14 @@ class ST25R3916:
     # -- lifecycle ---------------------------------------------------------
     def __enter__(self) -> "ST25R3916":
         import spidev
-        from gpiozero import OutputDevice
 
-        from .cc1101 import _rail_on, POWER_EN_GPIO
+        from .cc1101 import _Line, _rail_on, POWER_EN_GPIO
 
         if not ensure_spidev():
             raise RuntimeError("/dev/spidev0.2 missing — NFC overlay "
                                "not loaded (is the CC1101 cap fitted?)")
         _rail_on()
-        self._pwr = OutputDevice(POWER_EN_GPIO)
+        self._pwr = _Line(POWER_EN_GPIO)
         self._pwr.on()
         time.sleep(0.05)
 
@@ -367,16 +366,15 @@ class ST25R3916:
 def probe() -> dict:
     """Power the cap and ask the NFC chip who it is."""
     import spidev
-    from gpiozero import OutputDevice
 
-    from .cc1101 import _rail_on, POWER_EN_GPIO
+    from .cc1101 import _Line, _rail_on, POWER_EN_GPIO
 
     result = {"spidev": ensure_spidev(), "identity": None,
               "found": False}
     if not result["spidev"]:
         return result
     _rail_on()
-    pwr = OutputDevice(POWER_EN_GPIO)
+    pwr = _Line(POWER_EN_GPIO)
     pwr.on()
     time.sleep(0.1)
     try:
