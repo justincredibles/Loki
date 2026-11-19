@@ -156,21 +156,53 @@ def _rail_on() -> None:
     )
 
 
+_POWER_LINE = None
+_POWER_BORROWED = False
+
+
+def _power_on() -> None:
+    """Assert POWER_EN — and keep it asserted for the life of the
+    process.
+
+    caps.py's rule, from M5Stack's own guidance: leave BOTH cap
+    power enables on while the cap is fitted. The cap shares SPI0
+    with the LCD, and an unpowered cap drags on the shared bus
+    lines; the panel loses sync and holds its last frame until the
+    whole device reboots. That was the 2026-11-18 'frozen screen'
+    saga: every radio session ended by dropping POWER_EN, and
+    every post-radio screen froze while the app sat healthy
+    behind it. (Rebinding the panel driver does NOT revive it —
+    only a real power cycle does — so prevention is the fix.)
+
+    So the line is claimed once, set high, and never dropped or
+    freed here. Two long-lived processes share the cap (the menu
+    and the web portal): if the other process already owns the
+    line, it is already high — borrow it and move on, instead of
+    failing with 'GPIO busy' (the 0.32 bug in reverse).
+    """
+    global _POWER_LINE, _POWER_BORROWED
+    if _POWER_LINE is not None or _POWER_BORROWED:
+        return
+    _rail_on()
+    try:
+        _POWER_LINE = _Line(POWER_EN_GPIO)
+        _POWER_LINE.on()
+    except Exception:
+        _POWER_BORROWED = True
+    time.sleep(0.05)
+
+
 class CC1101:
     """The fitted CC1101, powered and talking. Use as a context manager."""
 
     def __init__(self) -> None:
         self._spi = None
-        self._pwr = None
 
     # -- lifecycle ---------------------------------------------------------
     def __enter__(self) -> "CC1101":
         import spidev
 
-        _rail_on()
-        self._pwr = _Line(POWER_EN_GPIO)
-        self._pwr.on()
-        time.sleep(0.05)
+        _power_on()
 
         self._spi = spidev.SpiDev()
         self._spi.open(SPI_BUS, SPI_CS)
@@ -189,16 +221,11 @@ class CC1101:
         return self
 
     def __exit__(self, *exc) -> None:
-        try:
-            self.strobe(SIDLE)
-            self._spi.close()
-        finally:
-            # Per M5Stack's own app guidance, the EXT rail stays ON
-            # while the cap is fitted; POWER_EN is released with the
-            # process and re-asserted on the next open.
-            if self._pwr is not None:
-                self._pwr.off()
-                self._pwr.close()
+        self.strobe(SIDLE)
+        self._spi.close()
+        # POWER_EN is deliberately NOT dropped here — _power_on()
+        # holds it for the life of the process. Cutting cap power
+        # freezes the LCD (see _power_on).
 
     # -- SPI primitives ------------------------------------------------------
     def strobe(self, cmd: int) -> int:

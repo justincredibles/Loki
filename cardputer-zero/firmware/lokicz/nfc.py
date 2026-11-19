@@ -148,7 +148,6 @@ class ST25R3916:
 
     def __init__(self) -> None:
         self._spi = None
-        self._pwr = None
         self.identity = None
         self.vdd_mv = None
 
@@ -156,15 +155,12 @@ class ST25R3916:
     def __enter__(self) -> "ST25R3916":
         import spidev
 
-        from .cc1101 import _Line, _rail_on, POWER_EN_GPIO
+        from .cc1101 import _power_on
 
         if not ensure_spidev():
             raise RuntimeError("/dev/spidev0.2 missing — NFC overlay "
                                "not loaded (is the CC1101 cap fitted?)")
-        _rail_on()
-        self._pwr = _Line(POWER_EN_GPIO)
-        self._pwr.on()
-        time.sleep(0.05)
+        _power_on()
 
         self._spi = spidev.SpiDev()
         self._spi.open(0, 2)
@@ -179,14 +175,10 @@ class ST25R3916:
         return self
 
     def __exit__(self, *exc) -> None:
-        try:
-            if self._spi is not None:
-                self.write_reg(REG_OP_CONTROL, 0x00)  # field + osc off
-                self._spi.close()
-        finally:
-            if self._pwr is not None:
-                self._pwr.off()
-                self._pwr.close()
+        if self._spi is not None:
+            self.write_reg(REG_OP_CONTROL, 0x00)  # field + osc off
+            self._spi.close()
+        # POWER_EN stays asserted — see cc1101._power_on.
 
     # -- SPI transport -------------------------------------------------------
     def read_reg(self, addr: int) -> int:
@@ -367,30 +359,23 @@ def probe() -> dict:
     """Power the cap and ask the NFC chip who it is."""
     import spidev
 
-    from .cc1101 import _Line, _rail_on, POWER_EN_GPIO
+    from .cc1101 import _power_on
 
     result = {"spidev": ensure_spidev(), "identity": None,
               "found": False}
     if not result["spidev"]:
         return result
-    _rail_on()
-    pwr = _Line(POWER_EN_GPIO)
-    pwr.on()
-    time.sleep(0.1)
+    _power_on()
+    spi = spidev.SpiDev()
+    spi.open(0, 2)
+    spi.max_speed_hz = 1_000_000
+    spi.mode = 1  # the 3916 samples on the falling edge — see header
     try:
-        spi = spidev.SpiDev()
-        spi.open(0, 2)
-        spi.max_speed_hz = 1_000_000
-        spi.mode = 1  # the 3916 samples on the falling edge — see header
-        try:
-            # Register read framing: 0b01 + 6-bit address, then data.
-            reads = [spi.xfer2([0x40 | IDENTITY_REG, 0x00])[1]
-                     for _ in range(3)]
-        finally:
-            spi.close()
+        # Register read framing: 0b01 + 6-bit address, then data.
+        reads = [spi.xfer2([0x40 | IDENTITY_REG, 0x00])[1]
+                 for _ in range(3)]
     finally:
-        pwr.off()
-        pwr.close()
+        spi.close()
     result["identity"] = reads[0]
     result["stable"] = len(set(reads)) == 1
     result["found"] = (reads[0] & ST25R3916_IDENTITY_MASK) == ST25R3916_IDENTITY

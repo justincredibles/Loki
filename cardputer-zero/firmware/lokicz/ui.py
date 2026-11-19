@@ -115,9 +115,9 @@ def _push(img) -> None:
         with open(FB_DEVICE, "wb") as fb:
             fb.write(_to_rgb565(img))
     except OSError:
-        # The framebuffer node briefly disappears while the panel
-        # driver is rebound (see panel.py); a dropped frame is
-        # harmless — the next one lands on the healed panel.
+        # A dropped frame is harmless (the next one lands a beat
+        # later); never let a transient framebuffer hiccup kill
+        # the menu.
         pass
 
 

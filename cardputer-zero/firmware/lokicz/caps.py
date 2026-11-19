@@ -35,6 +35,12 @@ CC1101 = CapProfile(
         "2) Cap power enable = CM0 GPIO26 (POWER_EN), held high.",
         "Leave BOTH enables on while the cap is fitted — the cap shares"
         " SPI0 with the LCD and cutting its power can freeze the display.",
+        # RE-CONFIRMED the hard way 2026-11-18: the code cycled
+        # POWER_EN per radio session anyway, and the panel froze
+        # after EVERY session — app healthy behind a still frame,
+        # driver rebinds useless, only a reboot revived it.
+        # cc1101._power_on() now holds the line for good.
+        "POWER_EN is held, never cycled per session (2026-11-18).",
         # Confirmed on our hardware 2026-11-17 after enabling power:
         "CC1101 answers on spidev0.1: PARTNUM 0x00, VERSION 0x14,"
         " MARCSTATE 0x01 (idle) — a genuine, live chip.",
