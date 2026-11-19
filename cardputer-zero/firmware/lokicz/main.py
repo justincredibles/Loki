@@ -16,6 +16,17 @@ from . import caps, ui, wifi_recon
 
 
 def main() -> int:
+    # Wedge hunter (0.34): if the menu ever looks frozen again,
+    # SIGUSR1 makes every thread dump its Python stack to the
+    # journal (kill -USR1 <pid>) instead of leaving us guessing
+    # from kernel wchans.
+    import faulthandler
+    import signal
+
+    faulthandler.enable()
+    if hasattr(signal, "SIGUSR1"):
+        faulthandler.register(signal.SIGUSR1)
+
     if "--menu" in sys.argv:
         from . import app
 

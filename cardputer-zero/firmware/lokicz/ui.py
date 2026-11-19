@@ -788,7 +788,12 @@ def home_screen(item_label: str, level: int, title: str,
 
 def celebrate(lines: list[str]) -> None:
     """Level-up / achievement cut-in: the excited sprite, big,
-    next to the news. Waits for any key."""
+    next to the news. Waits for any key — re-pushing the frame
+    every few seconds while it waits, and giving up on its own
+    after 90 s. (The first version pushed once and blocked in
+    read_key(); when that frame didn't survive the display stack
+    the screen sat black and apparently frozen after a capture
+    that had levelled the avatar up — the 0.34 fix.)"""
     img, draw = _base()
     _frame(draw, "LOKI", right="")
     draw.rectangle([6, 36, 128, 164], outline=GOLD_DARK, fill=PANEL)
@@ -803,7 +808,12 @@ def celebrate(lines: list[str]) -> None:
     draw.text((140, 152), "ANY KEY", font=_font("mono", 8),
               fill=GOLD_DARK)
     _push(img)
-    read_key()
+    waited = 0.0
+    while waited < 90:
+        if read_key_timeout(5) is not None:
+            return
+        waited += 5
+        _push(img)
 
 
 def render_avatar_png(equipped: dict, w: int = 240,
