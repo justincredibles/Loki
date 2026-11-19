@@ -464,6 +464,14 @@ def run() -> int:
                         ("text", "SAME KEY RETRIES · ANY KEY BACK",
                          "dim")]
                 radio_result = True
+            if radio_result:
+                # Every radio session wedges the SPI panel (it holds
+                # its last frame — see panel.py). Rebind the panel
+                # driver BEFORE the result screen is drawn, or the
+                # result never reaches the glass.
+                from . import panel
+
+                panel.reset()
             continue
         if key == "0" and screen == "main":
             screen = "home"

@@ -111,8 +111,14 @@ def _to_rgb565(img) -> bytes:
 
 
 def _push(img) -> None:
-    with open(FB_DEVICE, "wb") as fb:
-        fb.write(_to_rgb565(img))
+    try:
+        with open(FB_DEVICE, "wb") as fb:
+            fb.write(_to_rgb565(img))
+    except OSError:
+        # The framebuffer node briefly disappears while the panel
+        # driver is rebound (see panel.py); a dropped frame is
+        # harmless — the next one lands on the healed panel.
+        pass
 
 
 # --- Drawing primitives ----------------------------------------------

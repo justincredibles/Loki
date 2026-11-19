@@ -279,6 +279,15 @@ def _run_job(job: dict, fn) -> None:
         job["state"] = "error"
         job["error"] = f"{type(exc).__name__}: {exc}"
     finally:
+        if job["action"] in ("sweep", "ook", "replay", "nfc"):
+            # A radio session wedges the LCD panel (see panel.py);
+            # rebind its driver so the menu's screen comes back.
+            try:
+                from . import panel
+
+                panel.reset()
+            except Exception:
+                pass
         job["ended"] = time.time()
         _op_lock.release()
 
