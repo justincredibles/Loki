@@ -135,6 +135,7 @@ def _ook_capture(freq: float) -> list:
         rows.append(("kv", "CONFIDENCE",
                      dec["confidence"].upper(), "ok"))
     rows.append(("kv", "FILE", path.name[:24], "dim"))
+    rows.append(("text", "SAME KEY RETRIES · ANY KEY BACK", "dim"))
     _award("ook", stats)
     return rows
 
@@ -154,9 +155,11 @@ def _replay_rows() -> list:
     if r.get("sent"):
         return [("big", "SENT", "ok"),
                 ("kv", "FILE", path.name[:24], "text"),
-                ("kv", "FRAMES", str(r["frames"]), "text")]
+                ("kv", "FRAMES", str(r["frames"]), "text"),
+                ("text", "SAME KEY RETRIES · ANY KEY BACK", "dim")]
     return [("text", "REPLAY FAILED", "bad"),
-            ("text", str(r.get("reason", ""))[:26], "dim")]
+            ("text", str(r.get("reason", ""))[:26], "dim"),
+            ("text", "SAME KEY RETRIES · ANY KEY BACK", "dim")]
 
 
 def _nfc_rows() -> list:
@@ -167,18 +170,22 @@ def _nfc_rows() -> list:
             r = nfc.scan_once()
         except RuntimeError as exc:
             return [("text", "NFC UNAVAILABLE", "bad"),
-                    ("text", str(exc)[:26], "dim")]
+                    ("text", str(exc)[:26], "dim"),
+                    ("text", "SAME KEY RETRIES · ANY KEY BACK", "dim")]
     _award("nfc", r)
     if r["found"]:
         return [("big", "TAG FOUND", "ok"),
                 ("kv", "UID", r["uid"][:20], "gold"),
                 ("kv", "ATQA", r["atqa"] or "—", "text"),
-                ("kv", "SAK", f"0x{r['sak']:02X}", "text")]
+                ("kv", "SAK", f"0x{r['sak']:02X}", "text"),
+                ("text", "SAME KEY RETRIES · ANY KEY BACK", "dim")]
     if r.get("collision"):
         return [("big", "COLLISION", "warn"),
-                ("text", "two tags — one at a time", "dim")]
+                ("text", "two tags — one at a time", "dim"),
+                ("text", "SAME KEY RETRIES · ANY KEY BACK", "dim")]
     return [("big", "NO TAG", "text"),
-            ("text", "nothing in the field", "dim")]
+            ("text", "nothing in the field", "dim"),
+            ("text", "SAME KEY RETRIES · ANY KEY BACK", "dim")]
 
 
 def _audit_rows(stats: dict) -> list:
@@ -308,6 +315,7 @@ def run() -> int:
     saying = avatar.saying()
     pending = None
     radio_result = False
+    radio_result_key = None
     while True:
         if pending is not None:
             key, pending = pending, None
@@ -391,12 +399,17 @@ def run() -> int:
             title = "RADIO"
             if radio_result:
                 radio_result = False
-                rows = _radio_rows(cfg)
-                continue
+                if key != radio_result_key or key not in \
+                        ("1", "2", "3", "4", "5", "6"):
+                    rows = _radio_rows(cfg)
+                    continue
+                # Same key again = retry the action that just ran:
+                # fall through and let the dispatch below re-run it.
             if key == "0":
                 screen = "main"
                 rows = _status_rows(cfg)
                 continue
+            radio_result_key = key
             if cfg["cap"] != "cc1101" and key in \
                     ("1", "2", "3", "4", "5", "6"):
                 rows = [("text", "NEEDS THE CC1101 CAP", "warn"),
@@ -426,6 +439,8 @@ def run() -> int:
                                      f"PK {peak_r:.0f}@{peak_f:.0f}"))
                     rows = [("text", "BAND SWEEP COMPLETE", "ok")] + [
                         ("kv", band, val, "text") for band, val in out]
+                    rows.append(("text", "SAME KEY RETRIES · ANY KEY "
+                                 "BACK", "dim"))
                     _award("sweep", {})
                     radio_result = True
                 elif key in ("2", "3", "4"):
@@ -445,6 +460,8 @@ def run() -> int:
                 # pre-0.32 'GPIO busy' crash bounced straight home).
                 rows = [("text", "RADIO ERROR", "warn"),
                         ("text", f"{type(exc).__name__}: {exc}"[:60],
+                         "dim"),
+                        ("text", "SAME KEY RETRIES · ANY KEY BACK",
                          "dim")]
                 radio_result = True
             continue

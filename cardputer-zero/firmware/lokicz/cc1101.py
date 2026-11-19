@@ -344,26 +344,37 @@ class CC1101:
             pin.close()
             self.strobe(SIDLE)
 
-        # Gate state at time t (5 ms hangover so a burst's tail
-        # isn't clipped), then edges -> run durations in µs
+        # Gate state along the timeline (5 ms hangover so a burst's
+        # tail isn't clipped), then edges -> run durations in µs
         # (signed: + = signal, - = gap, the Flipper RAW convention),
         # merging sub-60µs glitches and collapsing gated-off time
-        # into plain gaps.
-        def gate_open(t_ns: int) -> bool:
-            state = False
-            for gt, gv in gate:
-                if gt > t_ns + 5_000_000:
-                    break
-                if gt <= t_ns:
-                    state = gv
-                elif gv:
-                    state = True
-            return state
-
+        # into plain gaps. Edges arrive in time order, so one
+        # advancing pointer into the gate samples keeps this linear.
+        # The first version rescanned the gate list from the top for
+        # every edge — O(edges x gate) — and a strong fob signal
+        # (tens of thousands of edges) wedged the menu at full CPU
+        # for minutes after the window closed (the 0.33 fix).
         runs: list[int] = []
         timeline = [(start, 0)]
+        gi = 0
+        gate_base = False
         for t_ns, lv in edges:
-            if gate_open(t_ns):
+            while gi < len(gate) and gate[gi][0] <= t_ns:
+                gate_base = gate[gi][1]
+                gi += 1
+            gate_state = gate_base
+            if not gate_state:
+                # 5 ms hangover: a True sample just ahead still
+                # counts (peeked, not consumed — it becomes the
+                # base for later edges once its time passes).
+                j = gi
+                while j < len(gate) and \
+                        gate[j][0] <= t_ns + 5_000_000:
+                    if gate[j][1]:
+                        gate_state = True
+                        break
+                    j += 1
+            if gate_state:
                 timeline.append((t_ns, lv))
             elif timeline[-1][1] != 0:
                 timeline.append((t_ns, 0))
