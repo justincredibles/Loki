@@ -150,10 +150,13 @@ def summarize(ies: list[tuple[str, bytes]]) -> list[dict]:
 
 
 def capture(seconds: int = 24,
-            iface: str = "wlan1") -> list[dict]:
+            iface: str = "wlan1", stop_check=None) -> list[dict]:
     """Monitor-listen for DroneID Wi-Fi broadcasts; decode them.
 
-    Same release/restore choreography as the probe logger."""
+    Same release/restore choreography as the probe logger.
+    `stop_check` ends the listen early: tshark is terminated,
+    whatever landed in the pcap still gets decoded, and the
+    finally-restore returns the dongle to managed mode."""
     from . import capture as capture_mod
 
     capture_mod._release(iface)
@@ -173,9 +176,21 @@ def capture(seconds: int = 24,
                         "monitor"], capture_output=True)
         hopper = threading.Thread(target=hop, daemon=True)
         hopper.start()
-        subprocess.run(["sudo", "timeout", str(seconds), "tshark",
-                        "-i", iface, "-w", str(PCAP), "-q"],
-                       capture_output=True)
+        proc = subprocess.Popen(
+            ["sudo", "timeout", str(seconds), "tshark",
+             "-i", iface, "-w", str(PCAP), "-q"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        deadline = time.time() + seconds + 5
+        while proc.poll() is None and time.time() < deadline:
+            if stop_check and stop_check():
+                proc.terminate()
+                break
+            time.sleep(0.25)
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait(timeout=5)
         stop.set()
         hopper.join(timeout=3)
     finally:

@@ -102,8 +102,13 @@ class GpsReader(threading.Thread):
 
 
 def run_wardrive(seconds: int = 300, interval: int = 10,
-                 iface: str = "wlan0", progress=None) -> dict:
-    """Log new networks for `seconds`; return a session summary."""
+                 iface: str = "wlan0", progress=None,
+                 stop_check=None) -> dict:
+    """Log new networks for `seconds`; return a session summary.
+
+    `stop_check` ends the session early — rows are written and
+    flushed the moment each network is first seen, so the CSV
+    already holds everything collected; stopping loses nothing."""
     WARDRIVE_DIR.mkdir(parents=True, exist_ok=True)
     stamp = time.strftime("%Y%m%d-%H%M%S")
     path = WARDRIVE_DIR / f"wardrive-{stamp}.csv"
@@ -112,6 +117,7 @@ def run_wardrive(seconds: int = 300, interval: int = 10,
 
     seen: dict[str, dict] = {}
     sightings = 0
+    stopped = False
     with open(path, "w", newline="") as f:
         f.write(PREAMBLE + "\n")
         writer = csv.writer(f)
@@ -119,6 +125,9 @@ def run_wardrive(seconds: int = 300, interval: int = 10,
         f.flush()
         t_end = time.time() + seconds
         while time.time() < t_end:
+            if stop_check and stop_check():
+                stopped = True
+                break
             fix = gps.fix
             for ap in wifi_recon.scan_aps(iface):
                 sightings += 1
@@ -137,10 +146,17 @@ def run_wardrive(seconds: int = 300, interval: int = 10,
             f.flush()
             if progress:
                 progress(len(seen), gps.fix)
-            time.sleep(interval)
+            # Interval sleep in slices so a stop press lands fast.
+            slept = 0.0
+            while slept < interval:
+                if stop_check and stop_check():
+                    break
+                time.sleep(0.5)
+                slept += 0.5
 
     return {"file": str(path), "networks": len(seen),
-            "sightings": sightings, "gps_fix": gps.fix is not None}
+            "sightings": sightings, "gps_fix": gps.fix is not None,
+            "stopped": stopped}
 
 
 def main() -> int:

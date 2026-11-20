@@ -59,12 +59,15 @@ def match_wifi(ap: dict, sigs: list[dict]) -> list[dict]:
     return hits
 
 
-def scan_ble(seconds: int) -> tuple[list[dict], str]:
+def scan_ble(seconds: int, stop_check=None) -> tuple[list[dict], str]:
     """BLE observations: [{address, name, rssi, uuids}] + method used.
 
     btmon gives the full advertising payload (that's where service
     UUIDs live); bluetoothctl gives names/MACs only. We run both
     when btmon exists, else bluetoothctl alone.
+
+    `stop_check` ends the window early: bluetoothctl is
+    terminated and whatever it printed so far is still parsed.
     """
     devices: dict[str, dict] = {}
     method = "bluetoothctl"
@@ -78,16 +81,28 @@ def scan_ble(seconds: int) -> tuple[list[dict], str]:
         method = "btmon+bluetoothctl"
     except OSError:
         pass
+    out = ""
     try:
         # bluetoothctl needs its own --timeout to stay alive: a bare
         # one-shot `scan on` exits instantly and kills discovery
         # before any advertisement lands (verified on hardware —
         # 0 devices without it, 10 in 20 s with it).
-        ctl = subprocess.run(["bluetoothctl", "--timeout", str(seconds),
-                              "scan", "on"], capture_output=True,
-                             text=True, timeout=seconds + 15)
-        out = ctl.stdout or ""
-    except (OSError, subprocess.TimeoutExpired):
+        ctl = subprocess.Popen(["bluetoothctl", "--timeout",
+                                str(seconds), "scan", "on"],
+                               stdout=subprocess.PIPE,
+                               stderr=subprocess.DEVNULL, text=True)
+        deadline = time.time() + seconds + 15
+        while ctl.poll() is None and time.time() < deadline:
+            if stop_check and stop_check():
+                ctl.terminate()
+                break
+            time.sleep(0.25)
+        try:
+            out = ctl.communicate(timeout=5)[0] or ""
+        except subprocess.TimeoutExpired:
+            ctl.kill()
+            out = ctl.communicate(timeout=5)[0] or ""
+    except OSError:
         out = ""
     for p in procs:
         p.terminate()
@@ -153,7 +168,11 @@ def match_ble(dev: dict, sigs: list[dict]) -> list[dict]:
     return hits
 
 
-def run_sniff(seconds: int = 120, progress=None) -> dict:
+def run_sniff(seconds: int = 120, progress=None,
+              stop_check=None) -> dict:
+    def stopped() -> bool:
+        return bool(stop_check and stop_check())
+
     sigs = load_signatures()
     SNIFF_DIR.mkdir(parents=True, exist_ok=True)
     stamp = time.strftime("%Y%m%d-%H%M%S")
@@ -162,7 +181,7 @@ def run_sniff(seconds: int = 120, progress=None) -> dict:
     hits: dict[tuple, dict] = {}
     wifi_obs = ble_obs = 0
     ble_window = min(30, seconds)
-    ble_devices, method = scan_ble(ble_window)
+    ble_devices, method = scan_ble(ble_window, stop_check=stop_check)
     ble_obs = len(ble_devices)
     for dev in ble_devices:
         for hit in match_ble(dev, sigs):
@@ -171,7 +190,7 @@ def run_sniff(seconds: int = 120, progress=None) -> dict:
         progress(f"BLE done ({method}): {ble_obs} devices")
 
     t_end = time.time() + max(0, seconds - ble_window)
-    while True:
+    while not stopped():
         aps = wifi_recon.scan_aps("wlan0")
         wifi_obs += len(aps)
         for ap in aps:
@@ -181,7 +200,11 @@ def run_sniff(seconds: int = 120, progress=None) -> dict:
             progress(f"Wi-Fi: {wifi_obs} obs, hits so far: {len(hits)}")
         if time.time() >= t_end:
             break
-        time.sleep(10)
+        # Inter-scan pause in slices so a stop lands fast.
+        for _ in range(20):
+            if stopped() or time.time() >= t_end:
+                break
+            time.sleep(0.5)
 
     # v2: decode OpenDroneID Wi-Fi broadcasts on the dongle —
     # a decoded frame carries the drone's position AND its
@@ -190,12 +213,12 @@ def run_sniff(seconds: int = 120, progress=None) -> dict:
     try:
         from pathlib import Path as _P
 
-        if _P("/sys/class/net/wlan1").exists():
+        if not stopped() and _P("/sys/class/net/wlan1").exists():
             from . import droneid
 
             if progress:
                 progress("DroneID: decoding Wi-Fi broadcasts...")
-            for drone in droneid.capture(24):
+            for drone in droneid.capture(24, stop_check=stop_check):
                 detail = drone["id"] or ""
                 if drone.get("lat") is not None:
                     detail += f" @ {drone['lat']:.5f}," \
@@ -217,7 +240,8 @@ def run_sniff(seconds: int = 120, progress=None) -> dict:
         for hit in hits.values():
             f.write(json.dumps(hit) + "\n")
     return {"file": str(log_path), "hits": list(hits.values()),
-            "wifi_obs": wifi_obs, "ble_obs": ble_obs, "ble_method": method}
+            "wifi_obs": wifi_obs, "ble_obs": ble_obs,
+            "ble_method": method, "stopped": stopped()}
 
 
 def main() -> int:

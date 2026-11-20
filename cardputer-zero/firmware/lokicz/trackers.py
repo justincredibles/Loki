@@ -107,8 +107,11 @@ def known() -> list[dict]:
     return sorted(out, key=lambda d: order[d["verdict"]])
 
 
-def watch(seconds: int = 90) -> dict:
-    """Listen for trackers, fold the window into the history."""
+def watch(seconds: int = 90, stop_check=None) -> dict:
+    """Listen for trackers, fold the window into the history.
+
+    `stop_check` ends the window early: the scan is terminated
+    and whatever was heard still folds into the history."""
     run_id = time.strftime("%Y%m%d-%H%M%S")
     btmon_text = ""
     try:
@@ -118,10 +121,21 @@ def watch(seconds: int = 90) -> dict:
     except OSError:
         p = None
     try:
-        subprocess.run(["bluetoothctl", "--timeout", str(seconds),
-                        "scan", "on"], capture_output=True,
-                       text=True, timeout=seconds + 15)
-    except (OSError, subprocess.TimeoutExpired):
+        ctl = subprocess.Popen(["bluetoothctl", "--timeout",
+                                str(seconds), "scan", "on"],
+                               stdout=subprocess.DEVNULL,
+                               stderr=subprocess.DEVNULL, text=True)
+        deadline = time.time() + seconds + 15
+        while ctl.poll() is None and time.time() < deadline:
+            if stop_check and stop_check():
+                ctl.terminate()
+                break
+            time.sleep(0.25)
+        try:
+            ctl.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            ctl.kill()
+    except OSError:
         pass
     if p is not None:
         p.terminate()
@@ -154,7 +168,8 @@ def watch(seconds: int = 90) -> dict:
                     "verdict": _verdict(e)})
     out.sort(key=lambda d: d["rssi"], reverse=True)
     return {"found": out, "heard": len(heard),
-            "known_total": len(db), "seconds": seconds}
+            "known_total": len(db), "seconds": seconds,
+            "stopped": bool(stop_check and stop_check())}
 
 
 if __name__ == "__main__":

@@ -122,9 +122,11 @@ def _ook_capture(freq: float) -> list:
     stamp = _time.strftime("%Y%m%d-%H%M%S")
     path = subghz.SUBGHZ_DIR / f"ook-{freq:.2f}MHz-{stamp}.sub"
     with ui.Spinner("OOK CAPTURE", f"{freq} MHz — press the fob",
-                    expected=15):
+                    expected=15, abortable=True) as spinner:
         with CC1101() as radio:
-            stats = radio.capture_ook(freq, 15, str(path))
+            stats = radio.capture_ook(
+                freq, 15, str(path),
+                stop_check=spinner.stop_requested)
     dec = subghz.decode_file(str(path))
     rows = [("big", f"{stats['bursts']} BURSTS",
              "gold" if stats["bursts"] else "text"),
@@ -149,9 +151,15 @@ def _replay_rows() -> list:
         return [("text", "NO CAPTURES YET", "warn"),
                 ("text", "capture a fob first (2/3/4)", "dim")]
     path = subghz.SUBGHZ_DIR / found[0]["name"]
-    with ui.Spinner("REPLAY", f"sending {path.name[:18]} (TX)"):
+    with ui.Spinner("REPLAY", f"sending {path.name[:18]} (TX)",
+                    abortable=True) as spinner:
         with CC1101() as radio:
-            r = radio.replay_sub(str(path), 3)
+            r = radio.replay_sub(str(path), 3,
+                                 stop_check=spinner.stop_requested)
+    if r.get("stopped"):
+        return [("big", "STOPPED", "warn"),
+                ("kv", "FRAMES SENT", str(r.get("frames", 0)), "text"),
+                ("text", "SAME KEY RETRIES · ANY KEY BACK", "dim")]
     if r.get("sent"):
         return [("big", "SENT", "ok"),
                 ("kv", "FILE", path.name[:24], "text"),
@@ -372,8 +380,10 @@ def run() -> int:
                 title = "WPA-SEC"
                 rows = _wpasec_rows(cfg)
             elif key == "0":
-                with ui.Spinner("WPA-SEC", "upload + download"):
-                    r = wpasec.sync(cfg)
+                with ui.Spinner("WPA-SEC", "upload + download",
+                                abortable=True) as spinner:
+                    r = wpasec.sync(
+                        cfg, stop_check=spinner.stop_requested)
                 if r["ok"]:
                     _award("wpasec-sync", r)
                 if r["ok"]:
@@ -382,6 +392,12 @@ def run() -> int:
                              str(r["cracked_total"]), "gold"),
                             ("kv", "NEW THIS SYNC",
                              str(r["cracked_new"]), "text")]
+                elif r.get("stopped"):
+                    rows = [("big", "STOPPED", "warn"),
+                            ("kv", "UPLOADED BEFORE STOP",
+                             str(r["uploaded"]), "text"),
+                            ("text", "finished uploads stay marked",
+                             "dim")]
                 else:
                     rows = [("text", "WPA-SEC SYNC FAILED", "bad"),
                             ("text", r.get("reason",
@@ -422,13 +438,18 @@ def run() -> int:
                     from .cc1101 import CC1101
 
                     with ui.Spinner("SUB-GHZ",
-                                    "listening on both bands"):
+                                    "listening on both bands",
+                                    abortable=True) as spinner:
                         with CC1101() as radio:
                             out = []
                             for start, stop in ((430.0, 437.0),
                                                 (902.0, 928.0)):
-                                sweep = radio.sweep(start, stop, 0.5,
-                                                    dwell_s=0.05)
+                                sweep = radio.sweep(
+                                    start, stop, 0.5, dwell_s=0.05,
+                                    stop_check=spinner
+                                    .stop_requested)
+                                if not sweep:
+                                    continue  # stopped before a step
                                 floor = sorted(r for _, r in sweep)[
                                     len(sweep) // 2]
                                 peak_f, peak_r = max(
@@ -437,6 +458,13 @@ def run() -> int:
                                     (f"{start:.0f}-{stop:.0f} MHZ",
                                      f"FLR {floor:.0f} · "
                                      f"PK {peak_r:.0f}@{peak_f:.0f}"))
+                    if spinner.stop_requested() and not out:
+                        rows = [("big", "STOPPED", "warn"),
+                                ("text", "sweep cut short", "dim"),
+                                ("text", "SAME KEY RETRIES · ANY KEY "
+                                 "BACK", "dim")]
+                        radio_result = True
+                        continue
                     rows = [("text", "BAND SWEEP COMPLETE", "ok")] + [
                         ("kv", band, val, "text") for band, val in out]
                     rows.append(("text", "SAME KEY RETRIES · ANY KEY "
@@ -484,9 +512,15 @@ def run() -> int:
             elif key == "4":
                 from . import flights
 
-                with ui.Spinner("FLIGHT RADAR", "asking the sky..."):
+                with ui.Spinner("FLIGHT RADAR", "asking the sky...",
+                                abortable=True) as spinner:
                     r = flights.nearest(cfg)
-                if r["ok"]:
+                if spinner.stop_requested():
+                    # The lookup is one HTTP call (20 s timeout) —
+                    # a stop press lands as soon as it returns.
+                    rows = [("big", "STOPPED", "warn"),
+                            ("text", "lookup abandoned", "dim")]
+                elif r["ok"]:
                     blips = [(a["bearing"],
                               a["dist_nm"] / r["radius_nm"],
                               "gold" if not a["on_ground"] else "dim")
@@ -513,8 +547,10 @@ def run() -> int:
 
                 with ui.Spinner("PROXIMITY",
                                 "listening for nearby radios...",
-                                expected=25):
-                    r = proximity.scan(25)
+                                expected=25,
+                                abortable=True) as spinner:
+                    r = proximity.scan(
+                        25, stop_check=spinner.stop_requested)
                 if r["devices"]:
                     blips = [(d["bearing"], d["frac"],
                               "gold" if d["rssi"] > -60 else
@@ -536,8 +572,10 @@ def run() -> int:
 
                 with ui.Spinner("TRACKERS",
                                 "listening for trackers (90s)...",
-                                expected=90):
-                    r = trackers.watch(90)
+                                expected=90,
+                                abortable=True) as spinner:
+                    r = trackers.watch(
+                        90, stop_check=spinner.stop_requested)
                 if r["found"]:
                     rows = [("big", f"{r['heard']} TRACKERS",
                              "warn")]
@@ -559,8 +597,11 @@ def run() -> int:
 
                 with ui.Spinner("PROBES",
                                 "listening for probe requests...",
-                                expected=60):
-                    r = probes.run_probes(60, cfg["capture_iface"])
+                                expected=60,
+                                abortable=True) as spinner:
+                    r = probes.run_probes(
+                        60, cfg["capture_iface"],
+                        stop_check=spinner.stop_requested)
                 rows = [("big", f"{r['directed_devices']} DEVICES",
                          "gold" if r["directed_devices"] else "text"),
                         ("kv", "PROBES HEARD",
@@ -577,8 +618,13 @@ def run() -> int:
 
                 with ui.Spinner("GPS TRACK",
                                 "recording 2 min of sky...",
-                                expected=120):
-                    r = gpslog.track(120)
+                                expected=120,
+                                abortable=True) as spinner:
+                    r = gpslog.track(
+                        120,
+                        progress=lambda m: setattr(spinner,
+                                                   "message", m),
+                        stop_check=spinner.stop_requested)
                 if r["fix"]:
                     rows = [("big", f"{r['points']} POINTS", "gold"),
                             ("kv", "DISTANCE",
@@ -590,6 +636,10 @@ def run() -> int:
                     rows = [("big", "NO FIX", "warn"),
                             ("text", "no position in 2 min", "text"),
                             ("text", "GPS needs open sky", "dim")]
+                if r.get("stopped"):
+                    rows.append(("text",
+                                 f"stopped at {r['seconds']}s — "
+                                 "track saved", "dim"))
                 title = "GPS TRACK"
                 _award("gps", r)
             elif key == "9":
@@ -607,21 +657,29 @@ def run() -> int:
             with ui.Spinner("CAPTURE",
                             f"listening on {cfg['capture_iface']} — "
                             "deauth disabled",
-                            expected=cfg["capture_seconds"]):
-                stats = capture.run_capture(cfg["capture_seconds"],
-                                            cfg["capture_iface"])
+                            expected=cfg["capture_seconds"],
+                            abortable=True) as spinner:
+                stats = capture.run_capture(
+                    cfg["capture_seconds"], cfg["capture_iface"],
+                    stop_check=spinner.stop_requested)
             rows = [("big", f"{stats['hashes']} HASHES",
                      "gold" if stats["hashes"] else "text"),
                     ("kv", "EAPOL MSGS", str(stats["eapol"]), "text"),
                     ("kv", "PCAP SAVED", f"{stats['bytes'] // 1024} KB",
                      "text")]
+            if stats.get("stopped"):
+                rows.append(("text",
+                             f"stopped at {stats['seconds']}s — "
+                             "capture saved", "dim"))
             title = "CAPTURE"
             _award("capture", stats)
             if cfg.get("wpasec_enabled"):
                 from . import wpasec
 
-                with ui.Spinner("WPA-SEC", "auto-sync..."):
-                    r = wpasec.sync(cfg)
+                with ui.Spinner("WPA-SEC", "auto-sync...",
+                                abortable=True) as spinner2:
+                    r = wpasec.sync(
+                        cfg, stop_check=spinner2.stop_requested)
                 if r["ok"]:
                     _award("wpasec-sync", r)
                 if r["ok"]:
@@ -655,20 +713,29 @@ def run() -> int:
             from . import wardrive
 
             with ui.Spinner("WARDRIVE", "scanning — GPS logging",
-                            expected=cfg["wardrive_seconds"]):
-                stats = wardrive.run_wardrive(cfg["wardrive_seconds"])
+                            expected=cfg["wardrive_seconds"],
+                            abortable=True) as spinner:
+                stats = wardrive.run_wardrive(
+                    cfg["wardrive_seconds"],
+                    stop_check=spinner.stop_requested)
             rows = [("big", f"{stats['networks']} NETS", "gold"),
                     ("kv", "GPS FIX",
                      "YES" if stats["gps_fix"] else "NO — NEEDS SKY",
                      "ok" if stats["gps_fix"] else "warn")]
+            if stats.get("stopped"):
+                rows.append(("text", "stopped early — CSV saved",
+                             "dim"))
             title = "WARDRIVE"
             _award("wardrive", stats)
         elif key == "5":
             from . import sniffer
 
             with ui.Spinner("SNIFF", "passive — Wi-Fi + BLE",
-                            expected=cfg["sniff_seconds"]):
-                stats = sniffer.run_sniff(cfg["sniff_seconds"])
+                            expected=cfg["sniff_seconds"],
+                            abortable=True) as spinner:
+                stats = sniffer.run_sniff(
+                    cfg["sniff_seconds"],
+                    stop_check=spinner.stop_requested)
             rows = [("big", f"{len(stats['hits'])} HITS",
                      "bad" if stats["hits"] else "ok"),
                     ("kv", "OBSERVED",
@@ -678,6 +745,9 @@ def run() -> int:
                 rows.append(("text",
                              f"[{hit['confidence']}] {hit['label']}",
                              "warn"))
+            if stats.get("stopped"):
+                rows.append(("text", "stopped early — log saved",
+                             "dim"))
             title = "SNIFF"
             _award("sniff", stats)
         elif key == "6":
@@ -702,11 +772,16 @@ def run() -> int:
         elif key == "7":
             from . import audit
 
-            with ui.Spinner("AUDIT", "starting...") as spinner:
+            with ui.Spinner("AUDIT", "starting...",
+                            abortable=True) as spinner:
                 stats = audit.run_audit(
                     cfg, progress=lambda m: setattr(spinner,
-                                                    "message", m))
+                                                    "message", m),
+                    stop_check=spinner.stop_requested)
             rows = _audit_rows(stats)
+            if stats.get("aborted"):
+                rows.append(("text", "STOPPED — PARTIAL REPORT",
+                             "warn"))
             title = "AUDIT"
             _award("audit", stats)
         # any other key: just redraw the current screen

@@ -260,11 +260,17 @@ class CC1101:
         time.sleep(0.02)
 
     def sweep(self, start_mhz: float, stop_mhz: float, step_mhz: float,
-              dwell_s: float = 0.06) -> list[tuple[float, float]]:
-        """Step across a band, recording the strongest RSSI per step."""
+              dwell_s: float = 0.06,
+              stop_check=None) -> list[tuple[float, float]]:
+        """Step across a band, recording the strongest RSSI per step.
+
+        `stop_check` ends the sweep early (radio idled first);
+        the steps gathered so far are returned."""
         results = []
         f = start_mhz
         while f <= stop_mhz + 1e-9:
+            if stop_check and stop_check():
+                break
             self.set_frequency(f)
             self.enter_rx()
             best = -120.0
@@ -314,7 +320,7 @@ class CC1101:
 
 
     def capture_ook(self, freq_mhz: float, seconds: float,
-                    out_path: str) -> dict:
+                    out_path: str, stop_check=None) -> dict:
         """Raw OOK capture: async-serial demodulated bits off GDO0.
 
         The chip is reconfigured for ASK/OOK async serial mode
@@ -349,6 +355,7 @@ class CC1101:
         threshold = floor + 8.0
 
         pin = _Line(GDO0_GPIO, output=False)
+        stopped = False
         try:
             edges: list[tuple[int, int]] = []
             gate: list[tuple[int, bool]] = []
@@ -361,6 +368,15 @@ class CC1101:
                 if now >= deadline:
                     break
                 if now >= next_poll:
+                    # The stop check rides the existing ~4 ms
+                    # RSSI poll so the tight edge loop pays
+                    # nothing for it. A stop ends the capture
+                    # here; the edges already gathered still go
+                    # through decode + file write below.
+                    if stop_check and stop_check():
+                        stopped = True
+                        deadline = now
+                        break
                     gate.append((now, self.rssi_dbm() >= threshold))
                     next_poll = now + 4_000_000
                 v = pin.value
@@ -435,6 +451,7 @@ class CC1101:
                      if a < -10_000 and b > 0)
         pulses = [r for r in runs if r > 0]
         return {"file": str(path), "transitions": len(edges),
+                "stopped": stopped,
                 "runs": len(runs), "bursts": bursts,
                 "floor_dbm": floor, "threshold_dbm": threshold,
                 "shortest_pulse_us": min(pulses) if pulses else 0,
@@ -442,7 +459,7 @@ class CC1101:
 
 
     def transmit_ook(self, freq_mhz: float, runs: list[int],
-                     repeats: int = 3) -> dict:
+                     repeats: int = 3, stop_check=None) -> dict:
         """Replay signed µs runs as OOK, async-serial TX via GDO0.
 
         The mirror image of capture_ook: same async mode, but
@@ -486,12 +503,18 @@ class CC1101:
                          0xC0, 0xC0, 0xC0, 0xC0])
 
         pin = _Line(GDO0_GPIO)
+        stopped = False
         try:
             pin.off()
             self.strobe(STX)
             time.sleep(0.01)
             sent_frames = 0
             for _ in range(repeats):
+                # Stop checks land between frames, never inside
+                # one — a half-sent frame helps nobody.
+                if stop_check and stop_check():
+                    stopped = True
+                    break
                 t = time.perf_counter()
                 for level, dur in timeline:
                     if level:
@@ -510,18 +533,21 @@ class CC1101:
         finally:
             pin.close()
             self.strobe(SIDLE)
-        return {"sent": True, "frequency_mhz": freq_mhz,
+        return {"sent": sent_frames > 0, "stopped": stopped,
+                "frequency_mhz": freq_mhz,
                 "frames": sent_frames, "frame_seconds": round(frame_s, 3),
                 "runs": len(timeline)}
 
-    def replay_sub(self, path: str, repeats: int = 3) -> dict:
+    def replay_sub(self, path: str, repeats: int = 3,
+                   stop_check=None) -> dict:
         """Replay a recorded Flipper .sub file at its own frequency."""
         from .subghz import parse_sub
 
         freq_hz, runs = parse_sub(path)
         if not freq_hz or not runs:
             return {"sent": False, "reason": "empty or unreadable .sub"}
-        out = self.transmit_ook(freq_hz / 1e6, runs, repeats)
+        out = self.transmit_ook(freq_hz / 1e6, runs, repeats,
+                                stop_check=stop_check)
         out["file"] = path
         return out
 

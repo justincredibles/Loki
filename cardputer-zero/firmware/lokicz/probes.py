@@ -40,7 +40,8 @@ def _hop(iface: str, stop: threading.Event) -> None:
         stop.wait(1.5)
 
 
-def run_probes(seconds: int = 60, iface: str = "wlan1") -> dict:
+def run_probes(seconds: int = 60, iface: str = "wlan1",
+               stop_check=None) -> dict:
     PROBE_DIR.mkdir(parents=True, exist_ok=True)
     stamp = time.strftime("%Y%m%d-%H%M%S")
     log_path = PROBE_DIR / f"probes-{stamp}.jsonl"
@@ -105,7 +106,14 @@ def run_probes(seconds: int = 60, iface: str = "wlan1") -> dict:
         reader = threading.Thread(target=_reader, daemon=True)
         reader.start()
         try:
-            stop.wait(seconds)
+            # Deadline wait in slices: a stop press (LCD) ends
+            # the run early through this same teardown, and the
+            # outer finally still restores the dongle.
+            deadline = time.time() + seconds
+            while time.time() < deadline:
+                if stop_check and stop_check():
+                    break
+                stop.wait(0.25)
         finally:
             proc.terminate()
             try:
@@ -130,6 +138,7 @@ def run_probes(seconds: int = 60, iface: str = "wlan1") -> dict:
                         key=lambda d: -d["count"]):
             f.write(json.dumps(d) + "\n")
     return {"file": str(log_path), "seconds": seconds,
+            "stopped": bool(stop_check and stop_check()),
             "probes_total": total, "wildcard": wildcard,
             "devices": len(devices),
             "directed_devices": len(directed),

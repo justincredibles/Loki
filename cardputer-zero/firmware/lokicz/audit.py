@@ -44,10 +44,41 @@ MAX_CVES_PER_CPE = 50
 
 # --- nmap plumbing ----------------------------------------------------
 
-def _nmap_xml(args: list[str], timeout: int) -> ET.Element:
-    out = subprocess.run(["nmap", "-oX", "-", *args],
-                         capture_output=True, text=True, timeout=timeout)
-    return ET.fromstring(out.stdout)
+class _Aborted(Exception):
+    """The user pressed stop mid-audit (LCD stop_check)."""
+
+
+def _nmap_xml(args: list[str], timeout: int,
+              stop_check=None) -> ET.Element:
+    if stop_check is None:
+        out = subprocess.run(["nmap", "-oX", "-", *args],
+                             capture_output=True, text=True,
+                             timeout=timeout)
+        return ET.fromstring(out.stdout)
+    # Polling variant: the in-flight nmap gets killed the moment
+    # a stop is requested — no wedge, no zombie left scanning.
+    proc = subprocess.Popen(["nmap", "-oX", "-", *args],
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.DEVNULL, text=True)
+    deadline = time.time() + timeout
+    try:
+        while proc.poll() is None:
+            if stop_check():
+                proc.kill()
+                proc.wait(timeout=5)
+                raise _Aborted
+            if time.time() >= deadline:
+                proc.kill()
+                proc.wait(timeout=5)
+                raise subprocess.TimeoutExpired(args, timeout)
+            time.sleep(0.2)
+    except _Aborted:
+        raise
+    except Exception:
+        if proc.poll() is None:
+            proc.kill()
+        raise
+    return ET.fromstring(proc.stdout.read())
 
 
 def _text(el, path, attr=None, default=""):
@@ -85,9 +116,10 @@ def _arp_table() -> dict:
     return table
 
 
-def discover(subnet: str) -> list[dict]:
+def discover(subnet: str, stop_check=None) -> list[dict]:
     """Ping-sweep the subnet; return hosts that answered."""
-    root = _nmap_xml(["-sn", subnet], timeout=300)
+    root = _nmap_xml(["-sn", subnet], timeout=300,
+                     stop_check=stop_check)
     arp = _arp_table()
     hosts = []
     for host in root.iter("host"):
@@ -112,10 +144,11 @@ def discover(subnet: str) -> list[dict]:
     return hosts
 
 
-def scan_host(ip: str) -> list[dict]:
+def scan_host(ip: str, stop_check=None) -> list[dict]:
     """Top-ports service scan of one host; open ports only."""
     root = _nmap_xml(["-sV", "--top-ports", str(TOP_PORTS), "-T4",
-                      "--host-timeout", "120s", ip], timeout=240)
+                      "--host-timeout", "120s", ip], timeout=240,
+                     stop_check=stop_check)
     ports = []
     for port in root.iter("port"):
         if _text(port, "state", "state") != "open":
@@ -170,7 +203,7 @@ def _cvss(cve: dict):
 
 
 def cves_for_cpe(cpe23: str, api_key: str, cache: dict,
-                 pace: list) -> list[dict]:
+                 pace: list, stop_check=None) -> list[dict]:
     """CVEs for one CPE 2.3 name, cached; NVD-polite pacing.
 
     `pace` is a one-element list holding the last request time so
@@ -181,8 +214,13 @@ def cves_for_cpe(cpe23: str, api_key: str, cache: dict,
         return cache[cpe23]["cves"]
     delay = 0.7 if api_key else 6.5
     wait = delay - (time.time() - pace[0])
-    if wait > 0:
-        time.sleep(wait)
+    while wait > 0:
+        if stop_check and stop_check():
+            raise _Aborted
+        time.sleep(min(0.25, wait))
+        wait = delay - (time.time() - pace[0])
+    if stop_check and stop_check():
+        raise _Aborted
     params = urllib.parse.urlencode(
         {"cpeName": cpe23, "resultsPerPage": MAX_CVES_PER_CPE})
     req = urllib.request.Request(
@@ -223,47 +261,65 @@ def _severity(score) -> str:
 
 # --- The audit run -------------------------------------------------------
 
-def run_audit(cfg: dict, progress=lambda msg: None) -> dict:
-    """Full pass: discover, scan, correlate. Returns LCD stats."""
-    subnet = cfg.get("audit_subnet") or local_subnet()
-    progress("SWEEPING THE LAN...")
-    hosts = discover(subnet)
-    try:
-        from . import lan_discovery
+def run_audit(cfg: dict, progress=lambda msg: None,
+              stop_check=None) -> dict:
+    """Full pass: discover, scan, correlate. Returns LCD stats.
 
-        progress("ASKING DEVICES WHO THEY ARE...")
-        lan_discovery.enrich(hosts)
-    except Exception:
-        pass  # discovery is garnish; never break an audit for it
-    progress(f"{len(hosts)} HOSTS — SCANNING")
+    `stop_check` aborts the pass: an in-flight nmap is killed
+    (no zombie), and a PARTIAL report — hosts discovered and
+    scanned so far, flagged "aborted" — is still written, so
+    stopping never throws away finished work."""
+    subnet = cfg.get("audit_subnet") or local_subnet()
+    hosts: list[dict] = []
     cache = _load_cache()
     pace = [0.0]
     api_key = cfg.get("nvd_api_key", "")
     cpe_seen: dict[str, list] = {}
-    scanned = 0
-    for host in hosts:
-        if scanned >= MAX_FULL_SCANS:
-            break
-        scanned += 1
-        progress(f"SCAN {scanned}/{min(len(hosts), MAX_FULL_SCANS)}"
-                 f" {host['ip'].split('.')[-1]}")
+    aborted = False
+    try:
+        progress("SWEEPING THE LAN...")
+        hosts = discover(subnet, stop_check=stop_check)
         try:
-            host["ports"] = scan_host(host["ip"])
-            host["scanned"] = True
-        except (subprocess.SubprocessError, ET.ParseError):
-            host["ports"] = []
-    # Correlate: one NVD lookup per unique product CPE.
-    jobs = {}
-    for host in hosts:
-        for port in host["ports"]:
-            for cpe in port["cpes"]:
-                jobs.setdefault(_cpe23(cpe, port["version"]), None)
-    for i, cpe23 in enumerate(jobs, 1):
-        progress(f"CVE CHECK {i}/{len(jobs)}")
-        try:
-            cpe_seen[cpe23] = cves_for_cpe(cpe23, api_key, cache, pace)
+            from . import lan_discovery
+
+            progress("ASKING DEVICES WHO THEY ARE...")
+            lan_discovery.enrich(hosts)
         except Exception:
-            cpe_seen[cpe23] = []  # network/API trouble — report says so
+            pass  # discovery is garnish; never break an audit for it
+        if stop_check and stop_check():
+            raise _Aborted
+        progress(f"{len(hosts)} HOSTS — SCANNING")
+        scanned = 0
+        for host in hosts:
+            if scanned >= MAX_FULL_SCANS:
+                break
+            scanned += 1
+            progress(f"SCAN {scanned}/{min(len(hosts), MAX_FULL_SCANS)}"
+                     f" {host['ip'].split('.')[-1]}")
+            try:
+                host["ports"] = scan_host(host["ip"],
+                                          stop_check=stop_check)
+                host["scanned"] = True
+            except (subprocess.SubprocessError, ET.ParseError):
+                host["ports"] = []
+        # Correlate: one NVD lookup per unique product CPE.
+        jobs = {}
+        for host in hosts:
+            for port in host["ports"]:
+                for cpe in port["cpes"]:
+                    jobs.setdefault(_cpe23(cpe, port["version"]), None)
+        for i, cpe23 in enumerate(jobs, 1):
+            progress(f"CVE CHECK {i}/{len(jobs)}")
+            try:
+                cpe_seen[cpe23] = cves_for_cpe(
+                    cpe23, api_key, cache, pace, stop_check=stop_check)
+            except _Aborted:
+                raise
+            except Exception:
+                cpe_seen[cpe23] = []  # network/API trouble — says so
+    except _Aborted:
+        aborted = True
+        progress("STOPPED — SAVING PARTIAL REPORT")
     _save_cache(cache)
     for host in hosts:
         for port in host["ports"]:
@@ -279,10 +335,12 @@ def run_audit(cfg: dict, progress=lambda msg: None) -> dict:
     AUDIT_DIR.mkdir(parents=True, exist_ok=True)
     stamp = time.strftime("%Y%m%d-%H%M%S")
     report = {"started": time.strftime("%Y-%m-%d %H:%M"),
-              "subnet": subnet, "hosts": hosts}
+              "subnet": subnet, "hosts": hosts,
+              "aborted": aborted}
     path = AUDIT_DIR / f"audit-{stamp}.json"
     path.write_text(json.dumps(report, indent=1) + "\n")
-    return summarize(report) | {"file": path.name}
+    return summarize(report) | {"file": path.name,
+                                "aborted": aborted}
 
 
 def summarize(report: dict) -> dict:

@@ -130,11 +130,15 @@ def _download_found(key: str) -> list[str]:
 
 # --- the sync ------------------------------------------------------------------
 
-def sync(cfg: dict) -> dict:
+def sync(cfg: dict, stop_check=None) -> dict:
     """Upload new captures, then download cracked results.
 
     Returns a plain result dict; never raises for expected
     problems (off, no key, no network) — the reason is in the dict.
+
+    `stop_check` ends the sync between uploads: state is still
+    saved (finished uploads stay marked) and the result carries
+    "stopped": True instead of attempting the download.
     """
     if not cfg.get("wpasec_enabled"):
         return {"ok": False, "reason": "WPA-SEC is off"}
@@ -147,7 +151,11 @@ def sync(cfg: dict) -> dict:
 
     state = _load_state()
     uploaded_now, failures = 0, 0
+    stopped = False
     for path in pending_uploads(state):
+        if stop_check and stop_check():
+            stopped = True
+            break
         try:
             _upload_one(path, key)
             state["uploaded"].append(path.name)
@@ -155,22 +163,25 @@ def sync(cfg: dict) -> dict:
         except (WpasecError, OSError):
             failures += 1
     new_cracks = 0
-    try:
-        fresh = _download_found(key)
-        known = set(cracked_lines())
-        CAPTURE_DIR.mkdir(parents=True, exist_ok=True)
-        with FOUND_PATH.open("a") as f:
-            for ln in fresh:
-                if ln not in known:
-                    f.write(ln + "\n")
-                    new_cracks += 1
-    except WpasecError:
-        failures += 1
+    if not stopped:
+        try:
+            fresh = _download_found(key)
+            known = set(cracked_lines())
+            CAPTURE_DIR.mkdir(parents=True, exist_ok=True)
+            with FOUND_PATH.open("a") as f:
+                for ln in fresh:
+                    if ln not in known:
+                        f.write(ln + "\n")
+                        new_cracks += 1
+        except WpasecError:
+            failures += 1
     state["last_sync"] = time.strftime("%Y-%m-%d %H:%M:%S")
     _save_state(state)
-    return {"ok": failures == 0, "uploaded": uploaded_now,
+    return {"ok": failures == 0 and not stopped,
+            "uploaded": uploaded_now,
             "failures": failures, "cracked_new": new_cracks,
-            "cracked_total": len(cracked_lines())}
+            "cracked_total": len(cracked_lines()),
+            "stopped": stopped}
 
 
 def main() -> int:

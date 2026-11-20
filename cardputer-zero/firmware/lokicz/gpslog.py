@@ -55,7 +55,16 @@ def _iso(epoch: float) -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(epoch))
 
 
-def track(seconds: int = 120, progress=lambda msg: None) -> dict:
+def track(seconds: int = 120, progress=lambda msg: None,
+          stop_check=None) -> dict:
+    """Record a track for `seconds`.
+
+    `stop_check` (a callable returning True) ends the run early:
+    the track is finalized exactly as on a natural finish — same
+    GPX + JSON sidecar — with the points gathered so far and the
+    actual elapsed seconds. The portal passes no stop_check and
+    always gets the full window.
+    """
     TRACK_DIR.mkdir(parents=True, exist_ok=True)
     stamp = time.strftime("%Y%m%d-%H%M%S")
     reader = wardrive.GpsReader()
@@ -64,8 +73,13 @@ def track(seconds: int = 120, progress=lambda msg: None) -> dict:
     distance = 0.0
     max_sats = 0
     last_recorded = 0.0
-    end = time.time() + seconds
+    t0 = time.time()
+    end = t0 + seconds
+    stopped = False
     while time.time() < end:
+        if stop_check and stop_check():
+            stopped = True
+            break
         fix = reader.fix
         if fix:
             max_sats = max(max_sats, fix.get("sats", 0))
@@ -77,14 +91,21 @@ def track(seconds: int = 120, progress=lambda msg: None) -> dict:
                 points.append({"lat": fix["lat"], "lon": fix["lon"],
                                "alt": fix.get("alt", 0.0), "t": now})
                 last_recorded = now
-                progress(f"{len(points)} PTS · {distance:.0f} M")
-        time.sleep(1)
+        progress(f"{len(points)} PTS · {distance:.0f} M · "
+                 f"{max_sats} SATS" if points or max_sats
+                 else "WAITING FOR FIX...")
+        # Sleep in slices so a stop press lands within ~0.25 s.
+        for _ in range(4):
+            if stop_check and stop_check():
+                break
+            time.sleep(0.25)
     gpx_path = TRACK_DIR / f"track-{stamp}.gpx"
     _write_gpx(points, gpx_path, stamp)
     summary = {"file": gpx_path.name, "when": _iso(time.time()),
-               "seconds": seconds, "points": len(points),
+               "seconds": int(round(time.time() - t0)),
+               "points": len(points),
                "distance_m": round(distance), "max_sats": max_sats,
-               "fix": bool(points)}
+               "fix": bool(points), "stopped": stopped}
     (TRACK_DIR / f"track-{stamp}.json").write_text(
         json.dumps(summary, indent=1) + "\n")
     return summary

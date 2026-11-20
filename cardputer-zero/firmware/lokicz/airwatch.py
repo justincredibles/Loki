@@ -26,6 +26,7 @@ busy honestly. Detection only — nothing here transmits.
 
 import subprocess
 import threading
+import time
 from collections import Counter, defaultdict
 
 from . import capture, deauth, probes
@@ -108,7 +109,8 @@ def analyze(frames: list[tuple]) -> dict:
             "beacon_flood": flood, "karma_suspects": karma}
 
 
-def watch(seconds: int = 60, iface: str = "wlan1") -> dict:
+def watch(seconds: int = 60, iface: str = "wlan1",
+          stop_check=None) -> dict:
     capture._release(iface)
     stop = threading.Event()
     frames: list[tuple] = []
@@ -143,7 +145,14 @@ def watch(seconds: int = 60, iface: str = "wlan1") -> dict:
         reader = threading.Thread(target=_reader, daemon=True)
         reader.start()
         try:
-            stop.wait(seconds)
+            # Deadline wait in slices: a stop press ends the
+            # watch early through this same teardown, and the
+            # outer finally still restores the dongle.
+            deadline = time.time() + seconds
+            while time.time() < deadline:
+                if stop_check and stop_check():
+                    break
+                stop.wait(0.25)
         finally:
             proc.terminate()
             try:
@@ -158,4 +167,5 @@ def watch(seconds: int = 60, iface: str = "wlan1") -> dict:
     out = analyze(frames)
     out["seconds"] = seconds
     out["frames"] = len(frames)
+    out["stopped"] = bool(stop_check and stop_check())
     return out

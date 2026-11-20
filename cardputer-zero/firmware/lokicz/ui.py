@@ -921,13 +921,43 @@ class Spinner:
     a gold progress bar (real fraction when `expected` seconds is
     known, a sliding block when it isn't) plus an elapsed clock,
     redrawn by a background thread until the block exits.
+
+    With `abortable=True` the spinner also watches the keyboard
+    on its own thread: pressing 0 (the app's back key), q or esc
+    sets the abort flag, the footer advertises it ("PRESS 0 TO
+    STOP"), and the operation polls `stop_requested()` from its
+    run loop to wind down through its normal cleanup path —
+    saving whatever partial results it has. Operations that
+    don't poll simply run to completion as before.
     """
 
-    def __init__(self, title: str, message: str, expected: float = 0):
+    STOP_KEYS = ("0", "q", "esc")
+
+    def __init__(self, title: str, message: str, expected: float = 0,
+                 abortable: bool = False):
         self.title, self.message, self.expected = title, message, expected
+        self.abortable = abortable
         self._stop = threading.Event()
         self._thread = None
         self._t0 = 0.0
+        self._abort = threading.Event()
+        self._keys_stop = threading.Event()
+        self._key_thread = None
+
+    def stop_requested(self) -> bool:
+        """True once the user has pressed a stop key (abortable
+        spinners only). Hand this to run loops as `stop_check`."""
+        return self._abort.is_set()
+
+    def _watch_keys(self):
+        while not self._keys_stop.is_set():
+            try:
+                key = read_key_timeout(0.25)
+            except Exception:
+                return  # no keyboard (headless) — nothing to watch
+            if key in self.STOP_KEYS:
+                self._abort.set()
+                return
 
     def _frame_img(self):
         img, draw = _base()
@@ -948,6 +978,9 @@ class Spinner:
         tick = "▮" if int(elapsed * 2) % 2 else "▯"
         draw.text((SCREEN_W - 24, 100), tick, font=_font("mono", 11),
                   fill=EMERALD)
+        if self.abortable:
+            draw.text((10, 150), "PRESS 0 TO STOP",
+                      font=_font("mono", 10), fill=DIM)
         return img
 
     def _loop(self):
@@ -962,12 +995,19 @@ class Spinner:
         self._t0 = time.time()
         self._thread = threading.Thread(target=self._loop, daemon=True)
         self._thread.start()
+        if self.abortable:
+            self._key_thread = threading.Thread(
+                target=self._watch_keys, daemon=True)
+            self._key_thread.start()
         return self
 
     def __exit__(self, *exc):
         self._stop.set()
         if self._thread:
             self._thread.join(timeout=1)
+        self._keys_stop.set()
+        if self._key_thread:
+            self._key_thread.join(timeout=1.5)
         return False
 
 

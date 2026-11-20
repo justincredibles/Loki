@@ -56,8 +56,8 @@ def slot_bearing(address: str) -> int:
     return int(digest[:4], 16) % 360
 
 
-def scan(seconds: int = 25) -> dict:
-    devices, method = sniffer.scan_ble(seconds)
+def scan(seconds: int = 25, stop_check=None) -> dict:
+    devices, method = sniffer.scan_ble(seconds, stop_check=stop_check)
     out = []
     for dev in devices:
         if not dev["rssi"]:
@@ -74,6 +74,7 @@ def scan(seconds: int = 25) -> dict:
     out.sort(key=lambda d: d["rssi"], reverse=True)
     return {"devices": out, "count": len(out), "method": method,
             "seconds": seconds,
+            "stopped": bool(stop_check and stop_check()),
             "spam_suspects": spam_suspects(out)}
 
 

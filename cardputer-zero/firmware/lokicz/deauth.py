@@ -49,7 +49,8 @@ def grade(total: int, top_count: int) -> tuple[str, str]:
             "a few deauths — ordinary AP/client housekeeping")
 
 
-def watch(seconds: int = 60, iface: str = "wlan1") -> dict:
+def watch(seconds: int = 60, iface: str = "wlan1",
+          stop_check=None) -> dict:
     capture._release(iface)
     stop = threading.Event()
     counts: Counter = Counter()
@@ -91,7 +92,14 @@ def watch(seconds: int = 60, iface: str = "wlan1") -> dict:
         reader = threading.Thread(target=_reader, daemon=True)
         reader.start()
         try:
-            stop.wait(seconds)
+            # Deadline wait in slices: a stop press ends the
+            # watch early through this same teardown, and the
+            # outer finally still restores the dongle.
+            deadline = time.time() + seconds
+            while time.time() < deadline:
+                if stop_check and stop_check():
+                    break
+                stop.wait(0.25)
         finally:
             proc.terminate()
             try:
@@ -107,7 +115,9 @@ def watch(seconds: int = 60, iface: str = "wlan1") -> dict:
     top = [{"mac": mac, "count": n}
            for mac, n in counts.most_common(5)]
     level, verdict = grade(total, top[0]["count"] if top else 0)
-    return {"seconds": seconds, "total": total,
+    return {"seconds": seconds,
+            "stopped": bool(stop_check and stop_check()),
+            "total": total,
             "deauth": kinds.get("12", 0),
             "disassoc": kinds.get("10", 0),
             "top_sources": top, "level": level,

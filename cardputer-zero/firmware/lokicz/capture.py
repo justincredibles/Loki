@@ -53,12 +53,21 @@ def _restore(iface: str) -> None:
     _run(f"nmcli device set {iface} managed yes")
 
 
-def run_capture(seconds: int = 90, iface: str = "wlan1") -> dict:
-    """Run one timed capture and return honest stats about it."""
+def run_capture(seconds: int = 90, iface: str = "wlan1",
+                stop_check=None) -> dict:
+    """Run one timed capture and return honest stats about it.
+
+    `stop_check` ends the run early via the same SIGINT path as
+    the natural timeout: hcxdumptool closes the pcapng cleanly,
+    the partial capture is scored like any other, and the
+    finally-restore returns the dongle to managed mode either
+    way. The portal passes no stop_check (full window)."""
     CAPTURE_DIR.mkdir(parents=True, exist_ok=True)
     stamp = time.strftime("%Y%m%d-%H%M%S")
     pcapng = CAPTURE_DIR / f"capture-{stamp}.pcapng"
     _release(iface)
+    stopped = False
+    t0 = time.time()
     try:
         # SIGINT lets hcxdumptool close the pcapng cleanly.
         proc = subprocess.Popen(
@@ -66,15 +75,24 @@ def run_capture(seconds: int = 90, iface: str = "wlan1") -> dict:
              "--disable_deauthentication"],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
         )
-        try:
-            out, _ = proc.communicate(timeout=seconds)
-        except subprocess.TimeoutExpired:
-            proc.send_signal(2)  # SIGINT
-            out, _ = proc.communicate(timeout=15)
+        out = ""
+        while True:
+            try:
+                out, _ = proc.communicate(timeout=0.5)
+                break
+            except subprocess.TimeoutExpired:
+                if stop_check and stop_check():
+                    stopped = True
+                if stopped or time.time() - t0 >= seconds:
+                    proc.send_signal(2)  # SIGINT
+                    out, _ = proc.communicate(timeout=15)
+                    break
     finally:
         _restore(iface)
 
-    stats = {"pcapng": str(pcapng), "seconds": seconds,
+    stats = {"pcapng": str(pcapng),
+             "seconds": int(round(time.time() - t0)),
+             "stopped": stopped,
              "bytes": pcapng.stat().st_size if pcapng.exists() else 0,
              "hashes": 0, "pmkid": 0, "eapol": 0,
              "tool_tail": "\n".join((out or "").splitlines()[-3:])}
