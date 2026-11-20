@@ -19,12 +19,13 @@ Plain-English tour:
   unpowered device drags on the shared SPI0 bus and desyncs
   the built-in LCD; only a reboot revives it.
 
-STATUS: pre-built on branch tft-driver (2026-11-19) before the
-panel was wired, and verified headless with mocked spidev/lgpio
-(init order + frame packing). TODO-VERIFY on real hardware:
-the 40 MHz SPI clock, the MADCTL orientation value (flip bits
-if the image lands rotated/mirrored), and the gamma/init table
-against this exact clone panel.
+STATUS: PROVEN on the real panel 2026-11-19 — wired per
+docs/DISPLAY-HAT.md, the test pattern landed sharp with correct
+orientation and colors at the 40 MHz clock with MADCTL 0x28,
+confirmed by Justin's own eyes. Integrated into the app in
+release 0.40: app.py constructs one ILI9341 in the "tft"
+profile and ui.py renders every screen to it at 320x240
+alongside the built-in LCD.
 """
 
 import time

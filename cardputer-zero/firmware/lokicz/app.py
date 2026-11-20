@@ -307,10 +307,44 @@ def _stop() -> int:
     return 0
 
 
+def _start_display_hat(cfg: dict):
+    """Bring up the display hat when the tft profile is fitted.
+
+    Constructs ONE ili9341.ILI9341, enters it, and registers it
+    as ui's TFT sink; run() holds the returned object for the
+    life of the process (the driver's power claim follows the
+    0.36 claim-once rule — never cycled, never reconstructed
+    per frame). Returns the panel, or None.
+
+    A panel that won't init (unplugged, a jumper worked loose)
+    is a journal line, not a crash: the menu carries on on the
+    built-in screen alone — the same philosophy as the 0.32
+    radio error guard. Other cap profiles return before the
+    driver is even imported, so their startup is untouched.
+    """
+    if cfg.get("cap") != "tft":
+        return None
+    try:
+        from . import ili9341
+
+        tft = ili9341.ILI9341()
+        tft.__enter__()
+    except Exception as exc:
+        print(f"lokicz: display hat unavailable ({exc}) — "
+              "built-in screen only", flush=True)
+        return None
+    ui.set_tft_sink(tft)
+    print("lokicz: display hat live — menu also renders on the "
+          "big screen", flush=True)
+    return tft
+
+
 def run() -> int:
     from . import avatar
 
     cfg = config.load()
+    # Held for the whole run: the display hat (tft profile only).
+    _hat = _start_display_hat(cfg)
     try:
         ui.splash()
     except OSError:

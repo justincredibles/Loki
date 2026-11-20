@@ -151,6 +151,66 @@ def _push(img) -> None:
         pass
 
 
+# --- Display-hat sink (release 0.40) ----------------------------------
+# When the "tft" cap profile is fitted, app.py constructs ONE
+# ili9341.ILI9341 and registers it here. Every screen then renders
+# TWICE via _emit(): once at the caller's surface (LCD_SIZE —
+# the built-in panel's behaviour is byte-for-byte what it always
+# was) and once at TFT_SIZE, so the big screen gets a native
+# 320x240 layout instead of a stretched copy of the small one.
+# The hat is a bonus display, never a dependency: sink errors are
+# swallowed exactly like framebuffer hiccups in _push, and with
+# no sink registered _emit() is just _push().
+_tft_sink = None
+_tft_last_frame = None
+_emit_lock = threading.RLock()
+
+
+def set_tft_sink(sink) -> None:
+    """Register (or clear, with None) the display-hat sink — any
+    object with .show(pil_image), e.g. ili9341.ILI9341."""
+    global _tft_sink
+    _tft_sink = sink
+
+
+def tft_last_frame():
+    """The most recent frame handed to the display hat (a PIL
+    image at TFT_SIZE), or None when no hat is fitted."""
+    return _tft_last_frame
+
+
+def _emit(build) -> None:
+    """Push one logical screen to every fitted surface.
+
+    `build()` renders the screen at the current surface size and
+    returns the PIL image. The built-in LCD render happens first,
+    exactly as the pre-hat code pushed it. With a hat sink
+    registered, the same screen is rendered a second time at
+    TFT_SIZE and handed to the sink. Emissions are serialised
+    behind one lock: the spinner thread and the menu thread both
+    end up here, and the surface-size flip must never land in
+    the middle of the other thread's render.
+    """
+    global _tft_last_frame
+    with _emit_lock:
+        _push(build())
+        if _tft_sink is None:
+            return
+        prev = screen_size()
+        try:
+            set_screen_size(*TFT_SIZE)
+            big = build()
+        finally:
+            set_screen_size(*prev)
+        _tft_last_frame = big
+        try:
+            _tft_sink.show(big)
+        except Exception:
+            # A hat that drops a frame (worked loose mid-session,
+            # an SPI hiccup) must never take the menu down with it.
+            pass
+
+
 # --- Drawing primitives ----------------------------------------------
 
 def _base():
@@ -400,9 +460,9 @@ def _chips(draw, chips, top: int) -> None:
 
 # --- Screens ----------------------------------------------------------
 
-def show_screen(title: str, rows: list, chips=None, right: str = "",
+def _screen_img(title: str, rows: list, chips=None, right: str = "",
                 cap: str | None = None):
-    """A themed screen.
+    """Build one themed screen at the current surface size.
 
     rows: ("kv", label, value, tone) | ("text", s, tone)
           | ("big", s, tone) | ("bar", frac, tone) | ("gap", px)
@@ -457,14 +517,21 @@ def show_screen(title: str, rows: list, chips=None, right: str = "",
             y += row[1] if len(row) > 1 else 8
     if chips:
         _chips(draw, chips, SCREEN_H - 50)
-    _push(img)
+    return img
 
 
-def radar_screen(title: str, blips: list, rows: list,
-                 right: str = "") -> str:
-    """A radar scope: blips at (bearing_deg, frac_of_range, tone)
-    around home center, data rows down the right side. Returns
-    the key pressed (any key goes back)."""
+def show_screen(title: str, rows: list, chips=None, right: str = "",
+                cap: str | None = None):
+    """A themed screen, pushed to every fitted surface."""
+    _emit(lambda: _screen_img(title, rows, chips=chips, right=right,
+                              cap=cap))
+
+
+def _radar_img(title: str, blips: list, rows: list,
+               right: str = ""):
+    """Build one radar scope at the current surface size: blips
+    at (bearing_deg, frac_of_range, tone) around home center,
+    data rows down the right side."""
     import math
 
     img, draw = _base()
@@ -504,7 +571,14 @@ def radar_screen(title: str, blips: list, rows: list,
             y += 16
         elif row[0] == "gap":
             y += row[1] if len(row) > 1 else 8
-    _push(img)
+    return img
+
+
+def radar_screen(title: str, blips: list, rows: list,
+                 right: str = "") -> str:
+    """A radar scope, pushed to every fitted surface. Returns
+    the key pressed (any key goes back)."""
+    _emit(lambda: _radar_img(title, blips, rows, right=right))
     return read_key()
 
 
@@ -849,9 +923,9 @@ def home_screen(item_label: str, level: int, title: str,
     frame = 0
     saying = saying_text
     while True:
-        _push(_home_img(item_label, level, title, frac, xp_text,
-                        saying, equipped, bob=bobs[frame % 4],
-                        cap=cap))
+        _emit(lambda: _home_img(item_label, level, title, frac,
+                                xp_text, saying, equipped,
+                                bob=bobs[frame % 4], cap=cap))
         key = read_key_timeout(0.85)
         if key is not None:
             return key
@@ -871,33 +945,38 @@ def celebrate(lines: list[str]) -> None:
     read_key(); when that frame didn't survive the display stack
     the screen sat black and apparently frozen after a capture
     that had levelled the avatar up — the 0.34 fix.)"""
-    img, draw = _base()
-    _frame(draw, "LOKI", right="")
-    draw.rectangle([6, 36, 128, 164], outline=GOLD_DARK, fill=PANEL)
-    gear = {}
-    try:
-        from . import avatar as _avatar_mod
+    def build():
+        img, draw = _base()
+        _frame(draw, "LOKI", right="")
+        draw.rectangle([6, 36, 128, 164], outline=GOLD_DARK,
+                       fill=PANEL)
+        gear = {}
+        try:
+            from . import avatar as _avatar_mod
 
-        gear = _avatar_mod.load().get("gear", {})
-    except Exception:
-        pass
-    draw_loki(img, draw, (8, 38, 118, 124), gear, mood="excited")
-    f_big = _font("mono-bold", 15)
-    f_txt = _font("mono", 11)
-    y = 52
-    for i, line in enumerate(lines[:6]):
-        draw.text((140, y), line, font=f_big if i == 0 else f_txt,
-                  fill=GOLD_HI if i == 0 else TEXT)
-        y += 22 if i == 0 else 17
-    draw.text((140, 152), "ANY KEY", font=_font("mono", 8),
-              fill=GOLD_DARK)
-    _push(img)
+            gear = _avatar_mod.load().get("gear", {})
+        except Exception:
+            pass
+        draw_loki(img, draw, (8, 38, 118, 124), gear, mood="excited")
+        f_big = _font("mono-bold", 15)
+        f_txt = _font("mono", 11)
+        y = 52
+        for i, line in enumerate(lines[:6]):
+            draw.text((140, y), line,
+                      font=f_big if i == 0 else f_txt,
+                      fill=GOLD_HI if i == 0 else TEXT)
+            y += 22 if i == 0 else 17
+        draw.text((140, 152), "ANY KEY", font=_font("mono", 8),
+                  fill=GOLD_DARK)
+        return img
+
+    _emit(build)
     waited = 0.0
     while waited < 90:
         if read_key_timeout(5) is not None:
             return
         waited += 5
-        _push(img)
+        _emit(build)
 
 
 def render_avatar_png(equipped: dict, w: int = 240,
@@ -922,8 +1001,9 @@ def show_text(lines: list[str]) -> None:
     show_screen("LOKI", [("text", line) for line in lines])
 
 
-def splash(seconds: float = 1.8) -> None:
-    """Boot emblem: the horned helm over a gold LOKI wordmark."""
+def _splash_img():
+    """Build the boot emblem at the current surface size: the
+    horned helm over a gold LOKI wordmark."""
     img, draw = _base()
     helm, pad = _helm_patch(120, 56)
     img.paste(helm, (SCREEN_W // 2 - helm.width // 2, 68 - pad - 56),
@@ -940,7 +1020,12 @@ def splash(seconds: float = 1.8) -> None:
     draw.rectangle([60, 156, SCREEN_W - 60, 161], outline=FRAME)
     draw.rectangle([62, 158, 62 + int((SCREEN_W - 124) * 0.72), 159],
                    fill=GOLD)
-    _push(img)
+    return img
+
+
+def splash(seconds: float = 1.8) -> None:
+    """Boot emblem, pushed to every fitted surface."""
+    _emit(_splash_img)
     time.sleep(seconds)
 
 
@@ -1016,7 +1101,7 @@ class Spinner:
     def _loop(self):
         while not self._stop.is_set():
             try:
-                _push(self._frame_img())
+                _emit(self._frame_img)
             except OSError:
                 return
             self._stop.wait(0.25)

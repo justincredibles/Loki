@@ -91,8 +91,9 @@ TFT = CapProfile(
         "Power: EXT 5V rail + GPIO26 POWER_EN on once and held — the"
         " driver reuses cc1101._power_on(); cycling cap power desyncs"
         " the built-in LCD on the shared SPI0 bus (release 0.36).",
-        "Driver: lokicz/ili9341.py. TODO-VERIFY on the real panel:"
-        " 40 MHz SPI clock, MADCTL orientation, init/gamma table.",
+        "Driver: lokicz/ili9341.py — PROVEN on the real panel"
+        " 2026-11-19 (test pattern correct at 40 MHz, MADCTL"
+        " 0x28); the app renders to it in the tft profile (0.40).",
     ],
 )
 
