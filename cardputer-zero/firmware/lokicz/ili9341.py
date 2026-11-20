@@ -25,10 +25,13 @@ correct orientation at the 40 MHz clock, confirmed by
 Justin's own eyes. Integrated into the app in release 0.40:
 app.py constructs one ILI9341 in the "tft" profile and ui.py
 renders every screen to it at 320x240 alongside the built-in
-LCD. Release 0.41 fixed the colors: the panel interchanges
-green and blue (see pack_rgb565) and is RGB-ordered, so
-MADCTL_LANDSCAPE is 0x20 — bars and solid fills verified in
-the correct order on hardware before shipping.
+LCD. Release 0.42 fixed the colors for real: this clone
+assembles each pixel byte-swapped with the red and blue
+fields exchanged, so pack_rgb565 pre-transforms every pixel
+(see its docstring). 0.41's simpler green/blue-swap theory
+fit saturated bars and fills but broke on real screens —
+the transform sweep that found the truth, and Justin's
+"perfect" verdict on the home screen, are both 2026-11-19.
 """
 
 import time
@@ -52,8 +55,8 @@ MADCTL, COLMOD = 0x36, 0x3A
 # swap). This unit is RGB-ordered — proven on hardware
 # 2026-11-19: with the BGR bit set (0x28) red and blue traded
 # places, so landscape here is MV alone, 0x20. (The panel's
-# separate green/blue interchange is compensated in
-# pack_rgb565 below, not via MADCTL — MADCTL has no G/B bit.)
+# color quirk lives in how it assembles the pixel bytes and
+# is compensated in pack_rgb565 below, not via MADCTL.)
 # The value stays a constructor knob for bring-up tweaks.
 MADCTL_LANDSCAPE = 0x20
 
@@ -84,18 +87,25 @@ INIT_SEQUENCE = [
 
 
 def pack_rgb565(img) -> bytes:
-    """Pack an RGB Pillow image into little-endian 565 bytes.
+    """Pack an RGB Pillow image into the bytes this panel wants.
 
-    COLOR QUIRK — read before "fixing" the field order: this
-    clone panel interchanges the green and blue channels (red
-    and white were always correct). Proven on hardware
-    2026-11-19 with color bars AND solid fills: a pure green
-    fill displayed blue and a pure blue fill displayed green.
-    So the packer compensates — BLUE goes into the 6-bit
-    middle (green) field and GREEN into the 5-bit low (blue)
-    field, and the panel's swap puts them back where they
-    belong. fill() applies the same compensation. Byte order
-    stays little-endian, same as ui._to_rgb565.
+    COLOR QUIRK — read before "fixing" any of this: this clone
+    does NOT assemble a pixel the textbook ILI9341 way. It
+    effectively reads the two bytes of each pixel swapped AND
+    the red/blue fields exchanged. Saturated test colors
+    cannot reveal that — release 0.41 chased a simpler
+    green/blue-swap theory that fit bars and solid fills
+    perfectly and still broke on real screens. The truth came
+    from sweeping candidate transforms across a labeled chart
+    in a single photo (2026-11-19): the winner was then
+    confirmed by Justin on the real home screen — "perfect".
+
+    So the packer pre-transforms every pixel: build the
+    normal RGB565 value, swap the red and blue fields, then
+    swap the two bytes. The panel's own assembly undoes both
+    swaps and the intended color lands. fill() applies the
+    same transform. (Byte order of the final emit stays
+    little-endian; the swap is in the VALUE, above it.)
 
     Sized from the image itself — a 320x240 frame packs to
     exactly 153600 bytes.
@@ -105,8 +115,10 @@ def pack_rgb565(img) -> bytes:
         import numpy as np
 
         a = np.asarray(rgb, dtype=np.uint16)
-        v = ((a[:, :, 0] >> 3) << 11) | ((a[:, :, 2] >> 2) << 5) \
-            | (a[:, :, 1] >> 3)
+        v = ((a[:, :, 0] >> 3) << 11) | ((a[:, :, 1] >> 2) << 5) \
+            | (a[:, :, 2] >> 3)
+        v = ((v & 0x1F) << 11) | (v & 0x07E0) | ((v >> 11) & 0x1F)
+        v = ((v >> 8) | (v << 8)) & 0xFFFF
         return v.astype("<u2").tobytes()
     except Exception:
         pass  # fall through to the slow packer
@@ -115,7 +127,9 @@ def pack_rgb565(img) -> bytes:
     out = bytearray(npix * 2)
     for i in range(npix):
         r, g, b = data[3 * i], data[3 * i + 1], data[3 * i + 2]
-        v = ((r >> 3) << 11) | ((b >> 2) << 5) | (g >> 3)
+        v = ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)
+        v = ((v & 0x1F) << 11) | (v & 0x07E0) | ((v >> 11) & 0x1F)
+        v = ((v >> 8) | ((v << 8) & 0xFFFF)) & 0xFFFF
         out[2 * i] = v & 0xFF
         out[2 * i + 1] = v >> 8
     return bytes(out)
@@ -246,7 +260,11 @@ class ILI9341:
     def fill(self, rgb: tuple) -> None:
         """Fill the whole panel with one (r, g, b) color."""
         r, g, b = rgb
-        v = ((r >> 3) << 11) | ((b >> 2) << 5) | (g >> 3)
+        # Same pre-transform as pack_rgb565 (see its docstring):
+        # normal 565, swap red/blue fields, swap the two bytes.
+        v = ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)
+        v = ((v & 0x1F) << 11) | (v & 0x07E0) | ((v >> 11) & 0x1F)
+        v = ((v >> 8) | ((v << 8) & 0xFFFF)) & 0xFFFF
         pixel = bytes((v & 0xFF, v >> 8))
         self.set_window(0, 0, self.width - 1, self.height - 1)
         self._cmd(RAMWR)
