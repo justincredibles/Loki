@@ -20,12 +20,15 @@ Plain-English tour:
   the built-in LCD; only a reboot revives it.
 
 STATUS: PROVEN on the real panel 2026-11-19 — wired per
-docs/DISPLAY-HAT.md, the test pattern landed sharp with correct
-orientation and colors at the 40 MHz clock with MADCTL 0x28,
-confirmed by Justin's own eyes. Integrated into the app in
-release 0.40: app.py constructs one ILI9341 in the "tft"
-profile and ui.py renders every screen to it at 320x240
-alongside the built-in LCD.
+docs/DISPLAY-HAT.md, the test pattern landed sharp with
+correct orientation at the 40 MHz clock, confirmed by
+Justin's own eyes. Integrated into the app in release 0.40:
+app.py constructs one ILI9341 in the "tft" profile and ui.py
+renders every screen to it at 320x240 alongside the built-in
+LCD. Release 0.41 fixed the colors: the panel interchanges
+green and blue (see pack_rgb565) and is RGB-ordered, so
+MADCTL_LANDSCAPE is 0x20 — bars and solid fills verified in
+the correct order on hardware before shipping.
 """
 
 import time
@@ -45,11 +48,14 @@ CASET, RASET, RAMWR = 0x2A, 0x2B, 0x2C
 MADCTL, COLMOD = 0x36, 0x3A
 
 # MADCTL bits: MY 0x80 (row flip), MX 0x40 (column flip),
-# MV 0x20 (row/column exchange = landscape), BGR 0x08 (these
-# clone panels are BGR-ordered). 0x28 = MV|BGR is the standard
-# landscape starting point; orientation flips are the expected
-# hardware bring-up tweak, so the value is a constructor knob.
-MADCTL_LANDSCAPE = 0x28
+# MV 0x20 (row/column exchange = landscape), BGR 0x08 (red/blue
+# swap). This unit is RGB-ordered — proven on hardware
+# 2026-11-19: with the BGR bit set (0x28) red and blue traded
+# places, so landscape here is MV alone, 0x20. (The panel's
+# separate green/blue interchange is compensated in
+# pack_rgb565 below, not via MADCTL — MADCTL has no G/B bit.)
+# The value stays a constructor knob for bring-up tweaks.
+MADCTL_LANDSCAPE = 0x20
 
 # Standard ILI9341 power/gamma bring-up (the widely used
 # reference table for these modules — Adafruit-lineage values).
@@ -78,18 +84,29 @@ INIT_SEQUENCE = [
 
 
 def pack_rgb565(img) -> bytes:
-    """Pack an RGB Pillow image into little-endian RGB565 bytes.
+    """Pack an RGB Pillow image into little-endian 565 bytes.
 
-    Same math as ui._to_rgb565, sized from the image itself —
-    a 320x240 frame packs to exactly 153600 bytes.
+    COLOR QUIRK — read before "fixing" the field order: this
+    clone panel interchanges the green and blue channels (red
+    and white were always correct). Proven on hardware
+    2026-11-19 with color bars AND solid fills: a pure green
+    fill displayed blue and a pure blue fill displayed green.
+    So the packer compensates — BLUE goes into the 6-bit
+    middle (green) field and GREEN into the 5-bit low (blue)
+    field, and the panel's swap puts them back where they
+    belong. fill() applies the same compensation. Byte order
+    stays little-endian, same as ui._to_rgb565.
+
+    Sized from the image itself — a 320x240 frame packs to
+    exactly 153600 bytes.
     """
     rgb = img.convert("RGB")
     try:
         import numpy as np
 
         a = np.asarray(rgb, dtype=np.uint16)
-        v = ((a[:, :, 0] >> 3) << 11) | ((a[:, :, 1] >> 2) << 5) \
-            | (a[:, :, 2] >> 3)
+        v = ((a[:, :, 0] >> 3) << 11) | ((a[:, :, 2] >> 2) << 5) \
+            | (a[:, :, 1] >> 3)
         return v.astype("<u2").tobytes()
     except Exception:
         pass  # fall through to the slow packer
@@ -98,7 +115,7 @@ def pack_rgb565(img) -> bytes:
     out = bytearray(npix * 2)
     for i in range(npix):
         r, g, b = data[3 * i], data[3 * i + 1], data[3 * i + 2]
-        v = ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)
+        v = ((r >> 3) << 11) | ((b >> 2) << 5) | (g >> 3)
         out[2 * i] = v & 0xFF
         out[2 * i + 1] = v >> 8
     return bytes(out)
@@ -229,7 +246,7 @@ class ILI9341:
     def fill(self, rgb: tuple) -> None:
         """Fill the whole panel with one (r, g, b) color."""
         r, g, b = rgb
-        v = ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)
+        v = ((r >> 3) << 11) | ((b >> 2) << 5) | (g >> 3)
         pixel = bytes((v & 0xFF, v >> 8))
         self.set_window(0, 0, self.width - 1, self.height - 1)
         self._cmd(RAMWR)
