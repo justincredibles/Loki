@@ -20,6 +20,32 @@ from pathlib import Path
 FB_DEVICE = "/dev/fb_lcd"
 SCREEN_W, SCREEN_H = 320, 170
 
+# Frame surfaces. Every draw helper reads SCREEN_W / SCREEN_H at
+# call time, so pointing the layout at another surface is just
+# rebinding the pair — LCD_SIZE is the built-in panel (the
+# default everywhere), TFT_SIZE is the display hat's landscape
+# surface (docs/DISPLAY-HAT.md; driver lokicz/ili9341.py).
+LCD_SIZE = (320, 170)
+TFT_SIZE = (320, 240)
+
+
+def screen_size() -> tuple[int, int]:
+    """The surface the draw helpers currently render for."""
+    return (SCREEN_W, SCREEN_H)
+
+
+def set_screen_size(w: int, h: int) -> None:
+    """Render for a (w, h) surface instead of the built-in LCD.
+
+    Width-driven layout (frames, centering, bars, chip grids)
+    follows immediately. A few screens carry y-coordinates tuned
+    for the 170-row LCD (splash art, the home screen); on a
+    taller surface they sit in the top of the frame until the
+    big-screen layout pass lands with the hat's bring-up.
+    """
+    global SCREEN_W, SCREEN_H
+    SCREEN_W, SCREEN_H = int(w), int(h)
+
 # --- Asgard palette -------------------------------------------------
 BG = (3, 10, 6)            # near-black green glass
 BG_LINE = (7, 22, 12)      # scanline tint
@@ -101,8 +127,12 @@ def _to_rgb565(img) -> bytes:
     except Exception:
         pass  # fall through to the slow packer
     data = img.convert("RGB").tobytes()
-    out = bytearray(SCREEN_W * SCREEN_H * 2)
-    for i in range(SCREEN_W * SCREEN_H):
+    # Sized from the image itself, not the module surface, so a
+    # frame rendered for the 320x240 hat packs fully too. For the
+    # built-in 320x170 surface this is the identical byte count.
+    npix = img.width * img.height
+    out = bytearray(npix * 2)
+    for i in range(npix):
         r, g, b = data[3 * i], data[3 * i + 1], data[3 * i + 2]
         v = ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)
         out[2 * i] = v & 0xFF

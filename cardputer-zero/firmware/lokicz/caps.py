@@ -3,8 +3,8 @@
 Plain-English version: the Zero takes ONE cap at a time on its top port.
 Both caps share the same SPI bus (SPI0) and the same chip-select line
 (CS1, CM0 GPIO7) that the LCD doesn't use, so the firmware loads exactly
-one profile — "cc1101", "lora", or "none" — and everything else in the
-program talks to the profile, never to pins directly.
+one profile — "cc1101", "lora", "tft", or "none" — and everything else
+in the program talks to the profile, never to pins directly.
 
 Every constant below is a verified hardware fact from docs/HARDWARE.md.
 Anything not yet verified on real hardware is marked TODO-VERIFY.
@@ -72,9 +72,33 @@ LORA = CapProfile(
     ],
 )
 
+# --- Display hat: HiLetgo 2.8" ILI9341 SPI touch panel (not a radio) ------
+TFT = CapProfile(
+    name="tft",
+    description='2.8" ILI9341 SPI display hat (240x320, run 320x240 '
+                "landscape) + XPT2046 resistive touch — no radio",
+    notes=[
+        # Wiring map lives in docs/DISPLAY-HAT.md (EXT header labels
+        # confirmed from Justin's unit, 2026-11-19):
+        "Display on spidev0.1 (SPI0 CS1): RESET = GPIO22, DC = GPIO23,"
+        " MOSI/SCK/MISO shared with the bus. Touch (phase 2):"
+        " T_CS = GPIO15, T_IRQ = GPIO14.",
+        # GPIO22 is the panel's RESET line in this profile, so the
+        # NFC chip-select overlay (which claims GPIO22) must stay
+        # PARKED — sync_boot_overlay() treats 'tft' like 'lora'.
+        "NFC overlay parked in this profile (GPIO22 is spoken for).",
+        # Same shared-bus power rule as the radio caps:
+        "Power: EXT 5V rail + GPIO26 POWER_EN on once and held — the"
+        " driver reuses cc1101._power_on(); cycling cap power desyncs"
+        " the built-in LCD on the shared SPI0 bus (release 0.36).",
+        "Driver: lokicz/ili9341.py. TODO-VERIFY on the real panel:"
+        " 40 MHz SPI clock, MADCTL orientation, init/gamma table.",
+    ],
+)
+
 NONE = CapProfile(name="none", description="No cap fitted")
 
-PROFILES = {p.name: p for p in (CC1101, LORA, NONE)}
+PROFILES = {p.name: p for p in (CC1101, LORA, TFT, NONE)}
 
 
 import subprocess
@@ -91,10 +115,16 @@ def sync_boot_overlay(cap: str) -> str:
     LoRa cap that same pin is the SX1262's BUSY line — with the
     overlay loaded, meshtasticd's GPIO request fails and the
     daemon aborts (proven live 2026-11-17, at the first LoRa
-    bring-up). So: LoRa fitted → the overlay line is parked as
-    '<line>.disabled' in config.txt; CC1101 fitted → restored.
-    Takes effect at the next boot. Returns what it did.
+    bring-up). On the display hat the same pin is the panel's
+    RESET line, claimed by the ili9341 driver — same collision,
+    same remedy. So: LoRa or display hat fitted → the overlay
+    line is parked as '<line>.disabled' in config.txt; anything
+    else fitted → restored. Takes effect at the next boot.
+    Returns what it did.
     """
+    # Profiles where GPIO22 belongs to the fitted hardware, so
+    # the NFC overlay must stay parked.
+    parks = cap in ("lora", "tft")
     try:
         lines = BOOT_CONFIG.read_text().splitlines()
     except OSError:
@@ -103,10 +133,10 @@ def sync_boot_overlay(cap: str) -> str:
     changed = False
     out = []
     for ln in lines:
-        if cap == "lora" and ln == NFC_OVERLAY:
+        if parks and ln == NFC_OVERLAY:
             out.append(parked)
             changed = True
-        elif cap != "lora" and ln == parked:
+        elif not parks and ln == parked:
             out.append(NFC_OVERLAY)
             changed = True
         else:
@@ -118,7 +148,7 @@ def sync_boot_overlay(cap: str) -> str:
                        capture_output=True, text=True)
     if r.returncode != 0:
         return "boot overlay edit FAILED (sudo refused?)"
-    return (f"boot overlay {'parked' if cap == 'lora' else 'restored'} "
+    return (f"boot overlay {'parked' if parks else 'restored'} "
             f"for the {cap} cap — applies at next boot")
 
 

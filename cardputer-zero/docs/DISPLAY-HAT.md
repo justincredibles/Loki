@@ -1,13 +1,15 @@
 # Display hat — 2.8" ILI9341 expansion screen
 
-Status: **design** (2026-11-18); **panel ordered by Justin
-the same evening** — confirmed from his own listing
-screenshots: the red V1.1 board below. Justin is following
-the community "Cap TFT V2" build (MakerWorld model 3235288,
-written for the Cardputer ADV). This doc maps that build
-onto the Cardputer **Zero** and plans the lokicz support.
-No code ships until the panel is in hand — SPI speed and
-the init sequence need hardware to verify.
+Status: **panel arrived 2026-11-19; jumper wiring in
+progress.** The driver is pre-built on branch `tft-driver`
+(caps.py "tft" profile, lokicz/ili9341.py, ui.py frame-size
+parameter) pending hardware verification — SPI speed and
+the init sequence still need the real panel to confirm.
+Panel ordered by Justin 2026-11-18 — confirmed from his
+own listing screenshots: the red V1.1 board below. Justin
+is following the community "Cap TFT V2" build (MakerWorld
+model 3235288, written for the Cardputer ADV); this doc
+maps that build onto the Cardputer **Zero**.
 
 ## The panel
 
@@ -33,29 +35,40 @@ no CC1101 and no LoRa — the existing wrong-cap guards in the
 menus already handle that world.
 
 The EXT port gives us SPI0 (the bus the built-in LCD and the
-caps share), I2C1, a UART, and spare GPIOs. The module's
-14-pin header, in order (from the board's own silkscreen,
-confirmed on Justin's unit photos), wired by signal name —
-match the physical header positions to the EXT pinout and
-**meter the 5 V / GND positions before first power**; this
-is a hand-wired mod.
+caps share), I2C1, a UART, and spare GPIOs. The Zero's EXT
+header is silkscreen-labeled — confirmed from a photo of
+Justin's own unit (2026-11-19), two rows of seven, left to
+right as you look at the header:
 
-| # | Module pin | Goes to | Notes |
+- **Top row:** G26 · G23 · G22 · G11 CLK · G10 MO · G9 MI ·
+  G7 CS1
+- **Bottom row:** 5V IN · G · 5V OUT · G2 SDA · G3 SCL ·
+  G14 TX · G15 RX
+
+(The G-numbers are CM0 GPIOs: G11/G10/G9 = SPI0 SCLK/MOSI/
+MISO, G7 = SPI0 CS1, G2/G3 = I2C1, G14/G15 = the UART pair,
+G26 = POWER_EN, G = ground.) The module's 14-pin header, in
+order (from the board's own silkscreen, confirmed on
+Justin's unit photos), jumper-wires to those labels as
+follows. **Meter the 5 V landings before first power** —
+this is a hand-wired mod.
+
+| # | Module pin | Goes to (EXT label) | Notes |
 |---|---|---|---|
-| 1 | VCC | EXT 5 V rail | onboard regulator makes 3.3 V |
-| 2 | GND | EXT GND | |
-| 3 | CS | SPI0 CS1 (GPIO7) → `/dev/spidev0.1` | the cap chip-select |
-| 4 | RESET | GPIO22 | free in this profile |
-| 5 | DC | GPIO23 | free in this profile |
-| 6 | SDI (MOSI) | SPI0 MOSI | |
-| 7 | SCK | SPI0 SCLK | shared bus |
-| 8 | LED | VCC rail | backlight always on, like the ADV build's BLK |
-| 9 | SDO (MISO) | SPI0 MISO | optional — driving is write-only |
-| 10 | T_CLK | SPI0 SCLK | touch, phase 2 |
-| 11 | T_CS | GPIO15 | touch, phase 2 |
-| 12 | T_DIN | SPI0 MOSI | touch, phase 2 |
-| 13 | T_DO | SPI0 MISO | touch, phase 2 |
-| 14 | T_IRQ | GPIO14 | touch, phase 2 |
+| 1 | VCC | 5V IN if it meters live, else 5V OUT | onboard regulator makes 3.3 V |
+| 2 | GND | G | |
+| 3 | CS | G7 CS1 → `/dev/spidev0.1` | the cap chip-select |
+| 4 | RESET | G22 | free in this profile |
+| 5 | DC | G23 | free in this profile |
+| 6 | SDI (MOSI) | G10 MO | |
+| 7 | SCK | G11 CLK | shared bus |
+| 8 | LED | same 5 V landing as VCC | backlight always on, like the ADV build's BLK |
+| 9 | SDO (MISO) | G9 MI | optional — driving is write-only |
+| 10 | T_CLK | G11 CLK | touch, phase 2 |
+| 11 | T_CS | G15 RX | touch, phase 2 |
+| 12 | T_DIN | G10 MO | touch, phase 2 |
+| 13 | T_DO | G9 MI | touch, phase 2 |
+| 14 | T_IRQ | G14 TX | touch, phase 2 |
 
 Power rule (learned the hard way in release 0.36): the cap
 rail — GPIO26 `POWER_EN` plus the `ext_5v_out` rail — must be
@@ -77,24 +90,40 @@ primary input either way.
 
 ## Software plan
 
+Pre-built on branch `tft-driver` (2026-11-19), headless-
+verified with mocked spidev/lgpio; hardware verification
+(SPI speed, init table, MADCTL orientation) happens at
+bring-up, once the wiring is done.
+
 - `caps.py`: a third profile `"tft"` alongside `cc1101` /
-  `lora`. Selecting it is a config change + reboot, exactly
-  like a cap swap.
+  `lora` — **done on `tft-driver`**. Selecting it is a
+  config change + reboot, exactly like a cap swap. The
+  profile parks the NFC overlay like `lora` does (GPIO22
+  is the panel's RESET here), and meshtasticd stays off —
+  `meshtastic.apply_profile`'s non-LoRa path already stops
+  + disables it, so it needed no change.
 - `lokicz/ili9341.py`: userspace driver in the house style —
-  spidev on CS1 at 32–48 MHz, DC/RES through the raw-lgpio
+  **written on `tft-driver`**. spidev on CS1 at 40 MHz (a
+  constructor parameter), DC/RES through the raw-lgpio
   line owner from `cc1101.py` (gpiozero never frees lines;
-  release 0.32), standard ILI9341 init with MADCTL set for
-  landscape, RGB565 windowed writes. The UI already renders
-  to a PIL image and packs RGB565 for the built-in panel, so
+  release 0.32), cap power via `cc1101._power_on()` (claim
+  once, hold, never cycle), standard ILI9341 init with
+  MADCTL set for landscape, RGB565 windowed writes, plus
+  `fill()` and a color-bar `test_pattern()` for bring-up
+  (`python3 -m lokicz.ili9341`). The UI already renders to
+  a PIL image and packs RGB565 for the built-in panel, so
   the driver is a second sink for the same frames.
   A full 320×240 frame is 150 KB ≈ 31 ms at 40 MHz — fine
   for this app's pace.
-- Big-screen layout: `ui.py`'s frame size becomes a
-  parameter instead of a hard-coded 320×170. At 320×240 the
-  home screen's avatar box grows (~148×150), sayings get a
-  fifth line, and data screens show more rows. The built-in
-  LCD keeps mirroring the 320×170 layout, so the device
-  works the same with the hat on or off.
+- Big-screen layout: `ui.py`'s frame size is now a
+  parameter (`set_screen_size()` / `TFT_SIZE`) — **done on
+  `tft-driver`**, defaulting to 320×170 everywhere so all
+  current call sites are unchanged. The 320×240 layout
+  polish itself (home screen's avatar box grows ~148×150,
+  sayings get a fifth line, data screens show more rows)
+  lands at bring-up. The built-in LCD keeps mirroring the
+  320×170 layout, so the device works the same with the
+  hat on or off.
 - Portal: `/api/screenshot.png` gains a `?screen=big`
   variant once the driver lands.
 
