@@ -1,6 +1,13 @@
 #!/bin/sh
 # Give the desktop user access to the devices lokicz drives.
 set -e
+# The launcher runs as the desktop user, so the app icon must be
+# world-readable — the 0.42 package shipped it 640 root-only and
+# APPLaunch silently fell back to a generic icon. Force it here
+# so the installed mode is right no matter what the build tree had.
+if [ -f /usr/share/APPLaunch/share/images/lokicz.png ]; then
+    chmod 644 /usr/share/APPLaunch/share/images/lokicz.png || true
+fi
 for user in cardputer pi; do
     if id -u "$user" >/dev/null 2>&1; then
         for grp in video input gpio spi dialout; do

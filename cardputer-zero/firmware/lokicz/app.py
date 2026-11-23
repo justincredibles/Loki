@@ -82,6 +82,7 @@ def _status_rows(cfg: dict) -> list:
     except Exception:
         pass
     rows.append(("text", "BAR: BLUE=CC1101 PINK=LORA", "dim"))
+    rows.append(("text", "0/ESC: AVATAR · HOLD ESC: EXIT", "dim"))
     return rows
 
 
@@ -359,6 +360,11 @@ def run() -> int:
     radio_result = False
     radio_result_key = None
     while True:
+        if ui.exit_requested:
+            # An ESC hold landed during a timed operation: its key
+            # watcher aborted the job and set this — leave now.
+            ui.exit_requested = False
+            return _stop()
         if pending is not None:
             key, pending = pending, None
         elif screen == "home":
@@ -375,7 +381,7 @@ def run() -> int:
                     % len(HOME_ITEMS)
                 saying = avatar.saying()
                 continue
-            if key in ("q", "esc"):
+            if key == "esc_hold":
                 return _stop()
             if key in ("6", "\n", "enter"):
                 kind = HOME_ITEMS[home_idx][1]
@@ -407,6 +413,8 @@ def run() -> int:
             # WPA-SEC screen has its own keys; anything else goes back.
             from . import wpasec
 
+            if key == "esc_hold":
+                return _stop()
             if key == "9":
                 cfg["wpasec_enabled"] = not cfg.get("wpasec_enabled",
                                                     False)
@@ -447,6 +455,12 @@ def run() -> int:
             # The radio lab has its own keys; a result screen
             # consumes one keypress to return to the radio menu.
             title = "RADIO"
+            if key == "esc_hold":
+                return _stop()
+            if key in ("q", "esc"):
+                screen = "main"
+                rows = _status_rows(cfg)
+                continue
             if radio_result:
                 radio_result = False
                 if key != radio_result_key or key not in \
@@ -527,12 +541,17 @@ def run() -> int:
                          "dim")]
                 radio_result = True
             continue
-        if key == "0" and screen == "main":
+        if key == "esc_hold":
+            return _stop()
+        if key in ("0", "q", "esc") and screen == "main":
+            # 0 has always meant "back to the avatar"; a short
+            # ESC/q tap means the same now (the Status screen's
+            # only exits used to be 0, undocumented, or an
+            # app-killing ESC). Exiting takes an ESC hold
+            # (above) or the Stop menu item — never a tap.
             screen = "home"
             saying = avatar.saying()
             continue
-        if key in ("q", "esc"):
-            return _stop()
         if page == 2:
             if key == "1":
                 screen = "wpasec"

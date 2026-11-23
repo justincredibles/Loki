@@ -1065,11 +1065,19 @@ class Spinner:
         return self._abort.is_set()
 
     def _watch_keys(self):
+        global exit_requested
         while not self._keys_stop.is_set():
             try:
                 key = read_key_timeout(0.25)
             except Exception:
                 return  # no keyboard (headless) — nothing to watch
+            if key == "esc_hold":
+                # A hold is an exit request, not just a stop: abort
+                # the operation and let app.run() leave at the top
+                # of its loop.
+                exit_requested = True
+                self._abort.set()
+                return
             if key in self.STOP_KEYS:
                 self._abort.set()
                 return
@@ -1162,31 +1170,86 @@ def _key_name(code) -> str:
             "RIGHT": "right"}.get(simple, name)
 
 
+# ESC is the universal back key, so a stray tap must never be able
+# to kill the app: the readers below measure how long ESC stays
+# down. Released before ESC_HOLD_SECONDS it is a tap ("esc");
+# still down at the deadline it is a hold ("esc_hold"), and only
+# a hold may exit. Other keys pressed while a hold is being
+# measured are queued here and handed to the next read, so no
+# keypress is ever swallowed by the measurement.
+ESC_HOLD_SECONDS = 3.0
+_pending_keys: list = []
+
+# Set when an ESC hold is seen by a Spinner's key watcher (which
+# consumes the key on a side thread, away from the menu dispatch):
+# the operation aborts, and app.run() exits at the top of its loop.
+exit_requested = False
+
+
+def _measure_esc(dev) -> str:
+    """ESC just went down — wait out the press and classify it.
+
+    Returns "esc" for a tap (released in time) or "esc_hold" when
+    the key is still down ESC_HOLD_SECONDS later.
+    """
+    import select
+
+    import evdev
+
+    deadline = time.time() + ESC_HOLD_SECONDS
+    while True:
+        left = deadline - time.time()
+        if left <= 0:
+            return "esc_hold"
+        ready, _, _ = select.select([dev.fd], [], [], left)
+        if not ready:
+            return "esc_hold"
+        event = dev.read_one()
+        if event is None or event.type != evdev.ecodes.EV_KEY:
+            continue
+        if event.code == evdev.ecodes.KEY_ESC:
+            if event.value == 0:
+                return "esc"
+            continue  # autorepeat while held — keep waiting
+        if event.value == 1:
+            _pending_keys.append(_key_name(event.code))
+
+
 def read_key() -> str | None:
     """Block until a key is pressed; return its simple name.
 
     Digits come back as "1".."9"/"0", letters lowercase, and the
     specials as "enter", "esc", "space", "up"/"down"/"left"/"right".
     Anything else returns its evdev name (e.g. "KEY_F1") so callers
-    can ignore what they don't care about.
+    can ignore what they don't care about. ESC is the one measured
+    key: a tap returns "esc" on release, a 3-second hold returns
+    "esc_hold" (see ESC_HOLD_SECONDS).
     """
     import evdev
 
+    if _pending_keys:
+        return _pending_keys.pop(0)
     dev = _open_keyboard()
     for event in dev.read_loop():
         if event.type != evdev.ecodes.EV_KEY or event.value != 1:
             continue  # only key-down events count
+        if event.code == evdev.ecodes.KEY_ESC:
+            return _measure_esc(dev)
         return _key_name(event.code)
     return None
 
 
 def read_key_timeout(timeout: float) -> str | None:
     """Like read_key(), but returns None after `timeout` seconds —
-    the home screen's animation loop lives on this."""
+    the home screen's animation loop lives on this. An ESC press
+    that begins inside the window is still measured in full, so
+    the caller's timeout never truncates a hold."""
     import select
 
     import evdev
 
+    if _pending_keys:
+        return _pending_keys.pop(0)
     dev = _open_keyboard()
     deadline = time.time() + timeout
     while True:
@@ -1201,4 +1264,6 @@ def read_key_timeout(timeout: float) -> str | None:
             continue
         if event.type != evdev.ecodes.EV_KEY or event.value != 1:
             continue
+        if event.code == evdev.ecodes.KEY_ESC:
+            return _measure_esc(dev)
         return _key_name(event.code)
