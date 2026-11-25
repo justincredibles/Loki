@@ -11,8 +11,38 @@ systemd it stays stopped until started again —
 """
 
 import glob
+import threading
 
-from . import caps, capture, config, ui, wifi_recon
+from . import caps, capture, config, ui, web, wifi_recon
+
+
+def _start_web_portal():
+    """Start the LAN web portal in a daemon thread.
+
+    The store package ships no systemd unit (and its manifest
+    declares background_service: false), so nothing else starts
+    `lokicz.web` — the dev install's lokicz-web.service was the
+    only thing that ever did, and it is gone on store installs.
+    Without this, the menu still advertises http://<ip>:8420 on
+    page 2 while nothing listens on 8420. A failure here (e.g.
+    the port is already taken) must never kill the menu, so it
+    logs and carries on.
+    """
+    from http.server import ThreadingHTTPServer
+
+    try:
+        server = ThreadingHTTPServer(("0.0.0.0", web.PORT),
+                                     web.Handler)
+    except OSError as exc:
+        print(f"lokicz web portal: could not bind :{web.PORT} "
+              f"({exc}) — portal unavailable", flush=True)
+        return None
+    thread = threading.Thread(target=server.serve_forever,
+                              name="lokicz-web", daemon=True)
+    thread.start()
+    print(f"lokicz web portal on http://{web.lan_ip()}:{web.PORT}",
+          flush=True)
+    return server
 
 
 def _total_hashes() -> int:
@@ -346,6 +376,10 @@ def run() -> int:
     cfg = config.load()
     # Held for the whole run: the display hat (tft profile only).
     _hat = _start_display_hat(cfg)
+    # The web portal lives in this process on store installs —
+    # there is no lokicz-web.service to start it (see
+    # _start_web_portal). Daemon thread: it dies with the menu.
+    _portal = _start_web_portal()
     try:
         ui.splash()
     except OSError:

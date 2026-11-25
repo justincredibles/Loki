@@ -49,7 +49,9 @@ def main() -> int:
     except OSError:
         print("(no framebuffer — not running on the device?)")
 
-    # TODO: start job runner + web UI (Ragnar-style tools land here).
+    # Web UI: started by app.run() in the menu process (see
+    # app._start_web_portal) — the store package ships no
+    # lokicz-web.service, so the menu is the portal's only host.
     return 0
 
 

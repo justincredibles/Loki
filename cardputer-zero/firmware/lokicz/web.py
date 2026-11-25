@@ -173,7 +173,20 @@ def lan_ip() -> str:
             s.connect(("8.8.8.8", 80))
             return s.getsockname()[0]
     except OSError:
-        return "127.0.0.1"
+        pass
+    # No route to the internet (LAN-only network, captive portal,
+    # 8.8.8.8 blocked): fall back to the first non-loopback IPv4
+    # on any interface instead of advertising 127.0.0.1, which no
+    # other device on the LAN can ever reach.
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None,
+                                       socket.AF_INET):
+            ip = info[4][0]
+            if not ip.startswith("127."):
+                return ip
+    except OSError:
+        pass
+    return "127.0.0.1"
 
 
 # --- Status -----------------------------------------------------------
